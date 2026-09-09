@@ -1,0 +1,89 @@
+package com.ails.backend.service;
+
+import com.ails.backend.common.BusinessException;
+import com.ails.backend.dto.conversation.ConversationRequest;
+import com.ails.backend.dto.conversation.ConversationResponse;
+import com.ails.backend.entity.Conversation;
+import com.ails.backend.enums.ConversationStatus;
+import com.ails.backend.mapper.ConversationMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.util.List;
+
+/**
+ * 对话管理：空间下的创建/列表/详情/归档/删除，带归属校验。
+ */
+@Service
+@RequiredArgsConstructor
+public class ConversationService {
+
+    private final ConversationMapper conversationMapper;
+    private final LearningSpaceService spaceService;
+
+    @Transactional(readOnly = true)
+    public List<ConversationResponse> listBySpace(Long userId, Long spaceId) {
+        spaceService.ownedSpace(userId, spaceId);
+        return conversationMapper.selectList(new LambdaQueryWrapper<Conversation>()
+                        .eq(Conversation::getUserId, userId)
+                        .eq(Conversation::getLearningSpaceId, spaceId)
+                        .orderByDesc(Conversation::getCreatedAt))
+                .stream().map(ConversationResponse::from).toList();
+    }
+
+    @Transactional
+    public ConversationResponse createInSpace(Long userId, Long spaceId, ConversationRequest request) {
+        spaceService.ownedSpace(userId, spaceId);
+        Conversation conversation = new Conversation();
+        conversation.setUserId(userId);
+        conversation.setLearningSpaceId(spaceId);
+        conversation.setTitle(StringUtils.hasText(request.title()) ? request.title().trim() : null);
+        conversation.setStatus(ConversationStatus.ACTIVE);
+        conversationMapper.insert(conversation);
+        return ConversationResponse.from(conversation);
+    }
+
+    @Transactional(readOnly = true)
+    public ConversationResponse get(Long userId, Long conversationId) {
+        return ConversationResponse.from(ownedConversation(userId, conversationId));
+    }
+
+    @Transactional
+    public ConversationResponse updateTitle(Long userId, Long conversationId, ConversationRequest request) {
+        Conversation conversation = ownedConversation(userId, conversationId);
+        if (StringUtils.hasText(request.title())) {
+            conversation.setTitle(request.title().trim());
+        }
+        conversationMapper.updateById(conversation);
+        return ConversationResponse.from(conversation);
+    }
+
+    @Transactional
+    public ConversationResponse archive(Long userId, Long conversationId) {
+        Conversation conversation = ownedConversation(userId, conversationId);
+        conversation.setStatus(ConversationStatus.ARCHIVED);
+        conversationMapper.updateById(conversation);
+        return ConversationResponse.from(conversation);
+    }
+
+    @Transactional
+    public void delete(Long userId, Long conversationId) {
+        ownedConversation(userId, conversationId);
+        // message / highlight 通过 FK ON DELETE CASCADE 清理
+        conversationMapper.deleteById(conversationId);
+    }
+
+    /**
+     * 取当前用户拥有的对话，否则视为不存在。
+     */
+    public Conversation ownedConversation(Long userId, Long conversationId) {
+        Conversation conversation = conversationMapper.selectById(conversationId);
+        if (conversation == null || !conversation.getUserId().equals(userId)) {
+            throw BusinessException.notFound("对话不存在");
+        }
+        return conversation;
+    }
+}

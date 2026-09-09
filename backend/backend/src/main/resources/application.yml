@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: backend
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # createDatabaseIfNotExist=true 便于首次启动自动建库（需 MySQL 账号有建库权限）
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:ails}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+
+  sql:
+    init:
+      # CREATE TABLE IF NOT EXISTS，幂等，每次启动执行
+      mode: always
+      schema-locations: classpath:schema.sql
+      encoding: UTF-8
+      continue-on-error: false
+
+server:
+  port: 8080
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+
+ails:
+  jwt:
+    # HS256 密钥需 >= 32 字节；生产环境务必用 JWT_SECRET 环境变量覆盖
+    secret: ${JWT_SECRET:ails-learning-space-dev-secret-change-me-in-production-0123456789abcdef}
+    # 过期时间（毫秒），默认 7 天
+    expiration-ms: ${JWT_EXPIRATION_MS:604800000}
+
+logging:
+  level:
+    com.ails.backend: debug
