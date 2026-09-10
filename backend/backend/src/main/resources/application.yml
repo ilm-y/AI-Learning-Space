@@ -2,6 +2,12 @@ spring:
   application:
     name: backend
 
+  # 本机覆盖（数据库密码、JWT 密钥等）。
+  # application-local.yml 已被 .gitignore 排除，不存在时 optional: 会让这里静默跳过，
+  # 所以新克隆的仓库不带它也能直接启动。详见 README 第九节。
+  config:
+    import: optional:classpath:application-local.yml
+
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     # createDatabaseIfNotExist=true 便于首次启动自动建库（需 MySQL 账号有建库权限）
