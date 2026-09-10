@@ -402,15 +402,40 @@ UNIQUE KEY `uk_evidence_dedupe` (`agent_run_id`, `concept_id`, `observation_hash
 
 JDK 17+、MySQL 8、Maven Wrapper（随仓库自带）。
 
-### 环境变量
+### 配置：本机差异写 `application-local.yml`，不要设环境变量
+
+`application.yml` 里的默认值（MySQL `root`/`root`）是团队约定，**本机不一样的部分写在
+`src/main/resources/application-local.yml`** —— 这个文件已被 `.gitignore` 排除，不会提交：
+
+```yaml
+spring:
+  datasource:
+    username: root
+    password: "你的密码"
+```
+
+它是靠 `application.yml` 里这一行走自动合并的，**不需要设环境变量，也不需要 `--spring.profiles.active`**：
+
+```yaml
+spring:
+  config:
+    import: optional:classpath:application-local.yml
+```
+
+`optional:` 前缀的含义是「文件不在就跳过」，所以新克隆的仓库没有这个文件也能正常启动（走 `application.yml` 的默认值）。
+优先级上，local 文件高于 `application.yml`，低于命令行参数与环境变量 —— 临时覆盖用环境变量仍然有效。
+
+> 注意：打包时它会一起进本地 jar，别拿这个 jar 做分发。
+
+### 环境变量（可选，优先级最高）
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `MYSQL_HOST` | `localhost` | |
 | `MYSQL_PORT` | `3306` | |
-| `MYSQL_DB` | `ails` | 连接串带 `createDatabaseIfNotExist=true`，首次启动会自动建库 |
+| `MYSQL_DB` | `ails` | 连接串带 `createDatabaseIfNotExist=true`，**库不存在会自动建** |
 | `MYSQL_USER` | `root` | |
-| `MYSQL_PASSWORD` | `root` | |
+| `MYSQL_PASSWORD` | `root` | 本机不同请写进 `application-local.yml` |
 | `JWT_SECRET` | 开发用默认值 | 生产**必须**覆盖 |
 | `JWT_EXPIRATION_MS` | `604800000` | 7 天 |
 
@@ -443,7 +468,11 @@ cd backend/backend
 ./mvnw -DskipTests clean package && java -jar target/backend-0.0.1-SNAPSHOT.jar
 ```
 
-启动后 `SHOW TABLES` 应为 **22** 张（外加 MySQL 自身的表）。
+**不需要带任何环境变量**：数据库密码等本机差异已经由 `application-local.yml` 提供（见上一节）。
+IDE 里直接跑 `BackendApplication` 主类同理。
+
+启动后 `SHOW TABLES` 应为 **22** 张（外加 MySQL 自身的表）。库被删掉也不要紧，连接串的
+`createDatabaseIfNotExist=true` 会重新建库，`schema.sql` 会接着把 22 张表建回来 —— 都是幂等的。
 
 ### 编译
 
