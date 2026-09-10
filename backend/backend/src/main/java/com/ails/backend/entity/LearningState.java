@@ -1,6 +1,6 @@
 package com.ails.backend.entity;
 
-import com.ails.backend.enums.LearningStateStatus;
+import com.ails.backend.enums.UnderstandingStatus;
 import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
@@ -11,10 +11,16 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 学习状态表（learning_state，用户 × 知识点）。
+ * 学习状态（learning_state）—— {@link LearningUnderstanding} 状态的物化投影。
+ * <p>
+ * 状态取值与 understanding.status 完全一致，由 LearningStateService 单向派生，
+ * 不允许独立修改，避免出现「Understanding 说 PARTIAL、LearningState 说 DEMONSTRATED」
+ * 这种不知道该信谁的分裂。
  * <p>
  * 规格原设计为复合主键 (user_id, concept_id)，MyBatis-Plus 不支持复合主键，
  * 故增加自增代理主键 id，并保留 UNIQUE(user_id, concept_id)。
+ * <p>
+ * 第一版不保存 mastery / confidence / stability。
  */
 @Data
 @TableName("learning_state")
@@ -28,25 +34,16 @@ public class LearningState {
 
     private Long conceptId;
 
-    /** 掌握度 0~1，默认 0.0 */
-    private Double mastery;
+    private UnderstandingStatus status;
 
-    /** 系统置信度 0~1，低于 0.65 会触发验证 */
-    private Double confidence;
-
-    /** 稳定性，多次表现一致则升高 */
-    private Double stability;
-
-    private LearningStateStatus status;
-
-    /** 最近一次获得证据的时间 */
-    private LocalDateTime lastEvidenceAt;
-
-    /** 下次复习时间（由 Review Agent 计算） */
+    /** 下次复习时间 */
     private LocalDateTime nextReviewAt;
 
     /** 优先级越高越该复习 */
     private Integer reviewPriority;
+
+    /** 最近一次获得证据的时间 */
+    private LocalDateTime lastEvidenceAt;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;

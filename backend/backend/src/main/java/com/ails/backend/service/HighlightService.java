@@ -17,7 +17,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * 高亮标记：仅允许在属于自己的对话消息上做标记。
+ * 高亮标记：用户在 AI 回复上标记重点 / 疑问 / 自己的理解。
+ * <p>
+ * 批注是仅次于测试的强信号来源 —— 用户主动写下的「我的理解」比系统从他的闲聊里
+ * 猜测要可靠得多。因此创建批注后会立刻跑一次学习分析，让
+ * Evidence → Understanding → Revision → LearningState 这条链路同步推进，
+ * 前端 POST 完再 GET understanding 就能看到结果。
+ * <p>
+ * 哪类批注产生证据、产生什么样的证据，由 {@link LearningAnalysisService} 决定；
+ * 本类只负责归属校验与落库。
  */
 @Service
 @RequiredArgsConstructor
@@ -26,6 +34,7 @@ public class HighlightService {
     private final HighlightMapper highlightMapper;
     private final MessageMapper messageMapper;
     private final ConversationMapper conversationMapper;
+    private final LearningAnalysisService learningAnalysisService;
 
     @Transactional
     public HighlightResponse create(Long userId, Long messageId, HighlightRequest request) {
@@ -41,12 +50,16 @@ public class HighlightService {
         Highlight highlight = new Highlight();
         highlight.setUserId(userId);
         highlight.setMessageId(messageId);
-        highlight.setType(request.type());
+        highlight.setMarkType(request.markType());
         highlight.setSelectedText(request.selectedText());
+        highlight.setStartOffset(request.startOffset());
+        highlight.setEndOffset(request.endOffset());
         highlight.setNote(request.note());
         highlightMapper.insert(highlight);
 
-        // TODO(M4): 高亮(尤其 MY_UNDERSTANDING)可作为证据交给 Learning-State Agent
+        // 批注 → 证据 → 理解 → 投影（IMPORTANT / CONCEPT_LINK 不产生证据，此处为空操作）
+        learningAnalysisService.analyzeHighlight(highlight, message);
+
         return HighlightResponse.from(highlight);
     }
 
@@ -55,6 +68,16 @@ public class HighlightService {
         return highlightMapper.selectList(new LambdaQueryWrapper<Highlight>()
                         .eq(Highlight::getUserId, userId)
                         .orderByDesc(Highlight::getCreatedAt))
+                .stream().map(HighlightResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<HighlightResponse> listByMessage(Long userId, Long messageId) {
+        return highlightMapper.selectList(new LambdaQueryWrapper<Highlight>()
+                        .eq(Highlight::getUserId, userId)
+                        .eq(Highlight::getMessageId, messageId)
+                        .orderByAsc(Highlight::getStartOffset)
+                        .orderByAsc(Highlight::getId))
                 .stream().map(HighlightResponse::from).toList();
     }
 }

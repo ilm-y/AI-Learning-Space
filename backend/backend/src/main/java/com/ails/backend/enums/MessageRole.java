@@ -5,5 +5,7 @@ package com.ails.backend.enums;
  */
 public enum MessageRole {
     USER,
-    ASSISTANT
+    ASSISTANT,
+    SYSTEM,
+    TOOL
 }

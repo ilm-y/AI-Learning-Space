@@ -6,6 +6,6 @@ package com.ails.backend.enums;
 public enum ImportTaskStatus {
     PENDING,
     PROCESSING,
-    SUCCESS,
+    COMPLETED,
     FAILED
 }

@@ -1,10 +1,7 @@
 package com.ails.backend.entity;
 
 import com.ails.backend.enums.SessionStatus;
-import com.ails.backend.enums.SessionType;
-import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -12,7 +9,10 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 学习课程表（learning_session，短期，一次学习活动）
+ * 一次学习活动的容器（learning_session）。
+ * <p>
+ * 注意：Session 不承担长期记忆。它更接近 Thread / Activity，
+ * 而不是长期 Memory —— 有价值的长期信息应被提取到 Understanding / Memory。
  */
 @Data
 @TableName("learning_session")
@@ -25,20 +25,16 @@ public class LearningSession {
 
     private Long learningSpaceId;
 
-    /** learning_plan.id，可空（可独立存在） */
-    private Long learningPlanId;
-
-    /** 如 "TLB 专项复习" */
     private String title;
 
-    private SessionType sessionType;
+    /** 当前关注点 */
+    private String currentFocus;
 
     private SessionStatus status;
 
     private LocalDateTime startedAt;
 
-    private LocalDateTime finishedAt;
+    private LocalDateTime lastActiveAt;
 
-    @TableField(fill = FieldFill.INSERT)
-    private LocalDateTime createdAt;
+    private LocalDateTime completedAt;
 }

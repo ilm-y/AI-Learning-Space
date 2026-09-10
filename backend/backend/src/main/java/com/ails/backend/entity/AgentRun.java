@@ -1,7 +1,7 @@
 package com.ails.backend.entity;
 
 import com.ails.backend.enums.AgentRunStatus;
-import com.ails.backend.enums.AgentType;
+import com.ails.backend.enums.AgentRunType;
 import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
@@ -12,7 +12,12 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * Agent 执行轨迹表（agent_run，调试/可观测）
+ * Agent 执行轨迹（agent_run）。
+ * <p>
+ * 一次 SSE 对话请求对应一条 run_type = CHAT 的记录；一次异步学习分析对应一条
+ * run_type = EXTRACTION 的记录（其 id 就是 Evidence 去重用的 agentRunId）。
+ * <p>
+ * 只保存结构化摘要，不保存 LLM 内部思维链。
  */
 @Data
 @TableName("agent_run")
@@ -23,26 +28,21 @@ public class AgentRun {
 
     private Long userId;
 
-    /** 可空 */
     private Long conversationId;
 
-    /** 可空 */
-    private Long learningSessionId;
+    /** 对应的 learning_session */
+    private Long sessionId;
 
-    private AgentType agentType;
+    private AgentRunType runType;
 
     private AgentRunStatus status;
 
-    /** 输入截断 */
     private String inputSummary;
 
-    /** 输出截断 */
     private String outputSummary;
 
-    /** 耗时毫秒 */
     private Integer durationMs;
 
-    /** 异常堆栈（截断） */
     private String errorStack;
 
     @TableField(fill = FieldFill.INSERT)

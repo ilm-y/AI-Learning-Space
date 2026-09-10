@@ -72,7 +72,8 @@ public class ConversationService {
     @Transactional
     public void delete(Long userId, Long conversationId) {
         ownedConversation(userId, conversationId);
-        // message / highlight 通过 FK ON DELETE CASCADE 清理
+        // 软删：MyBatis-Plus 的 @TableLogic 会把 deleteById 变成 UPDATE deleted_at = now()。
+        // 消息与证据都保留 —— 对话只是学习历史的容器，删掉它不该毁掉证据链。
         conversationMapper.deleteById(conversationId);
     }
 

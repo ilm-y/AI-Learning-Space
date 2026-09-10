@@ -1,20 +1,36 @@
 -- =============================================================
--- AI Learning Space — 表结构（对齐 README_v1 的 17 张表）
--- MyBatis-Plus 不自动建表，由 spring.sql.init 每次启动执行本脚本。
--- 全部为 CREATE TABLE IF NOT EXISTS，幂等。枚举列直接使用 MySQL ENUM，
--- Java 侧枚举常量名（即 code）与 ENUM 值一致。
+-- AI Learning Space — 表结构（对齐 database&API_design.md 的 22 张表）
 --
--- 注意：learning_state 按 README_v1 原设计为复合主键 (user_id, concept_id)，
--- 但 MyBatis-Plus 不支持复合主键，故增加自增代理主键 id + UNIQUE(user_id, concept_id)。
--- 表名 `user` 在 MySQL 8 中为非保留关键字，这里统一加反引号。
+-- 本脚本【只负责 CREATE】，不含任何 DROP，由 spring.sql.init 每次启动执行，
+-- 全部为 CREATE TABLE IF NOT EXISTS，幂等。
+--
+-- 需要清库重建时执行同目录下的 schema-dev-reset.sql（只负责 DROP）：
+--     mysql -uroot -p ails < schema-dev-reset.sql
+--     mysql -uroot -p ails < schema.sql
+--
+-- 核心模型（谁是 source of truth）：
+--     Evidence        append-only，认知判断的原子依据，永不修改、不提供删除
+--     Understanding   当前理解快照（可更新）+ 每次真正变化产生 Revision（历史）
+--     Memory          Agent 长期上下文，用 CANDIDATE / ACTIVE / ARCHIVED 管生命周期
+--     LearningState   Understanding.status 的 Materialized Projection，只读派生
+--
+-- 与文档列清单的三处刻意加强（详见 README）：
+--   1. message 加 UNIQUE(conversation_id, sequence_no) —— 防并发撞号
+--   2. learning_evidence 加 agent_run_id / analyzer_version / observation_hash —— 分析去重
+--   3. deleted_at 软删只覆盖用户内容（learning_space / conversation / message / concept）；
+--      证据链不设软删、也不提供删除入口
+--
+-- 约定：枚举列直接使用 MySQL ENUM，Java 侧枚举常量名与 ENUM 值一致
+--      （MyBatis-Plus 按 Enum.name() 存取）。
+--      表名 `user` 在 MySQL 8 中为非保留关键字，这里统一加反引号。
 -- =============================================================
 
 -- 模块 1：用户
 CREATE TABLE IF NOT EXISTS `user` (
     `id`            BIGINT       NOT NULL AUTO_INCREMENT,
-    `username`      VARCHAR(50)  NOT NULL,
+    `username`      VARCHAR(64)  NOT NULL,
     `password_hash` VARCHAR(255) NOT NULL COMMENT 'bcrypt 加密',
-    `email`         VARCHAR(100)          DEFAULT NULL,
+    `email`         VARCHAR(255)          DEFAULT NULL,
     `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
@@ -22,33 +38,36 @@ CREATE TABLE IF NOT EXISTS `user` (
     UNIQUE KEY `uk_user_email` (`email`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- 模块 2：学习空间
+-- 模块 2：学习空间（软删）
 CREATE TABLE IF NOT EXISTS `learning_space` (
-    `id`          BIGINT      NOT NULL AUTO_INCREMENT,
-    `user_id`     BIGINT      NOT NULL,
-    `name`        VARCHAR(100) NOT NULL COMMENT '如 操作系统内核',
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT,
+    `user_id`     BIGINT       NOT NULL,
+    `name`        VARCHAR(128) NOT NULL,
     `description` TEXT,
     `visibility`  ENUM ('PRIVATE', 'SHARED') NOT NULL DEFAULT 'PRIVATE',
-    `created_at`  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at`  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at`  DATETIME              DEFAULT NULL COMMENT '软删标记，MyBatis-Plus @TableLogic',
+    `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_space_user` (`user_id`),
-    CONSTRAINT `fk_space_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_space_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- 模块 3：知识点
+-- 模块 3：知识点（软删）
 CREATE TABLE IF NOT EXISTS `concept` (
     `id`                BIGINT       NOT NULL AUTO_INCREMENT,
     `learning_space_id` BIGINT       NOT NULL,
-    `canonical_name`    VARCHAR(255) NOT NULL COMMENT '规范名，如 Translation_Lookaside_Buffer',
-    `display_name`      VARCHAR(100)          DEFAULT NULL COMMENT '显示名，如 TLB',
+    `canonical_name`    VARCHAR(255) NOT NULL COMMENT '标准名称，如 Translation_Lookaside_Buffer',
+    `display_name`      VARCHAR(255)          DEFAULT NULL COMMENT '显示名称，如 TLB',
     `description`       TEXT,
     `difficulty_level`  INT                   DEFAULT NULL COMMENT '1~5',
+    `deleted_at`        DATETIME              DEFAULT NULL COMMENT '软删标记',
     `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_concept_space_name` (`learning_space_id`, `canonical_name`),
     KEY `idx_concept_space` (`learning_space_id`),
-    CONSTRAINT `fk_concept_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_concept_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- 模块 3：概念关系
@@ -56,248 +75,356 @@ CREATE TABLE IF NOT EXISTS `concept_relation` (
     `id`                BIGINT NOT NULL AUTO_INCREMENT,
     `source_concept_id` BIGINT NOT NULL,
     `target_concept_id` BIGINT NOT NULL,
-    `relation_type`     ENUM ('PREREQUISITE_OF', 'RELATED_TO', 'IS_A', 'CONTRASTS_WITH') NOT NULL,
+    `relation_type`     ENUM ('PREREQUISITE', 'RELATED', 'PART_OF', 'CONTRAST') NOT NULL,
     `weight`            FLOAT          DEFAULT NULL COMMENT '0~1',
     `created_at`        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_relation` (`source_concept_id`, `target_concept_id`, `relation_type`),
     KEY `idx_rel_source` (`source_concept_id`),
     KEY `idx_rel_target` (`target_concept_id`),
-    CONSTRAINT `fk_rel_source` FOREIGN KEY (`source_concept_id`) REFERENCES `concept` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_rel_target` FOREIGN KEY (`target_concept_id`) REFERENCES `concept` (`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_rel_source` FOREIGN KEY (`source_concept_id`) REFERENCES `concept` (`id`),
+    CONSTRAINT `fk_rel_target` FOREIGN KEY (`target_concept_id`) REFERENCES `concept` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- 模块 4：对话
+-- 模块 4：对话（软删）
 CREATE TABLE IF NOT EXISTS `conversation` (
     `id`                BIGINT       NOT NULL AUTO_INCREMENT,
     `user_id`           BIGINT       NOT NULL,
     `learning_space_id` BIGINT       NOT NULL,
-    `title`             VARCHAR(200)          DEFAULT NULL COMMENT 'AI 自动总结的标题',
+    `title`             VARCHAR(255)          DEFAULT NULL,
     `status`            ENUM ('ACTIVE', 'ARCHIVED') NOT NULL DEFAULT 'ACTIVE',
+    `last_message_at`   DATETIME              DEFAULT NULL,
+    `deleted_at`        DATETIME              DEFAULT NULL COMMENT '软删标记',
     `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后消息时间',
+    `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    KEY `idx_conv_user` (`user_id`),
-    KEY `idx_conv_space` (`learning_space_id`),
-    CONSTRAINT `fk_conv_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_conv_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`) ON DELETE CASCADE
+    KEY `idx_conv_user_space_updated` (`user_id`, `learning_space_id`, `updated_at`),
+    CONSTRAINT `fk_conv_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_conv_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- 模块 4：消息
+-- 模块 4：消息（软删）
 CREATE TABLE IF NOT EXISTS `message` (
     `id`              BIGINT      NOT NULL AUTO_INCREMENT,
     `conversation_id` BIGINT      NOT NULL,
-    `role`            ENUM ('USER', 'ASSISTANT') NOT NULL,
-    `content`         TEXT        NOT NULL COMMENT 'Markdown 格式',
+    `role`            ENUM ('USER', 'ASSISTANT', 'SYSTEM', 'TOOL') NOT NULL,
+    `message_type`    ENUM ('TEXT', 'TEST', 'EVENT') NOT NULL DEFAULT 'TEXT',
+    `content`         LONGTEXT    NOT NULL COMMENT 'Markdown 格式',
     `tokens`          INT                  DEFAULT NULL,
+    `sequence_no`     INT         NOT NULL COMMENT '对话内顺序，从 1 开始',
+    `deleted_at`      DATETIME             DEFAULT NULL COMMENT '软删标记',
     `created_at`      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    KEY `idx_msg_conversation` (`conversation_id`),
-    CONSTRAINT `fk_msg_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `conversation` (`id`) ON DELETE CASCADE
+    -- 刻意加强：文档只写普通 INDEX，这里加 UNIQUE 以防并发写入撞号（见 plan.md §8）
+    UNIQUE KEY `uk_msg_conv_seq` (`conversation_id`, `sequence_no`),
+    CONSTRAINT `fk_msg_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `conversation` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- 模块 5：高亮
+-- 模块 5：批注
 CREATE TABLE IF NOT EXISTS `highlight` (
-    `id`            BIGINT NOT NULL AUTO_INCREMENT,
-    `user_id`       BIGINT NOT NULL,
-    `message_id`    BIGINT NOT NULL,
-    `selected_text` TEXT   NOT NULL,
-    `type`          ENUM ('IMPORTANT', 'QUESTION', 'MY_UNDERSTANDING') NOT NULL,
+    `id`            BIGINT   NOT NULL AUTO_INCREMENT,
+    `user_id`       BIGINT   NOT NULL,
+    `message_id`    BIGINT   NOT NULL,
+    `selected_text` TEXT     NOT NULL,
+    `start_offset`  INT               DEFAULT NULL COMMENT '选区起点，用于可靠定位原文',
+    `end_offset`    INT               DEFAULT NULL COMMENT '选区终点',
+    `mark_type`     ENUM ('IMPORTANT', 'QUESTION', 'MY_UNDERSTANDING', 'MISCONCEPTION_CANDIDATE', 'CONCEPT_LINK') NOT NULL,
     `note`          TEXT,
     `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_hl_user` (`user_id`),
     KEY `idx_hl_message` (`message_id`),
-    CONSTRAINT `fk_hl_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_hl_message` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_hl_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_hl_message` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- 模块 6：文档
-CREATE TABLE IF NOT EXISTS `document` (
+-- 模块 6：当前理解快照（一个 user × concept 只有一行；current_revision_id 不加 FK 以避开循环依赖）
+CREATE TABLE IF NOT EXISTS `learning_understanding` (
+    `id`                      BIGINT   NOT NULL AUTO_INCREMENT,
+    `user_id`                 BIGINT   NOT NULL,
+    `concept_id`              BIGINT   NOT NULL,
+    `summary`                 TEXT,
+    `known_parts`             JSON              DEFAULT NULL COMMENT '已理解部分',
+    `misconceptions`          JSON              DEFAULT NULL COMMENT '当前/历史误区',
+    `uncertain_parts`         JSON              DEFAULT NULL COMMENT '不确定部分',
+    `latest_user_explanation` TEXT              DEFAULT NULL COMMENT '最近一次用户自己的解释',
+    `status`                  ENUM ('UNKNOWN', 'EXPOSED', 'PARTIAL', 'DEMONSTRATED', 'MISCONCEPTION') NOT NULL DEFAULT 'UNKNOWN',
+    `current_revision_id`     BIGINT            DEFAULT NULL COMMENT '当前 Revision（无 FK，避免与 understanding_revision 循环）',
+    `updated_at`              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_understanding_user_concept` (`user_id`, `concept_id`),
+    KEY `idx_understanding_concept` (`concept_id`),
+    CONSTRAINT `fk_understanding_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_understanding_concept` FOREIGN KEY (`concept_id`) REFERENCES `concept` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 模块 7：证据链（append-only，无软删、无删除入口）
+CREATE TABLE IF NOT EXISTS `learning_evidence` (
+    `id`                        BIGINT  NOT NULL AUTO_INCREMENT,
+    `user_id`                   BIGINT  NOT NULL,
+    `concept_id`                BIGINT  NOT NULL,
+    `understanding_id`          BIGINT           DEFAULT NULL COMMENT '关联理解（getOrCreateUnderstanding 保证有值）',
+    `observation`               TEXT    NOT NULL,
+    `correctness`               ENUM ('CORRECT', 'INCORRECT', 'PARTIAL', 'UNKNOWN') NOT NULL DEFAULT 'UNKNOWN',
+    `reasoning_quality`         FLOAT            DEFAULT NULL COMMENT '推理质量，内部分析信号',
+    `specificity`               FLOAT            DEFAULT NULL COMMENT '针对性，内部分析信号',
+    `ai_confidence`             FLOAT            DEFAULT NULL COMMENT 'AI 置信度，内部分析信号',
+    `need_follow_up`            BOOLEAN          DEFAULT NULL,
+    `follow_up_status`          ENUM ('NONE', 'PENDING', 'RESOLVED') NOT NULL DEFAULT 'NONE',
+    `follow_up_conversation_id` BIGINT           DEFAULT NULL,
+    -- 刻意加强：分析去重与溯源（文档列清单之外，见 plan.md §47/Phase 8）
+    `agent_run_id`              BIGINT           DEFAULT NULL COMMENT '产生本条 Evidence 的 analysis run',
+    `analyzer_version`          VARCHAR(64)      DEFAULT NULL,
+    `observation_hash`          VARCHAR(64)      DEFAULT NULL COMMENT 'observation 归一化后的 hash',
+    `created_at`                DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    -- 唯一索引允许多个 NULL，因此无 run 上下文的手工写入不受此约束
+    UNIQUE KEY `uk_evidence_dedupe` (`agent_run_id`, `concept_id`, `observation_hash`),
+    KEY `idx_ev_user` (`user_id`),
+    KEY `idx_ev_concept` (`concept_id`),
+    KEY `idx_ev_understanding` (`understanding_id`),
+    CONSTRAINT `fk_ev_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_ev_concept` FOREIGN KEY (`concept_id`) REFERENCES `concept` (`id`),
+    CONSTRAINT `fk_ev_understanding` FOREIGN KEY (`understanding_id`) REFERENCES `learning_understanding` (`id`),
+    CONSTRAINT `fk_ev_follow_up_conv` FOREIGN KEY (`follow_up_conversation_id`) REFERENCES `conversation` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 模块 8：理解历史版本（每次真正变化产生一条）
+CREATE TABLE IF NOT EXISTS `understanding_revision` (
+    `id`                  BIGINT   NOT NULL AUTO_INCREMENT,
+    `understanding_id`    BIGINT   NOT NULL,
+    `revision_no`         INT      NOT NULL COMMENT '从 1 开始，同 understanding 内递增',
+    `summary`             TEXT,
+    `known_parts`         JSON              DEFAULT NULL,
+    `misconceptions`      JSON              DEFAULT NULL,
+    `uncertain_parts`     JSON              DEFAULT NULL,
+    `user_explanation`    TEXT              DEFAULT NULL,
+    `status`              ENUM ('UNKNOWN', 'EXPOSED', 'PARTIAL', 'DEMONSTRATED', 'MISCONCEPTION') NOT NULL,
+    `trigger_evidence_id` BIGINT            DEFAULT NULL COMMENT '导致本次变化的 Evidence',
+    `created_at`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_revision_no` (`understanding_id`, `revision_no`),
+    KEY `idx_revision_understanding` (`understanding_id`),
+    KEY `idx_revision_evidence` (`trigger_evidence_id`),
+    CONSTRAINT `fk_revision_understanding` FOREIGN KEY (`understanding_id`) REFERENCES `learning_understanding` (`id`),
+    CONSTRAINT `fk_revision_evidence` FOREIGN KEY (`trigger_evidence_id`) REFERENCES `learning_evidence` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 模块 9：Evidence 的真实来源（多态引用，source_id 由应用层校验真实对象存在）
+CREATE TABLE IF NOT EXISTS `evidence_source` (
+    `id`          BIGINT   NOT NULL AUTO_INCREMENT,
+    `evidence_id` BIGINT   NOT NULL,
+    `source_type` ENUM ('MESSAGE', 'HIGHLIGHT', 'TEST_ANSWER') NOT NULL,
+    `source_id`   BIGINT   NOT NULL,
+    `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_evidence_source` (`evidence_id`, `source_type`, `source_id`),
+    KEY `idx_source` (`source_type`, `source_id`),
+    CONSTRAINT `fk_es_evidence` FOREIGN KEY (`evidence_id`) REFERENCES `learning_evidence` (`id`) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 模块 10：学习状态（Understanding 的 Materialized Projection，只由 LearningStateService 写）
+-- 规格原设计为复合主键 (user_id, concept_id)，MyBatis-Plus 不支持复合主键，
+-- 故增加自增代理主键 id + UNIQUE(user_id, concept_id)。
+CREATE TABLE IF NOT EXISTS `learning_state` (
+    `id`               BIGINT   NOT NULL AUTO_INCREMENT,
+    `user_id`          BIGINT   NOT NULL,
+    `concept_id`       BIGINT   NOT NULL,
+    `status`           ENUM ('UNKNOWN', 'EXPOSED', 'PARTIAL', 'DEMONSTRATED', 'MISCONCEPTION') NOT NULL DEFAULT 'UNKNOWN',
+    `next_review_at`   DATETIME          DEFAULT NULL,
+    `review_priority`  INT      NOT NULL DEFAULT 0,
+    `last_evidence_at` DATETIME          DEFAULT NULL,
+    `updated_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_state_user_concept` (`user_id`, `concept_id`),
+    KEY `idx_state_concept` (`concept_id`),
+    CONSTRAINT `fk_state_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_state_concept` FOREIGN KEY (`concept_id`) REFERENCES `concept` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 模块 11：Agent 长期记忆（不物理删除，用 status 管生命周期）
+CREATE TABLE IF NOT EXISTS `memory` (
     `id`                BIGINT       NOT NULL AUTO_INCREMENT,
-    `learning_space_id` BIGINT       NOT NULL,
-    `name`              VARCHAR(255) NOT NULL,
-    `file_name`         VARCHAR(255) NOT NULL,
-    `storage_uri`       VARCHAR(500) NOT NULL COMMENT '文件系统路径或 OSS key',
-    `file_type`         ENUM ('PDF', 'MD', 'TXT', 'DOCX') NOT NULL,
-    `size`              BIGINT                DEFAULT NULL,
-    `status`            ENUM ('UPLOADING', 'PARSING', 'CHUNKING', 'INDEXING', 'READY', 'FAILED') NOT NULL DEFAULT 'UPLOADING',
-    `parser_version`    VARCHAR(20)           DEFAULT NULL,
+    `user_id`           BIGINT       NOT NULL,
+    `learning_space_id` BIGINT                DEFAULT NULL COMMENT '可选：空间范围',
+    `concept_id`        BIGINT                DEFAULT NULL COMMENT '可选：Concept 范围',
+    `memory_type`       ENUM ('USER', 'LEARNING', 'PREFERENCE') NOT NULL,
+    `path`              VARCHAR(255)          DEFAULT NULL COMMENT '层次路径，如 os/hardware-first',
+    `content`           TEXT         NOT NULL,
+    `status`            ENUM ('CANDIDATE', 'ACTIVE', 'ARCHIVED') NOT NULL DEFAULT 'CANDIDATE',
+    `importance`        FLOAT                 DEFAULT NULL,
+    `embedding_ref`     VARCHAR(255)          DEFAULT NULL COMMENT '向量存储引用',
     `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    KEY `idx_doc_space` (`learning_space_id`),
-    CONSTRAINT `fk_doc_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`) ON DELETE CASCADE
+    KEY `idx_memory_user` (`user_id`),
+    KEY `idx_memory_space` (`learning_space_id`),
+    KEY `idx_memory_concept` (`concept_id`),
+    KEY `idx_memory_type_status` (`memory_type`, `status`),
+    CONSTRAINT `fk_memory_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_memory_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`),
+    CONSTRAINT `fk_memory_concept` FOREIGN KEY (`concept_id`) REFERENCES `concept` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- 模块 6：文档切片
+-- 模块 11：Memory 的来源
+CREATE TABLE IF NOT EXISTS `memory_source` (
+    `id`          BIGINT   NOT NULL AUTO_INCREMENT,
+    `memory_id`   BIGINT   NOT NULL,
+    `source_type` ENUM ('MESSAGE', 'HIGHLIGHT', 'EVIDENCE', 'TEST_ANSWER') NOT NULL,
+    `source_id`   BIGINT   NOT NULL,
+    `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_memory_source` (`memory_id`, `source_type`, `source_id`),
+    KEY `idx_ms_memory` (`memory_id`),
+    CONSTRAINT `fk_ms_memory` FOREIGN KEY (`memory_id`) REFERENCES `memory` (`id`) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 模块 12：主动验证任务（测试嵌入当前对话）
+CREATE TABLE IF NOT EXISTS `test_task` (
+    `id`                BIGINT   NOT NULL AUTO_INCREMENT,
+    `user_id`           BIGINT   NOT NULL,
+    `concept_id`        BIGINT   NOT NULL,
+    `conversation_id`   BIGINT            DEFAULT NULL COMMENT '测试嵌入的对话',
+    `question_type`     ENUM ('SINGLE_CHOICE', 'TRUE_FALSE', 'SHORT_ANSWER') NOT NULL,
+    `question_text`     TEXT     NOT NULL,
+    `options`           JSON              DEFAULT NULL COMMENT '选择题选项',
+    `correct_answer`    TEXT              DEFAULT NULL,
+    `evaluation_rubric` JSON              DEFAULT NULL COMMENT '简答题评价标准',
+    `hint`              TEXT              DEFAULT NULL,
+    `status`            ENUM ('PENDING', 'ANSWERED', 'EXPIRED') NOT NULL DEFAULT 'PENDING',
+    `created_at`        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `expired_at`        DATETIME          DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_test_user` (`user_id`),
+    KEY `idx_test_concept` (`concept_id`),
+    KEY `idx_test_conversation` (`conversation_id`),
+    CONSTRAINT `fk_test_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_test_concept` FOREIGN KEY (`concept_id`) REFERENCES `concept` (`id`),
+    CONSTRAINT `fk_test_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `conversation` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 模块 12：测试回答
+CREATE TABLE IF NOT EXISTS `test_answer` (
+    `id`          BIGINT   NOT NULL AUTO_INCREMENT,
+    `task_id`     BIGINT   NOT NULL,
+    `user_answer` TEXT     NOT NULL,
+    `is_correct`  BOOLEAN           DEFAULT NULL,
+    `evaluation`  JSON              DEFAULT NULL COMMENT '判分信息，如 {correctness, feedback}',
+    `answered_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_answer_task` (`task_id`) COMMENT '一个任务只允许一次有效回答',
+    CONSTRAINT `fk_answer_task` FOREIGN KEY (`task_id`) REFERENCES `test_task` (`id`) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 模块 13：学习活动容器（不承担长期记忆）
+CREATE TABLE IF NOT EXISTS `learning_session` (
+    `id`                BIGINT       NOT NULL AUTO_INCREMENT,
+    `user_id`           BIGINT       NOT NULL,
+    `learning_space_id` BIGINT       NOT NULL,
+    `title`             VARCHAR(255)          DEFAULT NULL,
+    `current_focus`     VARCHAR(255)          DEFAULT NULL COMMENT '当前关注点',
+    `status`            ENUM ('ACTIVE', 'COMPLETED', 'ABANDONED') NOT NULL DEFAULT 'ACTIVE',
+    `started_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `last_active_at`    DATETIME              DEFAULT NULL,
+    `completed_at`      DATETIME              DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_sess_user` (`user_id`),
+    KEY `idx_sess_space` (`learning_space_id`),
+    CONSTRAINT `fk_sess_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_sess_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 模块 14：文档
+CREATE TABLE IF NOT EXISTS `document` (
+    `id`                BIGINT        NOT NULL AUTO_INCREMENT,
+    `learning_space_id` BIGINT        NOT NULL,
+    `name`              VARCHAR(255)  NOT NULL,
+    `file_name`         VARCHAR(255)  NOT NULL,
+    `storage_uri`       VARCHAR(1024) NOT NULL,
+    `file_type`         VARCHAR(64)            DEFAULT NULL,
+    `size`              BIGINT                 DEFAULT NULL,
+    `status`            ENUM ('UPLOADING', 'PROCESSING', 'READY', 'FAILED') NOT NULL DEFAULT 'UPLOADING',
+    `parser_version`    VARCHAR(64)            DEFAULT NULL,
+    `created_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_doc_space` (`learning_space_id`),
+    CONSTRAINT `fk_doc_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 模块 14：文档切片
 CREATE TABLE IF NOT EXISTS `document_chunk` (
-    `id`            BIGINT NOT NULL AUTO_INCREMENT,
-    `document_id`   BIGINT NOT NULL,
-    `chunk_index`   INT    NOT NULL,
-    `content`       TEXT   NOT NULL,
-    `page_number`   INT             DEFAULT NULL,
-    `token_count`   INT             DEFAULT NULL,
-    `metadata_json` JSON            DEFAULT NULL,
-    `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `id`            BIGINT       NOT NULL AUTO_INCREMENT,
+    `document_id`   BIGINT       NOT NULL,
+    `chunk_index`   INT          NOT NULL,
+    `content`       TEXT         NOT NULL,
+    `page_number`   INT                   DEFAULT NULL,
+    `token_count`   INT                   DEFAULT NULL,
+    `vector_ref`    VARCHAR(255)          DEFAULT NULL COMMENT '向量库引用',
+    `metadata_json` JSON                  DEFAULT NULL,
+    `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_chunk_doc_idx` (`document_id`, `chunk_index`),
-    KEY `idx_chunk_document` (`document_id`),
     CONSTRAINT `fk_chunk_document` FOREIGN KEY (`document_id`) REFERENCES `document` (`id`) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- 模块 7：学习计划
+-- 模块 15：学习计划（第一版只做目标清单）
 CREATE TABLE IF NOT EXISTS `learning_plan` (
     `id`                BIGINT       NOT NULL AUTO_INCREMENT,
     `user_id`           BIGINT       NOT NULL,
     `learning_space_id` BIGINT       NOT NULL,
-    `title`             VARCHAR(200) NOT NULL COMMENT '如 7天掌握Kafka Consumer',
+    `title`             VARCHAR(255) NOT NULL,
     `description`       TEXT,
     `goal`              TEXT,
-    `status`            ENUM ('ACTIVE', 'COMPLETED', 'PAUSED') NOT NULL DEFAULT 'ACTIVE',
+    `status`            ENUM ('ACTIVE', 'COMPLETED', 'ARCHIVED') NOT NULL DEFAULT 'ACTIVE',
     `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_plan_user` (`user_id`),
     KEY `idx_plan_space` (`learning_space_id`),
-    CONSTRAINT `fk_plan_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_plan_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_plan_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_plan_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- 模块 7：学习课程（短期，一次学习活动）
-CREATE TABLE IF NOT EXISTS `learning_session` (
-    `id`                BIGINT       NOT NULL AUTO_INCREMENT,
-    `user_id`           BIGINT       NOT NULL,
-    `learning_space_id` BIGINT       NOT NULL,
-    `learning_plan_id`  BIGINT                DEFAULT NULL,
-    `title`             VARCHAR(200) NOT NULL,
-    `session_type`      ENUM ('GUIDED', 'REVIEW', 'FREE') NOT NULL DEFAULT 'FREE',
-    `status`            ENUM ('STARTED', 'FINISHED', 'ABANDONED') NOT NULL DEFAULT 'STARTED',
-    `started_at`        DATETIME     NOT NULL,
-    `finished_at`       DATETIME              DEFAULT NULL,
-    `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    KEY `idx_sess_user` (`user_id`),
-    KEY `idx_sess_space` (`learning_space_id`),
-    KEY `idx_sess_plan` (`learning_plan_id`),
-    CONSTRAINT `fk_sess_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_sess_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_sess_plan` FOREIGN KEY (`learning_plan_id`) REFERENCES `learning_plan` (`id`) ON DELETE CASCADE
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-
--- 模块 8：验证任务
-CREATE TABLE IF NOT EXISTS `verification_task` (
-    `id`                 BIGINT  NOT NULL AUTO_INCREMENT,
-    `user_id`            BIGINT  NOT NULL,
-    `concept_id`         BIGINT  NOT NULL,
-    `learning_session_id` BIGINT          DEFAULT NULL,
-    `question_type`      ENUM ('MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_BLANK', 'SHORT_ANSWER') NOT NULL,
-    `question_text`      TEXT    NOT NULL,
-    `options`            JSON            DEFAULT NULL COMMENT '选择题选项，如 ["A. 会","B. 不会"]',
-    `correct_answer`     TEXT    NOT NULL,
-    `hint`               TEXT            DEFAULT NULL,
-    `status`             ENUM ('PENDING', 'ANSWERED', 'EXPIRED', 'SKIPPED') NOT NULL DEFAULT 'PENDING',
-    `created_at`         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `expired_at`         DATETIME        DEFAULT NULL COMMENT '过期时间，如 24 小时后失效',
-    PRIMARY KEY (`id`),
-    KEY `idx_vt_user` (`user_id`),
-    KEY `idx_vt_concept` (`concept_id`),
-    KEY `idx_vt_session` (`learning_session_id`),
-    CONSTRAINT `fk_vt_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_vt_concept` FOREIGN KEY (`concept_id`) REFERENCES `concept` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_vt_session` FOREIGN KEY (`learning_session_id`) REFERENCES `learning_session` (`id`) ON DELETE CASCADE
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-
--- 模块 8：验证回答
-CREATE TABLE IF NOT EXISTS `verification_answer` (
-    `id`           BIGINT  NOT NULL AUTO_INCREMENT,
-    `task_id`      BIGINT  NOT NULL,
-    `user_answer`  TEXT    NOT NULL,
-    `is_correct`   BOOLEAN NOT NULL,
-    `answered_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_answer_task` (`task_id`) COMMENT '一个任务只允许一次有效回答',
-    KEY `idx_answer_task` (`task_id`),
-    CONSTRAINT `fk_answer_task` FOREIGN KEY (`task_id`) REFERENCES `verification_task` (`id`) ON DELETE CASCADE
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-
--- 模块 9：学习状态（规格为复合主键 user_id+concept_id，MP 不支持，改用代理主键）
-CREATE TABLE IF NOT EXISTS `learning_state` (
-    `id`               BIGINT       NOT NULL AUTO_INCREMENT,
-    `user_id`          BIGINT       NOT NULL,
-    `concept_id`       BIGINT       NOT NULL,
-    `mastery`          DOUBLE       NOT NULL DEFAULT 0 COMMENT '掌握度 0~1',
-    `confidence`       DOUBLE       NOT NULL DEFAULT 0 COMMENT '置信度 0~1',
-    `stability`        DOUBLE       NOT NULL DEFAULT 0.5,
-    `status`           ENUM ('NEW', 'EXPLORING', 'VERIFYING', 'UNDERSTANDING', 'PRACTICING', 'MASTERED', 'MISCONCEPTION') NOT NULL DEFAULT 'NEW',
-    `last_evidence_at` DATETIME              DEFAULT NULL,
-    `next_review_at`   DATETIME              DEFAULT NULL,
-    `review_priority`  INT          NOT NULL DEFAULT 0,
-    `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_state_user_concept` (`user_id`, `concept_id`),
-    KEY `idx_state_concept` (`concept_id`),
-    CONSTRAINT `fk_state_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_state_concept` FOREIGN KEY (`concept_id`) REFERENCES `concept` (`id`) ON DELETE CASCADE
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-
--- 模块 9：证据链
-CREATE TABLE IF NOT EXISTS `learning_evidence` (
-    `id`            BIGINT  NOT NULL AUTO_INCREMENT,
-    `user_id`       BIGINT  NOT NULL,
-    `concept_id`    BIGINT  NOT NULL,
-    `source_type`   ENUM ('MESSAGE', 'HIGHLIGHT', 'VERIFICATION', 'IMPORTED') NOT NULL,
-    `source_id`     BIGINT           DEFAULT NULL COMMENT 'message.id / highlight.id / verification_answer.id',
-    `observation`   TEXT    NOT NULL,
-    `correctness`   ENUM ('CORRECT', 'PARTIALLY_CORRECT', 'INCORRECT', 'UNKNOWN') NOT NULL DEFAULT 'UNKNOWN',
-    `weight`        DOUBLE  NOT NULL DEFAULT 0.8 COMMENT '对话0.8 / 主动验证1.2 / 导入0.6',
-    `ai_confidence` DOUBLE  NOT NULL DEFAULT 0.5,
-    `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    KEY `idx_ev_user` (`user_id`),
-    KEY `idx_ev_concept` (`concept_id`),
-    CONSTRAINT `fk_ev_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_ev_concept` FOREIGN KEY (`concept_id`) REFERENCES `concept` (`id`) ON DELETE CASCADE
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-
--- 模块 10：导入任务
+-- 模块 16：历史对话导入任务
 CREATE TABLE IF NOT EXISTS `import_task` (
     `id`                BIGINT       NOT NULL AUTO_INCREMENT,
     `user_id`           BIGINT       NOT NULL,
     `learning_space_id` BIGINT       NOT NULL,
     `file_name`         VARCHAR(255) NOT NULL,
-    `source_type`       ENUM ('CHATGPT_JSON', 'GEMINI_JSON', 'CLAUDE_JSON', 'MARKDOWN', 'TXT') NOT NULL,
-    `status`            ENUM ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED') NOT NULL DEFAULT 'PENDING',
+    `source_type`       ENUM ('CHATGPT', 'CLAUDE', 'GEMINI', 'OTHER') NOT NULL,
+    `status`            ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED') NOT NULL DEFAULT 'PENDING',
     `progress`          INT          NOT NULL DEFAULT 0,
-    `error_message`     TEXT,
     `total_messages`    INT          NOT NULL DEFAULT 0,
+    `error_message`     TEXT,
     `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_import_user` (`user_id`),
     KEY `idx_import_space` (`learning_space_id`),
-    CONSTRAINT `fk_import_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_import_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_import_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_import_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
--- 模块 10：Agent 执行轨迹
+-- 模块 17：Agent 执行轨迹（一次 SSE 请求 / 一次 analysis run 对应一条）
 CREATE TABLE IF NOT EXISTS `agent_run` (
-    `id`                  BIGINT  NOT NULL AUTO_INCREMENT,
-    `user_id`             BIGINT  NOT NULL,
-    `conversation_id`     BIGINT           DEFAULT NULL,
-    `learning_session_id` BIGINT           DEFAULT NULL,
-    `agent_type`          ENUM ('TUTOR', 'LEARNING_STATE', 'RAG', 'REVIEW', 'SUPERVISOR') NOT NULL,
-    `status`              ENUM ('STARTED', 'THINKING', 'TOOL_CALLING', 'FINISHED', 'TIMEOUT', 'ERROR') NOT NULL DEFAULT 'STARTED',
-    `input_summary`       TEXT,
-    `output_summary`      TEXT,
-    `duration_ms`         INT,
-    `error_stack`         TEXT,
-    `created_at`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `finished_at`         DATETIME         DEFAULT NULL,
+    `id`              BIGINT   NOT NULL AUTO_INCREMENT,
+    `user_id`         BIGINT   NOT NULL,
+    `conversation_id` BIGINT            DEFAULT NULL,
+    `session_id`      BIGINT            DEFAULT NULL,
+    `run_type`        ENUM ('CHAT', 'EXTRACTION', 'UPDATE', 'TEST', 'MEMORY') NOT NULL,
+    `status`          ENUM ('RUNNING', 'COMPLETED', 'FAILED') NOT NULL DEFAULT 'RUNNING',
+    `input_summary`   TEXT,
+    `output_summary`  TEXT,
+    `duration_ms`     INT               DEFAULT NULL,
+    `error_stack`     TEXT,
+    `created_at`      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `finished_at`     DATETIME          DEFAULT NULL,
     PRIMARY KEY (`id`),
     KEY `idx_agent_user` (`user_id`),
     KEY `idx_agent_conv` (`conversation_id`),
-    KEY `idx_agent_session` (`learning_session_id`),
-    CONSTRAINT `fk_agent_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_agent_conv` FOREIGN KEY (`conversation_id`) REFERENCES `conversation` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_agent_session` FOREIGN KEY (`learning_session_id`) REFERENCES `learning_session` (`id`) ON DELETE CASCADE
+    KEY `idx_agent_session` (`session_id`),
+    CONSTRAINT `fk_agent_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_agent_conv` FOREIGN KEY (`conversation_id`) REFERENCES `conversation` (`id`),
+    CONSTRAINT `fk_agent_session` FOREIGN KEY (`session_id`) REFERENCES `learning_session` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;

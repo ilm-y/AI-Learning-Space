@@ -16,7 +16,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 高亮标记（在 AI 回复上标记重点 / 疑问 / 我的理解）。
+ * 高亮标记：在 AI 回复上标记重点 / 疑问 / 自己的理解。
+ * <p>
+ * 创建批注可能会产生学习证据（由标记类型决定），因此这个 POST 不只是「存一条记录」——
+ * 打完 {@code MY_UNDERSTANDING} 之后立刻 GET understanding 就能看到理解被推进。
  */
 @RestController
 @RequiredArgsConstructor
@@ -34,5 +37,10 @@ public class HighlightController {
     @GetMapping("/api/highlights")
     public ApiResponse<List<HighlightResponse>> listMine() {
         return ApiResponse.ok(highlightService.listMine(SecurityUtil.currentUserId()));
+    }
+
+    @GetMapping("/api/messages/{messageId}/highlights")
+    public ApiResponse<List<HighlightResponse>> listByMessage(@PathVariable Long messageId) {
+        return ApiResponse.ok(highlightService.listByMessage(SecurityUtil.currentUserId(), messageId));
     }
 }
