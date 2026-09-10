@@ -206,7 +206,7 @@ known:
 - TLB Miss 后查询 Page Table
 
 misconception:
-- 曾经混淆 TLB Miss 与 Page Fault
+- 把 TLB Miss 与 Page Fault 混淆（ACTIVE）
 
 uncertain:
 - Page Table 本身的位置
@@ -415,7 +415,7 @@ UnderstandingRevision
 当前 Concept
 相关 Concept
 最近 Revision
-当前 misconceptions
+当前 misconceptions（ACTIVE / PENDING）
 当前 uncertain_parts
 ```
 
@@ -723,10 +723,16 @@ Revision 2
 known = TLB cache
 
 Revision 3
-misconception = TLB Miss ≠ Page Fault
+status = MISCONCEPTION
+misconception = TLB Miss ≠ Page Fault  (ACTIVE)
 
 Revision 4
-misconception resolved
+status = MISCONCEPTION
+misconception = TLB Miss ≠ Page Fault  (PENDING，已出现反向证据)
+
+Revision 5
+status = DEMONSTRATED
+misconceptions = []                   (已解除，条目从当前快照移除)
 ```
 
 这样可以追踪：
@@ -736,6 +742,10 @@ misconception resolved
 什么时候纠正错误？
 为什么状态改变？
 ```
+
+注意 Revision 里记录的是「**当时**仍未解除的误区」。误区解除后当前快照里就没有它了，
+但 Revision 3 / 4 仍然留着它，Evidence 也一条没删 —— 这就是「曾经有过误区、后来被纠正」
+的追溯入口。状态迁移规则见 `backend/backend/README.md` 的「误区不是历史，是当前状态」。
 
 ---
 

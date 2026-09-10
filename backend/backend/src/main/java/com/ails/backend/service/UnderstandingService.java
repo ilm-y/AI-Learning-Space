@@ -7,8 +7,11 @@ import com.ails.backend.entity.LearningEvidence;
 import com.ails.backend.entity.LearningUnderstanding;
 import com.ails.backend.entity.UnderstandingRevision;
 import com.ails.backend.enums.EvidenceCorrectness;
+import com.ails.backend.enums.MisconceptionStatus;
 import com.ails.backend.enums.UnderstandingStatus;
 import com.ails.backend.mapper.ConceptMapper;
+import com.ails.backend.model.Misconception;
+import com.ails.backend.model.MisconceptionLifecycle;
 import com.ails.backend.mapper.LearningUnderstandingMapper;
 import com.ails.backend.mapper.UnderstandingRevisionMapper;
 import com.ails.backend.utils.JsonUtil;
@@ -69,7 +72,7 @@ public class UnderstandingService {
         created.setConceptId(conceptId);
         created.setStatus(UnderstandingStatus.UNKNOWN);
         created.setKnownParts(JsonUtil.fromStringList(List.of()));
-        created.setMisconceptions(JsonUtil.fromStringList(List.of()));
+        created.setMisconceptions(MisconceptionLifecycle.serialize(List.of()));
         created.setUncertainParts(JsonUtil.fromStringList(List.of()));
         understandingMapper.insert(created);
         return created;
@@ -80,13 +83,16 @@ public class UnderstandingService {
      * <p>
      * 映射规则（本地规则版；接入 Python Agent 后由 Agent 的分析结果替换）：
      * <pre>
-     *   CORRECT   → 观察进入 knownParts
+     *   CORRECT   → 观察进入 knownParts，同时作为反向证据推进已有误区
      *   PARTIAL   → 观察进入 knownParts 与 uncertainParts
-     *   INCORRECT → 观察进入 misconceptions
+     *   INCORRECT → 交给 MisconceptionLifecycle 激活/刷新对应误区
      *   UNKNOWN   → 只表示「接触过」，不进入任何列表
      * </pre>
      * 状态由快照内容派生，而不是由单条证据直接决定，避免一条 INCORRECT 就把
      * 长期积累的理解历史抹掉。
+     * <p>
+     * 误区的 ACTIVE / PENDING / 解除由 {@link MisconceptionLifecycle} 决定 ——
+     * 那是纯函数，规则集中在一处，也不需要为此改数据模型。
      *
      * @param userExplanation 可选：用户自己的原话（MY_UNDERSTANDING 批注 / 测试回答）
      */
@@ -103,7 +109,6 @@ public class UnderstandingService {
         UnderstandingStatus beforeStatus = understanding.getStatus();
 
         List<String> known = new ArrayList<>(JsonUtil.toStringList(understanding.getKnownParts()));
-        List<String> misconceptions = new ArrayList<>(JsonUtil.toStringList(understanding.getMisconceptions()));
         List<String> uncertain = new ArrayList<>(JsonUtil.toStringList(understanding.getUncertainParts()));
 
         String observation = normalize(evidence.getObservation());
@@ -115,15 +120,19 @@ public class UnderstandingService {
                     addDistinct(known, observation);
                     addDistinct(uncertain, observation);
                 }
-                case INCORRECT -> addDistinct(misconceptions, observation);
-                case UNKNOWN -> {
-                    // 只是「接触过」，不进入任何列表
+                case INCORRECT, UNKNOWN -> {
+                    // 误区不在这里处理，交给 MisconceptionLifecycle 走完整生命周期；
+                    // UNKNOWN 只是「接触过」，不进入任何列表
                 }
             }
         }
 
+        // 误区是有生命周期的：ACTIVE → PENDING → 解除，所以它不是一个只增不减的字符串列表
+        List<Misconception> misconceptions =
+                MisconceptionLifecycle.evolve(MisconceptionLifecycle.parse(understanding.getMisconceptions()), evidence);
+
         understanding.setKnownParts(JsonUtil.fromStringList(known));
-        understanding.setMisconceptions(JsonUtil.fromStringList(misconceptions));
+        understanding.setMisconceptions(MisconceptionLifecycle.serialize(misconceptions));
         understanding.setUncertainParts(JsonUtil.fromStringList(uncertain));
         understanding.setSummary(buildSummary(known, misconceptions, uncertain));
         if (StringUtils.hasText(userExplanation)) {
@@ -220,13 +229,17 @@ public class UnderstandingService {
      * 状态派生规则。
      * <p>
      * 优先看误区（近期的错误理解必须显性暴露），其次看是否已形成可演示的理解。
+     * <p>
+     * 注意这里的 {@code misconceptions} 是<b>当前仍然成立</b>的误区：已经解除的误区
+     * 早就从快照里移除了，所以一条老误区不会把概念永久钉死在 MISCONCEPTION 上。
+     * 处于 PENDING 的误区仍然算 MISCONCEPTION（还没确认解除），只是 attention 优先级更低。
      */
     private UnderstandingStatus resolveStatus(LearningUnderstanding understanding, UnderstandingStatus previous) {
         List<String> known = JsonUtil.toStringList(understanding.getKnownParts());
-        List<String> misconceptions = JsonUtil.toStringList(understanding.getMisconceptions());
+        List<Misconception> misconceptions = MisconceptionLifecycle.parse(understanding.getMisconceptions());
         List<String> uncertain = JsonUtil.toStringList(understanding.getUncertainParts());
 
-        if (!misconceptions.isEmpty()) {
+        if (MisconceptionLifecycle.hasUnresolved(misconceptions)) {
             return UnderstandingStatus.MISCONCEPTION;
         }
         if (known.size() >= DEMONSTRATED_MIN_KNOWN_PARTS && uncertain.isEmpty()) {
@@ -248,16 +261,22 @@ public class UnderstandingService {
         return (count == null ? 0 : count.intValue()) + 1;
     }
 
-    private String buildSummary(List<String> known, List<String> misconceptions, List<String> uncertain) {
-        if (known.isEmpty() && misconceptions.isEmpty() && uncertain.isEmpty()) {
+    private String buildSummary(List<String> known, List<Misconception> misconceptions, List<String> uncertain) {
+        List<String> active = MisconceptionLifecycle.textsOf(misconceptions, MisconceptionStatus.ACTIVE);
+        List<String> pending = MisconceptionLifecycle.textsOf(misconceptions, MisconceptionStatus.PENDING);
+        if (known.isEmpty() && active.isEmpty() && pending.isEmpty() && uncertain.isEmpty()) {
             return null;
         }
         StringBuilder sb = new StringBuilder();
         if (!known.isEmpty()) {
             sb.append("已理解：").append(String.join("；", known));
         }
-        if (!misconceptions.isEmpty()) {
-            appendSection(sb, "存在误区：", misconceptions);
+        if (!active.isEmpty()) {
+            appendSection(sb, "存在误区：", active);
+        }
+        // 正在被纠正的误区单独说，UI 上不该和仍然成立的误区长一样
+        if (!pending.isEmpty()) {
+            appendSection(sb, "误区可能正在解除：", pending);
         }
         if (!uncertain.isEmpty()) {
             appendSection(sb, "待确认：", uncertain);

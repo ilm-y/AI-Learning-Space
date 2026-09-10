@@ -149,7 +149,7 @@ UNIQUE:
 | concept_id              | BIGINT FK | Concept                                                    |
 | summary                 | TEXT      | 当前理解总结                                               |
 | known_parts             | JSON      | 已理解部分                                                 |
-| misconceptions          | JSON      | 当前/历史误区                                              |
+| misconceptions          | JSON      | 当前仍未解除的误区（见下方 Misconception Lifecycle）       |
 | uncertain_parts         | JSON      | 不确定部分                                                 |
 | latest_user_explanation | TEXT      | 最近一次用户解释                                           |
 | status                  | ENUM      | UNKNOWN / EXPOSED / PARTIAL / DEMONSTRATED / MISCONCEPTION |
@@ -166,6 +166,63 @@ UNIQUE:
 
 > 它是当前快照，不承担历史记录。
 
+## Misconception Lifecycle
+
+`misconceptions` 存的是**当前仍然成立**的误区，不是历史上出现过的所有错误。
+
+A misconception represents a currently active misunderstanding rather than a historical
+error. Once detected, it enters `ACTIVE`. Subsequent independent correct evidence moves it
+to `PENDING`, indicating that the misconception may be resolving. After sufficient
+independent confirmation, it is removed from the current Understanding and considered
+`RESOLVED`. Historical misconception evidence is never deleted and remains available
+through `LearningEvidence` and `UnderstandingRevision`.
+
+```text
+                错误证据
+                   ↓
+              ┌─────────┐
+              │ ACTIVE  │  当前存在这个误区
+              └────┬────┘
+                   │ 反向正确证据（correctness = CORRECT 且推理质量达标）
+                   ↓
+              ┌─────────┐
+              │ PENDING │  可能正在解除，尚未被独立确认
+              └────┬────┘
+                   │ 再次独立确认
+                   ↓
+                移除       视为已解除（RESOLVED）
+```
+
+每条误区的结构：
+
+```json
+[
+  {
+    "text": "把 TCP 三次握手理解成保证数据传输可靠",
+    "status": "ACTIVE",
+    "firstDetectedAt": "2026-09-10T10:00:00",
+    "lastEvidenceAt": "2026-09-10T10:20:00",
+    "reversalEvidenceIds": [7]
+  }
+]
+```
+
+要点：
+
+- **`RESOLVED` 不落库**。解除即从当前快照移除，所以彻底解除后就是 `"misconceptions": []`，
+  而不是留下一条 `RESOLVED` 记录 —— 当前快照只回答「现在还存在什么误区」。
+  「曾经有过、什么时候被纠正」通过 `understanding_revision` 与 `learning_evidence` 追溯。
+- **解除需要几次确认是策略，不是数据模型的字段**。快照里存的是采信过的证据 id
+  （`reversalEvidenceIds`），阈值由 Service 层决定，将来可以升级成
+  「一次高质量解释 + 一次测试正确」而不改表结构。
+- **`LearningEvidence` 永远不记录 resolved**。E1 `MISCONCEPTION`、E2 `CORRECT`、E3 `CORRECT`
+  三条并存：E1 的事实永远是真的 —— 「当时用户确实有这个错误认知」。
+- **误区解除后 `status` 不再停留在 `MISCONCEPTION`**，按剩余内容重新派生；`learning_state`
+  的 `review_priority` 也随之从 9（`ACTIVE`）/ 6（`PENDING`）回到按理解程度取值。
+
+> **Evidence is append-only. Current Understanding is mutable.
+> LearningState is derived from current Understanding.**
+
 ---
 
 # 9. understanding_revision
@@ -179,7 +236,7 @@ UNIQUE:
 | revision_no         | INT       | 版本号              |
 | summary             | TEXT      | 当时总结            |
 | known_parts         | JSON      | 当时已知            |
-| misconceptions      | JSON      | 当时误区            |
+| misconceptions      | JSON      | 当时仍未解除的误区  |
 | uncertain_parts     | JSON      | 当时不确定          |
 | user_explanation    | TEXT      | 当时用户解释        |
 | status              | ENUM      | 当时状态            |
@@ -709,10 +766,13 @@ Agent 创建测试。
 返回：
 
 ```text
-需要复盘
-存在误区
-长期未验证
+存在误区              MISCONCEPTION         优先级 9
+误区正在解除           MISCONCEPTION_RESOLVING  优先级 6
+需要复盘              NEEDS_REVIEW
+长期未验证            LONG_UNVERIFIED
 ```
+
+理由与优先级的对应关系见 #8 的 Misconception Lifecycle。
 
 ---
 

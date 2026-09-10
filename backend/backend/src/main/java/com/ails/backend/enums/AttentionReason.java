@@ -10,6 +10,9 @@ public enum AttentionReason {
     /** 当前理解被判定为误解，最优先纠正 */
     MISCONCEPTION,
 
+    /** 误区已经出现反向的正确证据，可能正在解除 —— 仍然要关注，但不用那么急 */
+    MISCONCEPTION_RESOLVING,
+
     /** 长时间没有新证据，理解可能已经过期 */
     LONG_UNVERIFIED,
 

@@ -325,8 +325,14 @@ known_parts:
 
 misconceptions:
 [
-  "曾混淆 TLB Miss 与 Page Fault"
+  {
+    "text": "把 TLB Miss 与 Page Fault 混淆",
+    "status": "ACTIVE"
+  }
 ]
+
+（当前仍然成立的误区；出现反向证据后降为 PENDING，解除后从快照移除，
+  历史通过 Revision 与 Evidence 追溯）
 
 uncertain_parts:
 [
@@ -448,7 +454,8 @@ Current Conversation
 ```text
 当前 Concept
 相关 Concept
-历史误区
+当前误区（ACTIVE / PENDING）
+历史误区（从 Revision 与 Evidence 追溯）
 最近 Revision
 ```
 
