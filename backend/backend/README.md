@@ -86,6 +86,7 @@ src/main/java/com/ails/backend/
 ├── entity/                     22 张表对应的实体
 ├── enums/                      全部枚举（与 MySQL ENUM 值一一对应）
 ├── mapper/                     MyBatis-Plus Mapper，全部是裸 BaseMapper
+├── model/                      领域值对象与不依赖数据库的规则（误区生命周期）
 ├── security/                   JWT 过滤器与鉴权失败处理
 ├── service/                    业务逻辑与写入语义
 └── utils/                      JWT / 安全上下文 / JSON 工具
@@ -139,11 +140,23 @@ public interface XMapper extends BaseMapper<X> {
 
 复杂查询都在 Service 里用 `LambdaQueryWrapper` 拼，Mapper 保持裸接口 —— 需要加自定义 SQL 时再开对应方法，不要提前建 XML。
 
+### `model/` — 领域值对象与纯规则
+
+存放**不属于某一张表、但属于领域本身**的东西：
+
+| 类 | 作用 |
+| --- | --- |
+| `Misconception` | 当前快照里的一个误区条目（存进 `learning_understanding.misconceptions` 的 JSON） |
+| `MisconceptionLifecycle` | 误区的状态迁移规则，**纯函数、不碰数据库**，所以可以脱离 Spring 与 MySQL 单测 |
+
+把误区规则放在这里而不是塞进 `UnderstandingService`，是为了让它可测、可改：将来把
+「两次独立确认」升级成「一次高质量解释 + 一次测试正确」，只改这一个类。
+
 ### `dto/`
 
 按领域分包：`auth / user / space / concept / conversation / highlight / understanding / memory / test / state / agent`。
 
-统一风格：Java `record` + 静态 `from(...)` 工厂（带空值守卫，返回 `null` 而不是抛异常）。JSON 列在实体里是 `String`，出参时用 `utils/JsonUtil` 转成 `List<String>`。
+统一风格：Java `record` + 静态 `from(...)` 工厂（带空值守卫，返回 `null` 而不是抛异常）。JSON 列在实体里是 `String`，出参时用 `utils/JsonUtil` 转成 `List<String>` 或 `List<Misconception>`。
 
 `test/` 包替代了 v1 的 `verification/`；`state/` 里的 `ContinueLearningItem` 已被 `AttentionItem` 与 `TopicCoverageItem` 取代。
 
@@ -175,6 +188,9 @@ source_type + source_id + concept_id + analyzer_version + observation_hash
 - 没有变化就不留 Revision —— Revision 的数量等于「理解真正演进过的次数」
 - 第一次创建初始 UNKNOWN 快照**不算变化**，所以打完第一个批注后 revisions 里只有 Revision 1
 - 同样没有删除入口：理解只能被新证据推进，不能被直接改写
+
+快照里只有 `known_parts / uncertain_parts` 是「只增不减」的清单。**`misconceptions` 不是** —— 它由
+`model/MisconceptionLifecycle` 管理生命周期，见下面「误区不是历史，是当前状态」。
 
 ### 3. MemoryService —— 生命周期，不是删除
 
@@ -222,14 +238,62 @@ CANDIDATE（Agent 推断，待确认） → ACTIVE（生效） → ARCHIVED（�
 状态由**快照内容**派生，而不是由单条证据直接决定 —— 否则一条 `INCORRECT` 就能把长期积累的理解抹掉：
 
 ```text
-misconceptions 非空            → MISCONCEPTION
+存在未解除的误区               → MISCONCEPTION
 knownParts ≥ 2 且 uncertain 空 → DEMONSTRATED
 knownParts 非空                → PARTIAL
 有证据但没形成判断             → EXPOSED
 完全没有证据                   → UNKNOWN
 ```
 
-`learning_state` 只是把上面这个结果复制过去，并按状态派生出复习间隔与优先级（`MISCONCEPTION` 优先级最高、间隔 1 天；`DEMONSTRATED` 优先级最低、间隔 7 天）。
+### 误区不是历史，是当前状态
+
+这是最容易搞错的一点：
+
+```text
+曾经答错        ≠  现在仍然不会
+曾经出现误区    ≠  当前永远 MISCONCEPTION
+```
+
+所以 `learning_understanding.misconceptions` 里存的**只是当前仍然成立的误区**，每条带自己的状态：
+
+```text
+               错误证据
+                  ↓
+              ┌────────┐
+              │ ACTIVE │  当前存在这个误区
+              └───┬────┘
+                  │  反向正确证据（CORRECT + 推理质量达标）
+                  ↓
+              ┌────────┐
+              │PENDING │  可能正在解除，还没被独立确认
+              └───┬────┘
+                  │  再次独立确认
+                  ↓
+               移除      视为已解除
+```
+
+- **解除不是一条 `RESOLVED` 记录，而是条目从当前快照里消失。** 当前快照只回答「现在还存在什么误区」，所以 `misconceptions: []` 是干净的。要知道「曾经有过什么误区、什么时候被纠正的」，去看 `GET /api/understandings/{conceptId}/revisions` 和 Evidence：**历史一条都没删。**
+- **一次答对只说明「这一次答对了」**，所以第一次反向证据先把误区降到 `PENDING`（状态仍是 `MISCONCEPTION`），第二条独立的正确证据才解除。证据是按 source 去重的，两条不同证据天然来自两次不同的 Message / Highlight / TestAnswer。
+- **「几次算解除」写在 `MisconceptionLifecycle` 的常量里，不是数据库字段**，也不是快照里的计数 —— 快照存的是采信过的证据 id，将来换成更细的规则不需要动数据模型和已有历史。
+- 解除之后如果又出现错误证据，会重新激活为 `ACTIVE`（按新一轮重新计时）。
+- 已知简化：本地规则版分析器分不清一条正确证据反驳的是**哪一个**误区，因此对它一视同仁地计一次确认；接入 Agent 后可以由 Agent 指明针对的是哪一条。
+
+`learning_state` 只是把 `understanding.status` 复制过去，并按状态派生出复习间隔与优先级：
+
+| 情形 | 优先级 | 复习间隔 | attention 理由 |
+| --- | ---: | ---: | --- |
+| 误区 `ACTIVE` | 9 | 1 天 | `MISCONCEPTION` |
+| 误区 `PENDING` | 6 | 2 天 | `MISCONCEPTION_RESOLVING` |
+| `PARTIAL` | 5 | 3 天 | 到期后 `NEEDS_REVIEW` |
+| `EXPOSED` | 4 | 2 天 | 到期后 `NEEDS_REVIEW` |
+| `UNKNOWN` | 3 | 1 天 | 到期后 `NEEDS_REVIEW` |
+| `DEMONSTRATED` | 1 | 7 天 | 到期后 `NEEDS_REVIEW` |
+
+所以「第一次发现错误 → 红色重点关注；开始答对 → 仍然关注但降级；确认已经掌握 → 从 attention 消失」，
+不会出现一条老误区把概念永久钉在最高优先级的情况。
+
+`ACTIVE` 还是 `PENDING` 属于 Understanding，`learning_state` 表里**没有**冗余这一列 ——
+投影只把结论落到 `review_priority`（9 / 6），attention 的推荐理由回读快照现算。
 
 > 当前的「抽取」是**本地规则版**（按 Concept 名称匹配文本 + 批注类型映射），分析器版本号 `rules-v1`。接入 Python Agent 后由 Agent 的分析结果替换，链路与写入语义不变。
 
@@ -286,9 +350,9 @@ message.error   { runId, code, message }
 
 ---
 
-## 八、三处对设计文档的刻意加强
+## 八、四处对设计文档的刻意加强
 
-这三处偏离了 `database&API_design.md` 的列清单，都是有意的，理由如下。
+这四处偏离了 `database&API_design.md` 的列清单，都是有意的，理由如下。
 
 ### 1. `message` 加了唯一约束
 
@@ -316,6 +380,17 @@ UNIQUE KEY `uk_evidence_dedupe` (`agent_run_id`, `concept_id`, `observation_hash
 `learning_evidence` / `learning_understanding` / `understanding_revision` **完全没有软删，也没有任何删除入口** —— 学习历史和证据链必须长期可追溯。`memory` 也不删，用 `CANDIDATE / ACTIVE / ARCHIVED` 管生命周期。
 
 对应地，外键级联**只保留 4 组**：`test_task → test_answer`、`memory → memory_source`、`learning_evidence → evidence_source`、`document → document_chunk`。`learning_space / conversation / message / concept` 的外键去掉了 `ON DELETE CASCADE` —— 否则一个 delete 就能顺着级联把长期学习历史炸掉。
+
+### 4. `misconceptions` 的语义收窄为「当前」，且存对象而不是字符串
+
+文档写的是「当前/历史误区」，实际存的是**只包含当前仍未解除的误区**，且每条是带状态的对象：
+
+```json
+[{ "text": "...", "status": "ACTIVE", "firstDetectedAt": "...", "lastEvidenceAt": "...", "reversalEvidenceIds": [7] }]
+```
+
+理由是「历史」已经有两处权威记录（`understanding_revision` 与 `learning_evidence`），在快照里再存一份会让它的状态语义自相矛盾
+—— 快照说「用户现在是这样理解的」，却塞着一条早就不成立的旧错误。详见第五节。**不需要改表结构**，JSON 列不受影响。
 
 保留的既有约定：MySQL ENUM 的值与 Java 枚举常量名完全一致（MyBatis-Plus 按 `name()` 存取），全库 utf8mb4。
 
@@ -377,7 +452,19 @@ cd backend/backend
 ./mvnw -DskipTests clean package
 ```
 
-`BackendApplicationTests` 是 `@SpringBootTest`，需要真实数据源，本地无 MySQL 时会失败 —— 它不参与日常编译闸口。
+### 测试
+
+```bash
+# 误区生命周期是纯函数，脱离 Spring、不需要 MySQL
+./mvnw test -Dtest=MisconceptionLifecycleTest
+```
+
+| 测试 | 依赖 | 说明 |
+| --- | --- | --- |
+| `MisconceptionLifecycleTest` | 无 | 误区 ACTIVE → PENDING → 解除的迁移规则，9 个用例 |
+| `BackendApplicationTests` | 本地 MySQL | `@SpringBootTest` 上下文加载冒烟测试，标了 `@Disabled`，默认整包 `./mvnw test` 会跳过 |
+
+所以默认的 `./mvnw test` 是安全的：不需要数据库也能过。要在本地跑上下文冒烟测试，去掉那个 `@Disabled` 即可。
 
 ---
 
@@ -404,5 +491,7 @@ Conversation / Chat（SSE）/ Highlight / Understanding / Evidence / Memory / Te
 - **`LearningAnalysisService` 的规则版分析器会漏抽**。匹配不到 Concept 名称就不产生证据 —— 这是刻意的：宁可少抽，也不瞎猜。真正的语义理解是 Agent 的活。
 - **`TestService` 的简答题判分是启发式**。没有标准答案时看长度和是否点到概念名，这不是语义判断，等 Agent 接管后整段替换。
 - **`learning_state` 的复习间隔与优先级是硬编码的状态映射**，不是调度算法。
+- **误区的解除规则是「两条独立正确证据」，而且不区分反驳的是哪一条误区**。规则版分析器只能给出整条证据的 `correctness`，无法指出它针对的是哪个误区，所以对该 Concept 下所有未解除的误区一视同仁地计一次确认。接入 Agent 后由 Agent 指明目标误区，并把「两次确认」升级成更细的规则 —— 改 `MisconceptionLifecycle` 一个类即可，数据模型与已有历史都不用动。
+- **`misconceptions` 的 JSON 结构在本次修改中变了**（字符串数组 → 对象数组）。旧库里的行无法被新代码解析，需要按第九节重建；这是开发期的一次性动作，不涉及线上数据。
 
 这些都写在对应类的 Javadoc 里，不会让人误以为它们已经是最终实现。

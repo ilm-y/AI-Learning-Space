@@ -9,12 +9,14 @@ import com.ails.backend.entity.LearningState;
 import com.ails.backend.entity.LearningUnderstanding;
 import com.ails.backend.entity.UnderstandingRevision;
 import com.ails.backend.enums.AttentionReason;
+import com.ails.backend.enums.MisconceptionStatus;
 import com.ails.backend.enums.UnderstandingStatus;
 import com.ails.backend.mapper.ConceptMapper;
 import com.ails.backend.mapper.LearningEvidenceMapper;
 import com.ails.backend.mapper.LearningStateMapper;
 import com.ails.backend.mapper.LearningUnderstandingMapper;
 import com.ails.backend.mapper.UnderstandingRevisionMapper;
+import com.ails.backend.model.MisconceptionLifecycle;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -41,6 +44,8 @@ import java.util.stream.Collectors;
  *   <li>对外只提供查询接口，不存在「直接改学习状态」的入口；</li>
  *   <li>没有 mastery / confidence / stability 之类的数值聚合，也不存在阈值。
  *       想知道「为什么是这个状态」，去看 Understanding 的快照与 Revision 历史。</li>
+ *   <li>误区是 ACTIVE 还是 PENDING 属于 Understanding：投影只把结论落到 review_priority
+ *       （9 / 6），attention 的理由回读快照现算，不在本表里冗余第二份。</li>
  * </ul>
  * 这样就不会出现「Understanding 说 PARTIAL，LearningState 说 DEMONSTRATED」的分裂。
  */
@@ -116,6 +121,9 @@ public class LearningStateService {
                 .orderByDesc(LearningState::getReviewPriority)
                 .orderByAsc(LearningState::getNextReviewAt));
         Map<Long, Concept> concepts = loadConcepts(states.stream().map(LearningState::getConceptId).toList());
+        // ACTIVE / PENDING 的区分属于 Understanding，不在 learning_state 里冗余一份
+        Map<Long, MisconceptionStatus> misconceptions = loadMisconceptions(userId,
+                states.stream().map(LearningState::getConceptId).toList());
         LocalDateTime now = LocalDateTime.now();
 
         return states.stream()
@@ -123,7 +131,7 @@ public class LearningStateService {
                         state.getConceptId(),
                         conceptName(concepts.get(state.getConceptId())),
                         state.getStatus(),
-                        reasonOf(state, now),
+                        reasonOf(state, misconceptions.get(state.getConceptId()), now),
                         state.getLastEvidenceAt(),
                         state.getNextReviewAt(),
                         state.getReviewPriority()))
@@ -187,19 +195,21 @@ public class LearningStateService {
     private void applyProjection(LearningState state, LearningUnderstanding understanding, LocalDateTime evidenceAt) {
         UnderstandingStatus status = understanding == null || understanding.getStatus() == null
                 ? UnderstandingStatus.UNKNOWN : understanding.getStatus();
+        MisconceptionStatus misconception = misconceptionOf(understanding);
         state.setStatus(status);
         if (evidenceAt != null) {
             state.setLastEvidenceAt(evidenceAt);
         }
         LocalDateTime base = state.getLastEvidenceAt() == null ? LocalDateTime.now() : state.getLastEvidenceAt();
-        state.setNextReviewAt(base.plusDays(reviewIntervalDays(status)));
-        state.setReviewPriority(reviewPriority(status));
+        state.setNextReviewAt(base.plusDays(reviewIntervalDays(status, misconception)));
+        state.setReviewPriority(reviewPriority(status, misconception));
     }
 
     /** 复习间隔与优先级都由状态派生，不引入任何数值分数 */
-    private int reviewIntervalDays(UnderstandingStatus status) {
+    private int reviewIntervalDays(UnderstandingStatus status, MisconceptionStatus misconception) {
         return switch (status) {
-            case MISCONCEPTION -> 1;
+            // 已经出现反向证据的误区不用天天盯，隔天再看有没有稳定下来
+            case MISCONCEPTION -> misconception == MisconceptionStatus.PENDING ? 2 : 1;
             case UNKNOWN -> 1;
             case EXPOSED -> 2;
             case PARTIAL -> 3;
@@ -207,19 +217,30 @@ public class LearningStateService {
         };
     }
 
-    private int reviewPriority(UnderstandingStatus status) {
+    /**
+     * 优先级阶梯：仍成立的误区最高，正在解除的误区次之，其余按理解程度递减。
+     * <p>
+     * 「曾经有误区」不占权重 —— 误区一旦解除就不再出现在快照里，也就不会继续压着
+     * 这个概念排在 attention 最前面。
+     */
+    private int reviewPriority(UnderstandingStatus status, MisconceptionStatus misconception) {
         return switch (status) {
-            case MISCONCEPTION -> 9;
-            case UNKNOWN -> 5;
+            case MISCONCEPTION -> misconception == MisconceptionStatus.PENDING ? 6 : 9;
+            case PARTIAL -> 5;
             case EXPOSED -> 4;
-            case PARTIAL -> 3;
+            case UNKNOWN -> 3;
             case DEMONSTRATED -> 1;
         };
     }
 
-    private AttentionReason reasonOf(LearningState state, LocalDateTime now) {
-        if (state.getStatus() == UnderstandingStatus.MISCONCEPTION) {
+    private AttentionReason reasonOf(LearningState state, MisconceptionStatus misconception, LocalDateTime now) {
+        // 兜底：万一读不到快照，退回状态判定，别把 MISCONCEPTION 漏出 attention
+        if (misconception == MisconceptionStatus.ACTIVE
+                || (misconception == null && state.getStatus() == UnderstandingStatus.MISCONCEPTION)) {
             return AttentionReason.MISCONCEPTION;
+        }
+        if (misconception == MisconceptionStatus.PENDING) {
+            return AttentionReason.MISCONCEPTION_RESOLVING;
         }
         if (state.getLastEvidenceAt() != null
                 && state.getLastEvidenceAt().isBefore(now.minusDays(LONG_UNVERIFIED_DAYS))
@@ -242,6 +263,34 @@ public class LearningStateService {
         return ids.stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+    }
+
+    /** 每个 Concept 当前误区的严重程度（ACTIVE > PENDING > 无），一次查询取回 */
+    private Map<Long, MisconceptionStatus> loadMisconceptions(Long userId, List<Long> conceptIds) {
+        List<Long> distinct = conceptIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (distinct.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, MisconceptionStatus> result = new HashMap<>();
+        for (LearningUnderstanding understanding : understandingMapper.selectList(
+                new LambdaQueryWrapper<LearningUnderstanding>()
+                        .eq(LearningUnderstanding::getUserId, userId)
+                        .in(LearningUnderstanding::getConceptId, distinct))) {
+            MisconceptionStatus severity =
+                    MisconceptionLifecycle.severity(MisconceptionLifecycle.parse(understanding.getMisconceptions()));
+            if (severity != null) {
+                result.put(understanding.getConceptId(), severity);
+            }
+        }
+        return result;
+    }
+
+    /** 快照里当前的误区严重程度；没有未解除的误区时返回 null */
+    private MisconceptionStatus misconceptionOf(LearningUnderstanding understanding) {
+        if (understanding == null) {
+            return null;
+        }
+        return MisconceptionLifecycle.severity(MisconceptionLifecycle.parse(understanding.getMisconceptions()));
     }
 
     private Map<Long, Concept> loadConcepts(List<Long> ids) {

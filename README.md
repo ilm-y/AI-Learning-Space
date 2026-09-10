@@ -149,13 +149,17 @@ known_parts:
 - TLB Miss 后查询 Page Table
 
 misconceptions:
-- 曾混淆 TLB Miss 与 Page Fault
+- 把 TLB Miss 与 Page Fault 混淆（ACTIVE）
 
 uncertain_parts:
 - Page Table 本身的位置
 ```
 
 它不是简单的分数，而是一个“用户认知快照”。
+
+`misconceptions` 里只有**当前仍然成立**的误区：`ACTIVE`（当前存在）→ `PENDING`（出现反向证据，
+可能正在解除）→ 解除后从快照移除。曾经有过、后来被纠正的误区不会留在这里，而是通过
+`understanding_revision` 与 `learning_evidence` 追溯 —— 证据链永不删除。
 
 ---
 
