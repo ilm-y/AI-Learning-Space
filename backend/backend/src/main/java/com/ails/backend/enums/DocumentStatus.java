@@ -5,9 +5,7 @@ package com.ails.backend.enums;
  */
 public enum DocumentStatus {
     UPLOADING,
-    PARSING,
-    CHUNKING,
-    INDEXING,
+    PROCESSING,
     READY,
     FAILED
 }

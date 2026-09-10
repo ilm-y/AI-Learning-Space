@@ -11,7 +11,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 学习计划表（learning_plan，长期）
+ * 学习计划（learning_plan）。第一版只做目标清单，不做复杂排课。
  */
 @Data
 @TableName("learning_plan")
@@ -24,12 +24,10 @@ public class LearningPlan {
 
     private Long learningSpaceId;
 
-    /** 如 "7天掌握Kafka Consumer" */
     private String title;
 
     private String description;
 
-    /** 学习目标描述 */
     private String goal;
 
     private PlanStatus status;

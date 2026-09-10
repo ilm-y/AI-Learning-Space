@@ -10,7 +10,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 文档切片表（document_chunk）
+ * 文档切片（document_chunk）—— RAG 的检索单元。
  */
 @Data
 @TableName("document_chunk")
@@ -21,18 +21,19 @@ public class DocumentChunk {
 
     private Long documentId;
 
-    /** 切片序号 */
     private Integer chunkIndex;
 
-    /** 切片文本 */
     private String content;
 
-    /** 页码（PDF） */
+    /** PDF 页码 */
     private Integer pageNumber;
 
     private Integer tokenCount;
 
-    /** 扩展元数据 JSON */
+    /** 向量库引用 */
+    private String vectorRef;
+
+    /** 元数据，JSON 字符串 */
     private String metadataJson;
 
     @TableField(fill = FieldFill.INSERT)

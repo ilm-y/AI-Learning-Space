@@ -70,7 +70,8 @@ public class ConceptService {
     @Transactional
     public void delete(Long userId, Long conceptId) {
         Concept concept = accessibleConcept(userId, conceptId);
-        // learning_state / learning_evidence / verification_task / concept_relation 等由 FK 级联清理
+        // 软删：concept 上挂着 LearningUnderstanding / LearningEvidence，物理删除会炸掉学习历史。
+        // Evidence 与 Understanding 都没有删除入口，也不受这次软删影响。
         conceptMapper.deleteById(concept.getId());
     }
 

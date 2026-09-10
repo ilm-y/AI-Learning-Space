@@ -6,5 +6,5 @@ package com.ails.backend.enums;
 public enum PlanStatus {
     ACTIVE,
     COMPLETED,
-    PAUSED
+    ARCHIVED
 }
