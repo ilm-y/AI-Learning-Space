@@ -1,0 +1,14 @@
+[project]
+name = "ails-agent"
+version = "0.1.0"
+description = "AI Learning Space — Learning Agent Runtime（最小版本）"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"

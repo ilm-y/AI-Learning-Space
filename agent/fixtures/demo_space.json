@@ -1,0 +1,182 @@
+{
+  "_comment": "样例认知数据：README 第 2 节那个 TLB 场景。字段形状与后端响应完全一致（同一套 Pydantic 模型），所以从 Fixture 切到 HTTP 不需要改任何上层代码。",
+  "space": {
+    "id": 1,
+    "name": "操作系统"
+  },
+  "concepts": [
+    {
+      "id": 10,
+      "canonicalName": "TLB",
+      "displayName": "TLB（快表）",
+      "description": "Translation Lookaside Buffer，MMU 内部的页表项缓存",
+      "difficultyLevel": 3
+    },
+    {
+      "id": 11,
+      "canonicalName": "Page Table",
+      "displayName": "页表",
+      "description": "虚拟地址到物理地址的映射表",
+      "difficultyLevel": 3
+    },
+    {
+      "id": 12,
+      "canonicalName": "Page Fault",
+      "displayName": "缺页异常",
+      "description": "访问的页面不在物理内存时由 MMU 触发的异常",
+      "difficultyLevel": 4
+    },
+    {
+      "id": 13,
+      "canonicalName": "Virtual Memory",
+      "displayName": "虚拟内存",
+      "description": "为每个进程提供独立地址空间的抽象",
+      "difficultyLevel": 2
+    },
+    {
+      "id": 14,
+      "canonicalName": "Cache",
+      "displayName": "高速缓存",
+      "description": "CPU 与主存之间的缓存层次",
+      "difficultyLevel": 2
+    }
+  ],
+  "understandings": [
+    {
+      "id": 500,
+      "conceptId": 10,
+      "conceptName": "TLB",
+      "summary": "用户理解 TLB 是页表项（PTE）的缓存。",
+      "knownParts": [
+        "TLB 是页表项的缓存",
+        "TLB Hit 与 TLB Miss 的区别",
+        "TLB Miss 之后需要继续查 Page Table"
+      ],
+      "misconceptions": [
+        {
+          "text": "把 TLB Miss 与 Page Fault 混为一谈，认为 TLB 里没有就等于缺页",
+          "status": "ACTIVE",
+          "firstDetectedAt": "2026-09-10T10:00:00",
+          "lastEvidenceAt": "2026-09-10T10:00:00",
+          "reversalEvidenceIds": []
+        }
+      ],
+      "uncertainParts": [
+        "Page Table 本身存放在哪里"
+      ],
+      "latestUserExplanation": "它应该就是 Page Table 的缓存。",
+      "status": "MISCONCEPTION",
+      "currentRevisionId": 3,
+      "updatedAt": "2026-09-10T10:20:00"
+    },
+    {
+      "id": 501,
+      "conceptId": 13,
+      "conceptName": "Virtual Memory",
+      "summary": "用户接触过虚拟内存，知道地址需要经过翻译才能落到物理内存。",
+      "knownParts": [
+        "虚拟地址与物理地址不是一回事"
+      ],
+      "misconceptions": [],
+      "uncertainParts": [
+        "多级页表为什么存在"
+      ],
+      "latestUserExplanation": null,
+      "status": "PARTIAL",
+      "currentRevisionId": 1,
+      "updatedAt": "2026-09-08T21:00:00"
+    }
+  ],
+  "memories": [
+    {
+      "id": 100,
+      "learningSpaceId": 1,
+      "conceptId": null,
+      "memoryType": "PREFERENCE",
+      "path": "os/teaching-style",
+      "content": "用户更喜欢从「硬件实际发生了什么」入手理解操作系统概念，例如按 CPU → MMU → TLB → Page Table 的因果链展开，而不是先讲抽象模型。",
+      "status": "ACTIVE",
+      "importance": 0.9
+    },
+    {
+      "id": 101,
+      "learningSpaceId": 1,
+      "conceptId": 13,
+      "memoryType": "LEARNING",
+      "path": "os/virtual-memory",
+      "content": "用户已经学过虚拟内存的基础部分，地址翻译这条线不需要从头讲。",
+      "status": "ACTIVE",
+      "importance": 0.7
+    },
+    {
+      "id": 102,
+      "learningSpaceId": null,
+      "conceptId": null,
+      "memoryType": "USER",
+      "path": "profile",
+      "content": "用户是计算机专业学生，正在系统学习操作系统。",
+      "status": "ACTIVE",
+      "importance": 0.5
+    },
+    {
+      "id": 103,
+      "learningSpaceId": 1,
+      "conceptId": null,
+      "memoryType": "PREFERENCE",
+      "path": "os/teaching-style",
+      "content": "用户可能喜欢看图示。（AI 推断，尚未被用户确认）",
+      "status": "CANDIDATE",
+      "importance": 0.4
+    }
+  ],
+  "knowledge": [
+    {
+      "id": 200,
+      "documentId": 1,
+      "conceptId": 10,
+      "content": "TLB（Translation Lookaside Buffer）是 MMU 内部的页表项缓存。CPU 发出的虚拟地址先查 TLB：命中则直接得到物理页框号；未命中则由 MMU 进行页表遍历（page walk）。",
+      "pageNumber": 12,
+      "tokenCount": 88
+    },
+    {
+      "id": 201,
+      "documentId": 1,
+      "conceptId": 10,
+      "content": "TLB Miss 与 Page Fault 是两个层次的未命中：前者是缓存未命中，代价是一次页表遍历；后者是页面根本不在物理内存中，代价是一次磁盘 I/O 与进程陷入内核。",
+      "pageNumber": 19,
+      "tokenCount": 82
+    },
+    {
+      "id": 202,
+      "documentId": 1,
+      "conceptId": 12,
+      "content": "Page Fault（缺页异常）发生在页表项的有效位标记为「不在内存」时，由 MMU 触发异常，内核缺页处理程序负责把页面从磁盘换入，再重新执行那条导致异常的指令。",
+      "pageNumber": 18,
+      "tokenCount": 79
+    }
+  ],
+  "evidences": [
+    {
+      "id": 300,
+      "conceptId": 10,
+      "understandingId": 500,
+      "observation": "用户把 TLB Miss 描述成「TLB 里面没有，所以就是缺页」",
+      "correctness": "INCORRECT",
+      "reasoningQuality": 0.3,
+      "specificity": 0.7,
+      "aiConfidence": 0.8,
+      "createdAt": "2026-09-10T10:00:00"
+    },
+    {
+      "id": 301,
+      "conceptId": 10,
+      "understandingId": 500,
+      "observation": "用户正确说出 TLB Miss 之后仍需查询 Page Table",
+      "correctness": "CORRECT",
+      "reasoningQuality": 0.85,
+      "specificity": 0.9,
+      "aiConfidence": 0.88,
+      "createdAt": "2026-09-10T10:20:00"
+    }
+  ]
+}
