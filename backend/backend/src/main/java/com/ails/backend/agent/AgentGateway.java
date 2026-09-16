@@ -5,16 +5,52 @@ import com.ails.backend.dto.agent.ChatAgentRequest;
 /**
  * Backend 与 Agent Runtime 之间唯一的边界。
  * <p>
- * 现在由 {@link StubAgentGateway} 提供桩实现；将来接入 Python Agent 时，
- * 新增一个 HttpPythonAgentGateway 即可，ChatController / ChatService 不需要改动。
+ * 现在由 {@link StubAgentGateway} 提供桩实现；将来接入 Python Agent 时，新增一个
+ * {@code HttpPythonAgentGateway} 即可，ChatController / ChatService 不需要改动 ——
+ * 需要替换的点只有这一个接口的实现，Controller 里因此不必留任何
+ * 「以后要调 Python Agent」的注释。
  * <p>
- * 这就是为什么 Controller 里不需要留任何「以后要调 Python Agent」的注释 ——
- * 需要替换的点只有这一个接口的实现。
+ * <b>注意替换时的一个坑：</b>{@link StubAgentGateway} 是普通 {@code @Component}，
+ * 而这里注入的是<b>按类型</b>的 {@link AgentGateway}。直接再加一个 {@code @Component}
+ * 实现会让容器里出现两个候选 Bean，启动即报 NoUniqueBeanDefinitionException。
+ * 正确做法是二选一：给新实现加 {@code @Primary} / {@code @ConditionalOnProperty}，
+ * 或者把桩实现改成 {@code @ConditionalOnMissingBean(AgentGateway.class)} 由它让位。
+ *
+ * <h3>实现契约（调用方 {@code ChatService} 就按这套语义写代码）</h3>
+ * <ol>
+ *   <li><b>阻塞调用。</b>方法要一直阻塞到这次 Agent 交互<b>彻底结束</b>再返回，
+ *       不能「启动一个后台任务就返回」。ChatService 把「本方法返回」当作
+ *       「与 Agent 的交互已结束」的信号，返回之后不再接受任何回调。</li>
+ *   <li><b>在调用方线程上回调。</b>handler 的三个方法应当在调用 {@code streamReply}
+ *       的那条线程上依次调用。ChatService 传入的 handler 实现<b>不是线程安全的</b>
+ *       （内部用一个普通 StringBuilder 攒增量文本），并且假定回调串行、不会并发。
+ *       实现方不要为了「提高并发」自己开线程池去回调，除非同时把这条约束改掉。</li>
+ *   <li><b>终局回调恰好一次。</b>调用序列固定为
+ *       {@code onDelta × N（N ≥ 0）} → {@code onComplete} <b>或</b> {@code onError}，
+ *       二选一。终局回调之后不得再调用任何方法 —— 迟到的 {@code onComplete} 会被
+ *       ChatService 的终局开关丢弃，但那是它的兜底，不是实现方把「收尾发两次」
+ *       「终局后又吐 delta」当成正常流程的理由。</li>
+ *   <li><b>错误走 onError，不要抛。</b>模型调用失败、下游返回错误、响应反序列化失败，
+ *       都属于「这次生成失败」，应当转成 {@code onError(code, message)} 而不是抛异常。
+ *       调用方只对自己那侧的异常兜底，抛出去会把栈打出来当故障处理。</li>
+ *   <li><b>不碰传输层。</b>实现只管「把内容推出来」——推到 SSE、WebSocket 还是别的地方，
+ *       由调用方决定。实现方不得持有或关闭调用方的连接对象。</li>
+ *   <li><b>不写业务数据。</b>Evidence / Understanding 等学习闭环的落库由后端完成
+ *       （见 {@code LearningAnalysisService}），Agent 侧只读不写，
+ *       这样同一次对话的写入路径只有一条。</li>
+ * </ol>
  */
 public interface AgentGateway {
 
     /**
-     * 请求一次流式回复。实现方需同步或异步地把结果推给 handler。
+     * 请求一次流式回复，把内容经 {@code handler} 推回给调用方。
+     * <p>
+     * 参数 {@link ChatAgentRequest} 里的 {@code history} <b>不含</b>本轮提问
+     * （本轮由 {@code userMessage} 单独承载），实现方直接把它当成「这轮之前说过的话」用。
+     *
+     * @param request 本轮请求：身份信息（runId / userId / conversationId / spaceId）、
+     *                本轮提问、以及不含本轮提问的对话历史
+     * @param handler 内容与终局的回调出口，约束见类注释
      */
     void streamReply(ChatAgentRequest request, AgentStreamHandler handler);
 }

@@ -17,6 +17,7 @@ import com.ails.backend.mapper.UnderstandingRevisionMapper;
 import com.ails.backend.utils.JsonUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -63,7 +64,23 @@ public class UnderstandingService {
      */
     @Transactional
     public LearningUnderstanding getOrCreate(Long userId, Long conceptId) {
-        LearningUnderstanding existing = find(userId, conceptId);
+        return loadOrCreateLocked(userId, conceptId);
+    }
+
+    /**
+     * 加锁读快照，没有就插入。命名为 locked 是提醒：<b>它必须在调用方已开启的事务里跑</b>
+     * （{@code FOR UPDATE} 脱离事务没有意义）。
+     * <p>
+     * 顺序刻意是「先加锁读 → 判断 → 插入」，而不是「先普通读 → 判断 → 加锁」：
+     * InnoDB 的一致性读视图在事务里第一次<b>普通</b> SELECT 时建立，先普通读会把视图钉在旧时刻，
+     * 等锁到手后看到的还是旧数据。详见
+     * {@link com.ails.backend.mapper.LearningUnderstandingMapper#selectByUserAndConceptForUpdate}。
+     * <p>
+     * 并发下的两条路径都要处理：唯一索引上等值条件的 gap 锁<b>不互斥</b>，所以
+     * 「两边都没查到、都去 INSERT」是可能的，输的那个靠 DuplicateKeyException 兜住。
+     */
+    private LearningUnderstanding loadOrCreateLocked(Long userId, Long conceptId) {
+        LearningUnderstanding existing = understandingMapper.selectByUserAndConceptForUpdate(userId, conceptId);
         if (existing != null) {
             return existing;
         }
@@ -74,8 +91,18 @@ public class UnderstandingService {
         created.setKnownParts(JsonUtil.fromStringList(List.of()));
         created.setMisconceptions(MisconceptionLifecycle.serialize(List.of()));
         created.setUncertainParts(JsonUtil.fromStringList(List.of()));
-        understandingMapper.insert(created);
-        return created;
+        try {
+            understandingMapper.insert(created);
+            return created;
+        } catch (DuplicateKeyException e) {
+            // 另一个事务先插进去了。重取一次加锁读 —— 加锁读永远读最新已提交版本，
+            // 所以这里能看到对方写好的行，即使本事务的一致性读视图还是旧的。
+            LearningUnderstanding winner = understandingMapper.selectByUserAndConceptForUpdate(userId, conceptId);
+            if (winner == null) {
+                throw e; // 不是因为并发插入撞的唯一键，别吞
+            }
+            return winner;
+        }
     }
 
     /**
@@ -98,7 +125,11 @@ public class UnderstandingService {
      */
     @Transactional
     public ApplyResult apply(Long userId, Long conceptId, LearningEvidence evidence, String userExplanation) {
-        LearningUnderstanding understanding = getOrCreate(userId, conceptId);
+        // 走私有方法而不是 this.getOrCreate()：同类内部调用不经过 Spring 代理，那上面的
+        // @Transactional 是失效的 —— 这里本来就该复用外层事务，与其留一个「看起来在生效、
+        // 其实没生效」的注解，不如直接调不加注解的内部方法，语义和事实一致。
+        // 这一步同时把快照行的写锁拿到手，后面整段读改写都在锁内。
+        LearningUnderstanding understanding = loadOrCreateLocked(userId, conceptId);
 
         // 变更前快照，用于判断是否真的发生了变化
         String beforeSummary = understanding.getSummary();
@@ -255,6 +286,17 @@ public class UnderstandingService {
         return previous == null ? UnderstandingStatus.UNKNOWN : previous;
     }
 
+    /**
+     * 下一个 revision_no。
+     * <p>
+     * {@code COUNT(*)+1} 本身是「读-算-写」裸奔的写法，之所以安全，是因为它只在
+     * {@link #apply} 里被调用，而 apply 全程持有该快照行的写锁
+     * （见 {@code loadOrCreateLocked}）—— 同一 (user, concept) 的 apply 被强制串行，
+     * 不会有两个事务算出同一个号去撞 {@code uk_revision_no}。
+     * <p>
+     * Revision 没有软删、也没有删除入口，所以用 COUNT 等价于用 MAX，不需要额外处理空洞。
+     * <b>如果将来 apply 丢掉了那把锁，这里必须改成 MAX(revision_no)+1 或加重试。</b>
+     */
     private Integer nextRevisionNo(Long understandingId) {
         Long count = revisionMapper.selectCount(new LambdaQueryWrapper<UnderstandingRevision>()
                 .eq(UnderstandingRevision::getUnderstandingId, understandingId));

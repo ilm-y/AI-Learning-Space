@@ -63,11 +63,11 @@ Conversation → Evidence → Understanding(+Revision) / Memory → LearningStat
 
 三条关键关系，记住这三条就不会搞错：
 
-| 关系 | 含义 |
-| --- | --- |
+| 关系                     | 含义                                                                      |
+| ------------------------ | ------------------------------------------------------------------------- |
 | **Understanding 是真相** | 「用户现在怎么理解这个概念」只有这一个答案，就在 `learning_understanding` |
-| **LearningState 是投影** | 它不产生判断，只把 `understanding.status` 复制过来，方便筛选与推荐 |
-| **Evidence 是依据** | append-only。证据冲突时不是改掉旧的，而是再追加一条 |
+| **LearningState 是投影** | 它不产生判断，只把 `understanding.status` 复制过来，方便筛选与推荐        |
+| **Evidence 是依据**      | append-only。证据冲突时不是改掉旧的，而是再追加一条                       |
 
 `test_task` / `test_answer` 属于「验证手段」而不是「结论」：判分结果会作为一条 Evidence 流回证据层，再走同一条链路推进理解。
 
@@ -122,12 +122,12 @@ ChatController → ChatService → AgentGateway ─┬→ StubAgentGateway      
 
 ### `config/`
 
-| 类 | 作用 |
-| --- | --- |
-| `SecurityConfig` | `/api/auth/**` 与 OPTIONS 放行，其余需要认证；无状态；CORS 全开 |
-| `MybatisPlusConfig` | `@MapperScan("com.ails.backend.mapper")`，所以 Mapper 都不加 `@Mapper` |
-| `MyBatisMetaObjectHandler` | 自动填充 `createdAt` / `updatedAt` / `answeredAt` |
-| `AsyncConfig` | `chatStreamExecutor` 线程池，SSE 生成不占用 Tomcat 请求线程 |
+| 类                         | 作用                                                                   |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `SecurityConfig`           | `/api/auth/**` 与 OPTIONS 放行，其余需要认证；无状态；CORS 全开        |
+| `MybatisPlusConfig`        | `@MapperScan("com.ails.backend.mapper")`，所以 Mapper 都不加 `@Mapper` |
+| `MyBatisMetaObjectHandler` | 自动填充 `createdAt` / `updatedAt` / `answeredAt`                      |
+| `AsyncConfig`              | `chatStreamExecutor` 线程池，SSE 生成不占用 Tomcat 请求线程            |
 
 ### `entity/` 与 `mapper/`
 
@@ -144,10 +144,10 @@ public interface XMapper extends BaseMapper<X> {
 
 存放**不属于某一张表、但属于领域本身**的东西：
 
-| 类 | 作用 |
-| --- | --- |
-| `Misconception` | 当前快照里的一个误区条目（存进 `learning_understanding.misconceptions` 的 JSON） |
-| `MisconceptionLifecycle` | 误区的状态迁移规则，**纯函数、不碰数据库**，所以可以脱离 Spring 与 MySQL 单测 |
+| 类                       | 作用                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `Misconception`          | 当前快照里的一个误区条目（存进 `learning_understanding.misconceptions` 的 JSON） |
+| `MisconceptionLifecycle` | 误区的状态迁移规则，**纯函数、不碰数据库**，所以可以脱离 Spring 与 MySQL 单测    |
 
 把误区规则放在这里而不是塞进 `UnderstandingService`，是为了让它可测、可改：将来把
 「两次独立确认」升级成「一次高质量解释 + 一次测试正确」，只改这一个类。
@@ -221,15 +221,15 @@ CANDIDATE（Agent 推断，待确认） → ACTIVE（生效） → ARCHIVED（�
 
 ### 证据从哪来
 
-| 来源 | 映射 |
-| --- | --- |
-| Message 提到某个 Concept | `UNKNOWN` —— 只说明接触过，状态推进到 `EXPOSED` |
-| Highlight `MY_UNDERSTANDING` | `CORRECT` —— 用户自己的解释，最强信号 |
-| Highlight `MISCONCEPTION_CANDIDATE` | `INCORRECT` |
-| Highlight `QUESTION` | `UNKNOWN` + 需要跟进 |
-| Highlight `IMPORTANT` | 不产生证据（普通标记） |
-| Highlight `CONCEPT_LINK` | 不产生证据（只建概念关联） |
-| TestAnswer 判分 | `CORRECT` / `PARTIAL` / `INCORRECT` |
+| 来源                                | 映射                                            |
+| ----------------------------------- | ----------------------------------------------- |
+| Message 提到某个 Concept            | `UNKNOWN` —— 只说明接触过，状态推进到 `EXPOSED` |
+| Highlight `MY_UNDERSTANDING`        | `CORRECT` —— 用户自己的解释，最强信号           |
+| Highlight `MISCONCEPTION_CANDIDATE` | `INCORRECT`                                     |
+| Highlight `QUESTION`                | `UNKNOWN` + 需要跟进                            |
+| Highlight `IMPORTANT`               | 不产生证据（普通标记）                          |
+| Highlight `CONCEPT_LINK`            | 不产生证据（只建概念关联）                      |
+| TestAnswer 判分                     | `CORRECT` / `PARTIAL` / `INCORRECT`             |
 
 **返回 0 条证据是完全正常的。** 普通闲聊不涉及任何已注册 Concept 时，`analyzeMessage` 返回空列表，不写证据、不动理解。
 
@@ -280,14 +280,14 @@ knownParts 非空                → PARTIAL
 
 `learning_state` 只是把 `understanding.status` 复制过去，并按状态派生出复习间隔与优先级：
 
-| 情形 | 优先级 | 复习间隔 | attention 理由 |
-| --- | ---: | ---: | --- |
-| 误区 `ACTIVE` | 9 | 1 天 | `MISCONCEPTION` |
-| 误区 `PENDING` | 6 | 2 天 | `MISCONCEPTION_RESOLVING` |
-| `PARTIAL` | 5 | 3 天 | 到期后 `NEEDS_REVIEW` |
-| `EXPOSED` | 4 | 2 天 | 到期后 `NEEDS_REVIEW` |
-| `UNKNOWN` | 3 | 1 天 | 到期后 `NEEDS_REVIEW` |
-| `DEMONSTRATED` | 1 | 7 天 | 到期后 `NEEDS_REVIEW` |
+| 情形           | 优先级 | 复习间隔 | attention 理由            |
+| -------------- | -----: | -------: | ------------------------- |
+| 误区 `ACTIVE`  |      9 |     1 天 | `MISCONCEPTION`           |
+| 误区 `PENDING` |      6 |     2 天 | `MISCONCEPTION_RESOLVING` |
+| `PARTIAL`      |      5 |     3 天 | 到期后 `NEEDS_REVIEW`     |
+| `EXPOSED`      |      4 |     2 天 | 到期后 `NEEDS_REVIEW`     |
+| `UNKNOWN`      |      3 |     1 天 | 到期后 `NEEDS_REVIEW`     |
+| `DEMONSTRATED` |      1 |     7 天 | 到期后 `NEEDS_REVIEW`     |
 
 所以「第一次发现错误 → 红色重点关注；开始答对 → 仍然关注但降级；确认已经掌握 → 从 attention 消失」，
 不会出现一条老误区把概念永久钉在最高优先级的情况。
@@ -323,20 +323,20 @@ message.error   { runId, code, message }
 
 ### 已实现
 
-| 域 | 接口 |
-| --- | --- |
-| 认证 | `POST /api/auth/register`、`POST /api/auth/login` |
-| 用户 | `GET/PUT /api/user/me`、`PUT /api/user/me/password` |
-| 空间 | `GET/POST /api/spaces`、`GET/PUT/DELETE /api/spaces/{id}` |
-| 知识点 | `GET/POST /api/spaces/{spaceId}/concepts`、`GET/PUT/DELETE /api/concepts/{id}` |
-| 对话 | `GET/POST /api/spaces/{spaceId}/conversations`、`GET/PUT/DELETE /api/conversations/{id}`、`POST /api/conversations/{id}/archive` |
-| 对话流 | `GET /api/conversations/{id}/messages`、`POST /api/conversations/{id}/messages`（SSE） |
-| 批注 | `POST /api/messages/{messageId}/highlights`、`GET /api/messages/{messageId}/highlights`、`GET /api/highlights` |
-| 理解 | `GET /api/understandings?spaceId=`、`GET /api/understandings/{conceptId}`、`GET /api/understandings/{conceptId}/revisions` |
-| 证据 | `GET /api/understandings/{conceptId}/evidence`、`GET /api/evidence/{evidenceId}` |
-| 记忆 | `GET/POST /api/memories`、`GET/PATCH/DELETE /api/memories/{id}`、`GET /api/memories/search` |
-| 测试 | `POST /api/tests`、`GET /api/tests/pending`、`GET /api/tests/{testId}`、`POST /api/tests/{testId}/answer` |
-| 学习状态 | `GET /api/learning-state/overview`、`/concepts/{conceptId}`、`/attention`、`/topic-coverage?spaceId=` |
+| 域       | 接口                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 认证     | `POST /api/auth/register`、`POST /api/auth/login`                                                                                |
+| 用户     | `GET/PUT /api/user/me`、`PUT /api/user/me/password`                                                                              |
+| 空间     | `GET/POST /api/spaces`、`GET/PUT/DELETE /api/spaces/{id}`                                                                        |
+| 知识点   | `GET/POST /api/spaces/{spaceId}/concepts`、`GET/PUT/DELETE /api/concepts/{id}`                                                   |
+| 对话     | `GET/POST /api/spaces/{spaceId}/conversations`、`GET/PUT/DELETE /api/conversations/{id}`、`POST /api/conversations/{id}/archive` |
+| 对话流   | `GET /api/conversations/{id}/messages`、`POST /api/conversations/{id}/messages`（SSE）                                           |
+| 批注     | `POST /api/messages/{messageId}/highlights`、`GET /api/messages/{messageId}/highlights`、`GET /api/highlights`                   |
+| 理解     | `GET /api/understandings?spaceId=`、`GET /api/understandings/{conceptId}`、`GET /api/understandings/{conceptId}/revisions`       |
+| 证据     | `GET /api/understandings/{conceptId}/evidence`、`GET /api/evidence/{evidenceId}`                                                 |
+| 记忆     | `GET/POST /api/memories`、`GET/PATCH/DELETE /api/memories/{id}`、`GET /api/memories/search`                                      |
+| 测试     | `POST /api/tests`、`GET /api/tests/pending`、`GET /api/tests/{testId}`、`POST /api/tests/{testId}/answer`                        |
+| 学习状态 | `GET /api/learning-state/overview`、`/concepts/{conceptId}`、`/attention`、`/topic-coverage?spaceId=`                            |
 
 `/api/learning-state/*` **只有查询接口**。LearningState 是投影，没有「改状态」的入口 —— 想让它变，就去产生新证据。
 
@@ -429,24 +429,24 @@ spring:
 
 ### 环境变量（可选，优先级最高）
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `MYSQL_HOST` | `localhost` | |
-| `MYSQL_PORT` | `3306` | |
-| `MYSQL_DB` | `ails` | 连接串带 `createDatabaseIfNotExist=true`，**库不存在会自动建** |
-| `MYSQL_USER` | `root` | |
-| `MYSQL_PASSWORD` | `root` | 本机不同请写进 `application-local.yml` |
-| `JWT_SECRET` | 开发用默认值 | 生产**必须**覆盖 |
-| `JWT_EXPIRATION_MS` | `604800000` | 7 天 |
+| 变量                | 默认值       | 说明                                                           |
+| ------------------- | ------------ | -------------------------------------------------------------- |
+| `MYSQL_HOST`        | `localhost`  |                                                                |
+| `MYSQL_PORT`        | `3306`       |                                                                |
+| `MYSQL_DB`          | `ails`       | 连接串带 `createDatabaseIfNotExist=true`，**库不存在会自动建** |
+| `MYSQL_USER`        | `root`       |                                                                |
+| `MYSQL_PASSWORD`    | `root`       | 本机不同请写进 `application-local.yml`                         |
+| `JWT_SECRET`        | 开发用默认值 | 生产**必须**覆盖                                               |
+| `JWT_EXPIRATION_MS` | `604800000`  | 7 天                                                           |
 
 ### 建表脚本
 
 两份脚本职责分离，不要合并：
 
-| 文件 | 职责 | 何时执行 |
-| --- | --- | --- |
-| `schema.sql` | **只 CREATE**，全部 `CREATE TABLE IF NOT EXISTS`，幂等 | `spring.sql.init` 在**每次启动**时自动执行，无需手工干预 |
-| `schema-dev-reset.sql` | **只 DROP**，`SET FOREIGN_KEY_CHECKS = 0/1` 包住 | 需要清库重建时**手工**执行 |
+| 文件                   | 职责                                                   | 何时执行                                                 |
+| ---------------------- | ------------------------------------------------------ | -------------------------------------------------------- |
+| `schema.sql`           | **只 CREATE**，全部 `CREATE TABLE IF NOT EXISTS`，幂等 | `spring.sql.init` 在**每次启动**时自动执行，无需手工干预 |
+| `schema-dev-reset.sql` | **只 DROP**，`SET FOREIGN_KEY_CHECKS = 0/1` 包住       | 需要清库重建时**手工**执行                               |
 
 **为什么必须分开**：`schema.sql` 每次启动都会跑。如果把 DROP 写进去，`./mvnw spring-boot:run` 每重启一次就会清空一次数据库。
 
@@ -488,10 +488,10 @@ IDE 里直接跑 `BackendApplication` 主类同理。
 ./mvnw test -Dtest=MisconceptionLifecycleTest
 ```
 
-| 测试 | 依赖 | 说明 |
-| --- | --- | --- |
-| `MisconceptionLifecycleTest` | 无 | 误区 ACTIVE → PENDING → 解除的迁移规则，9 个用例 |
-| `BackendApplicationTests` | 本地 MySQL | `@SpringBootTest` 上下文加载冒烟测试，标了 `@Disabled`，默认整包 `./mvnw test` 会跳过 |
+| 测试                         | 依赖       | 说明                                                                                  |
+| ---------------------------- | ---------- | ------------------------------------------------------------------------------------- |
+| `MisconceptionLifecycleTest` | 无         | 误区 ACTIVE → PENDING → 解除的迁移规则，9 个用例                                      |
+| `BackendApplicationTests`    | 本地 MySQL | `@SpringBootTest` 上下文加载冒烟测试，标了 `@Disabled`，默认整包 `./mvnw test` 会跳过 |
 
 所以默认的 `./mvnw test` 是安全的：不需要数据库也能过。要在本地跑上下文冒烟测试，去掉那个 `@Disabled` 即可。
 
@@ -505,15 +505,15 @@ Conversation / Chat（SSE）/ Highlight / Understanding / Evidence / Memory / Te
 
 ### 待接入
 
-| 项目 | 现状 | 接入方式 |
-| --- | --- | --- |
-| Python Agent Runtime | `StubAgentGateway` 回显桩 | 新增 `HttpPythonAgentGateway implements AgentGateway`，替换 Bean |
-| 证据抽取与判分 | 本地规则版 `rules-v1` | 由 Agent 产出分析结果替换 `LearningAnalysisService` 的抽取逻辑与 `TestService` 的判分 |
-| 出题策略 | 由调用方指定或生成本地简答题 | Evidence Gap + 验证策略应由 Agent 决定 |
-| 文档 / 导出 / 导入 / 学习计划 / 学习会话 | Controller 返回 501 | 表结构已在位 |
-| Memory 向量检索 | 关键词 `LIKE` | 填 `memory.embedding_ref`，接向量库 |
-| Agent 写 Memory | `createCandidate` 已就绪但无调用方 | Agent 推断结果走 `createCandidate` 落 `CANDIDATE` |
-| `agent_run.session_id` | 恒为 null | 等学习会话实现 |
+| 项目                                     | 现状                               | 接入方式                                                                              |
+| ---------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------- |
+| Python Agent Runtime                     | `StubAgentGateway` 回显桩          | 新增 `HttpPythonAgentGateway implements AgentGateway`，替换 Bean                      |
+| 证据抽取与判分                           | 本地规则版 `rules-v1`              | 由 Agent 产出分析结果替换 `LearningAnalysisService` 的抽取逻辑与 `TestService` 的判分 |
+| 出题策略                                 | 由调用方指定或生成本地简答题       | Evidence Gap + 验证策略应由 Agent 决定                                                |
+| 文档 / 导出 / 导入 / 学习计划 / 学习会话 | Controller 返回 501                | 表结构已在位                                                                          |
+| Memory 向量检索                          | 关键词 `LIKE`                      | 填 `memory.embedding_ref`，接向量库                                                   |
+| Agent 写 Memory                          | `createCandidate` 已就绪但无调用方 | Agent 推断结果走 `createCandidate` 落 `CANDIDATE`                                     |
+| `agent_run.session_id`                   | 恒为 null                          | 等学习会话实现                                                                        |
 
 ### 已知取舍
 
@@ -524,3 +524,14 @@ Conversation / Chat（SSE）/ Highlight / Understanding / Evidence / Memory / Te
 - **`misconceptions` 的 JSON 结构在本次修改中变了**（字符串数组 → 对象数组）。旧库里的行无法被新代码解析，需要按第九节重建；这是开发期的一次性动作，不涉及线上数据。
 
 这些都写在对应类的 Javadoc 里，不会让人误以为它们已经是最终实现。
+
+### 已知问题与手写 SQL 清单
+
+上面记的是「刻意的取舍」。另有一类**已知但尚未处理**的问题 —— 跨 run 的 Evidence 去重缺数据库兜底、
+`learning_space_id` 为 NULL 的记忆对 Agent 不可见、线程池拒绝分支未被执行验证 ——
+连同**全部手写 SQL 的清单**（5 个 mapper / 6 条语句 + 2 处 `.last()` 片段，
+以及每一条为什么必须手写）记在 [AUDIT_NOTES.md](AUDIT_NOTES.md)。
+
+手写 SQL 值得单独看一遍的原因是：MyBatis-Plus 的 `@TableLogic` 只在注入自带方法时
+才拼 `deleted_at IS NULL`，手写语句不会被追加 —— 这既是机制也是陷阱，
+`message` 那个序号重复的 500 就是这么踩出来的。

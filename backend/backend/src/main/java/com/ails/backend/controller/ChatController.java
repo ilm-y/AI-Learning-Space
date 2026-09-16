@@ -48,6 +48,9 @@ public class ChatController {
      */
     @PostMapping(value = "/{id}/messages", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sendMessage(@PathVariable Long id, @Valid @RequestBody MessageRequest request) {
-        return chatService.stream(SecurityUtil.currentUserId(), id, request.content());
+        // token 在这里取下并一路带到 ChatAgentRequest：Agent 要用它回访后端的只读检索接口，
+        // 换成在 Service 里现取是不可能的 —— SSE 的生成线程上没有 SecurityContext（见 ChatService.stream）。
+        return chatService.stream(SecurityUtil.currentUserId(), id, request.content(),
+                SecurityUtil.currentToken());
     }
 }

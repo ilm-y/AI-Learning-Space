@@ -24,4 +24,14 @@ public final class SecurityUtil {
     public static Long currentUserId() {
         return currentUser().id();
     }
+
+    /**
+     * 当前请求携带的原始 JWT（不含 "Bearer " 前缀）。
+     * <p>
+     * 用途只有一个：把它透传给下游服务，让下游以<b>同一个用户</b>的身份回调后端的鉴权接口。
+     * 目前是 ChatService 组装 {@code ChatAgentRequest} 时塞给 Python Agent。
+     */
+    public static String currentToken() {
+        return currentUser().token();
+    }
 }
