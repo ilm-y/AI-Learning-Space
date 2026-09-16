@@ -79,12 +79,18 @@ public class ConversationService {
 
     /**
      * 取当前用户拥有的对话，否则视为不存在。
+     * <p>
+     * 除了对话本身的归属，还要确认它所在的学习空间仍然存在：空间被软删之后，
+     * 它下面的知识点会随之一并 404（{@code ConceptService.requireOwnedSpace} 会查空间），
+     * 如果对话还能照常读写，「删除空间」就变成了两套语义 —— 一半的东西消失了，
+     * 另一半还在，而且没有任何入口能把它们恢复回来。
      */
     public Conversation ownedConversation(Long userId, Long conversationId) {
         Conversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null || !conversation.getUserId().equals(userId)) {
             throw BusinessException.notFound("对话不存在");
         }
+        spaceService.ownedSpace(userId, conversation.getLearningSpaceId());
         return conversation;
     }
 }

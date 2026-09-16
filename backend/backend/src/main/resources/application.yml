@@ -38,7 +38,7 @@ mybatis-plus:
 ails:
   jwt:
     # HS256 密钥需 >= 32 字节；生产环境务必用 JWT_SECRET 环境变量覆盖
-    secret: ${JWT_SECRET:ails-learning-space-dev-secret-change-me-in-production-0123456789abcdef}
+    secret: ${JWT_SECRET:ails-dev-7f3a9c2e5b8d1f4a6e0c3b7d9f2a5c8e1b4d7f0a3c6e9b2d5f8a1c4e7b0d3f6a}
     # 过期时间（毫秒），默认 7 天
     expiration-ms: ${JWT_EXPIRATION_MS:604800000}
 

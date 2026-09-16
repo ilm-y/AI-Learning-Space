@@ -61,10 +61,21 @@ public class LearningSpaceService {
         return LearningSpaceResponse.from(space);
     }
 
+    /**
+     * 删除空间 —— 实际是<b>软删</b>（@TableLogic 把 deleteById 变成 UPDATE deleted_at）。
+     * <p>
+     * 子表<b>不会</b>被级联清理，也不可能被清理：① 没有任何指向 learning_space 的外键带
+     * ON DELETE CASCADE；② 软删走的是 UPDATE，外键动作根本不会触发。
+     * 所以 conversation / concept / learning_evidence / learning_understanding 这些行原样留在库里
+     * —— 这正是刻意为之：空间只是容器，删掉它不该毁掉学习历史。
+     * <p>
+     * 这些残留行「看不见」的口径统一由各自的归属校验负责：空间软删后，
+     * {@code ConceptService.requireOwnedSpace} 与 {@code ConversationService.ownedConversation}
+     * 都会因为它查不到而返回 404，因此从 API 上看不到、也写不进这个空间的任何数据。
+     */
     @Transactional
     public void delete(Long userId, Long spaceId) {
         ownedSpace(userId, spaceId);
-        // 子表均建了 ON DELETE CASCADE 外键，删除空间会级联清理
         spaceMapper.deleteById(spaceId);
     }
 

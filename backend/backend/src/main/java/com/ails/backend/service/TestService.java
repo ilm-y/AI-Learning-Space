@@ -18,9 +18,13 @@ import com.ails.backend.mapper.TestAnswerMapper;
 import com.ails.backend.mapper.TestTaskMapper;
 import com.ails.backend.utils.JsonUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -59,6 +63,8 @@ public class TestService {
     private final ConversationService conversationService;
     private final UnderstandingService understandingService;
     private final LearningAnalysisService learningAnalysisService;
+    /** 只为 {@link #markExpired} 的独立事务服务，见那里的说明 */
+    private final PlatformTransactionManager transactionManager;
 
     @Transactional
     public TestTaskResponse create(Long userId, TestTaskRequest request) {
@@ -86,11 +92,21 @@ public class TestService {
         return TestTaskResponse.from(task, displayName(concept));
     }
 
+    /**
+     * 待作答的测试。
+     * <p>
+     * 「已过期」在这里就会被挡掉，不等它被扫成 EXPIRED：状态位的翻转依赖用户下次提交
+     * （见 {@link #markExpired}），中间这段时间如果照常列出来，用户点进去只会看到一个 409，
+     * 属于「列表说有、操作说没有」。所以列表按<div>时间</div>判断，状态位只负责长期一致。
+     */
     @Transactional(readOnly = true)
     public List<TestTaskResponse> listPending(Long userId) {
+        LocalDateTime now = LocalDateTime.now();
         List<TestTask> tasks = testTaskMapper.selectList(new LambdaQueryWrapper<TestTask>()
                 .eq(TestTask::getUserId, userId)
                 .eq(TestTask::getStatus, TestTaskStatus.PENDING)
+                // expired_at 为空的按「永不过期」处理（当前 create 一定会写，这里只是不制造额外假设）
+                .and(w -> w.isNull(TestTask::getExpiredAt).or().gt(TestTask::getExpiredAt, now))
                 .orderByDesc(TestTask::getCreatedAt));
         return tasks.stream()
                 .map(task -> TestTaskResponse.from(task, conceptName(task.getConceptId())))
@@ -105,16 +121,40 @@ public class TestService {
 
     /**
      * 提交答案：判分 → 落 test_answer → 推进理解链路。
+     * <p>
+     * <b>两处顺序都是刻意的，别调换：</b>
+     * <ol>
+     *   <li><b>过期标记先写、且写在拿锁之前</b>。标记必须独立提交 —— 它后面紧跟着就 throw
+     *       {@code BusinessException}（RuntimeException），写在同一事务里会被一起回滚，
+     *       任务就永远停在 PENDING 继续出现在 listPending 里（见 {@link #markExpired}）。
+     *       放在拿锁之前是因为标记跑在另一个事务里，此刻外层事务只做过普通 SELECT、没持有
+     *       任何行锁，不会自己等自己。</li>
+     *   <li><b>拿到行锁之后才判 PENDING</b>。「读状态」与「写 ANSWERED」之间不能有窗口，
+     *       否则用户双击提交时两个请求同时读到 PENDING、同时插 test_answer，
+     *       后一个撞 {@code uk_answer_task} 变成 500 —— 而接口契约写的是 409。</li>
+     * </ol>
      */
     @Transactional
     public AnswerResult answer(Long userId, Long testId, AnswerRequest request) {
-        TestTask task = ownedTask(userId, testId);
+        TestTask snapshot = ownedTask(userId, testId);
+        if (isExpired(snapshot)) {
+            markExpired(testId);
+            throw BusinessException.conflict("该测试已过期");
+        }
+
+        // SELECT ... FOR UPDATE：从这里到事务结束，同一 task 的其它提交请求全部排队
+        TestTask task = testTaskMapper.selectByIdForUpdate(testId);
+        if (task == null || !Objects.equals(task.getUserId(), userId)) {
+            throw BusinessException.notFound("测试不存在");
+        }
         if (task.getStatus() != TestTaskStatus.PENDING) {
+            // 并发双击的第二个请求落在这里 —— 409，不是唯一键冲突的 500
             throw BusinessException.conflict("该测试已作答或已过期");
         }
-        if (task.getExpiredAt() != null && task.getExpiredAt().isBefore(LocalDateTime.now())) {
-            task.setStatus(TestTaskStatus.EXPIRED);
-            testTaskMapper.updateById(task);
+        if (isExpired(task)) {
+            // 极窄的窗口：上面那次检查还没到期，拿到锁时刚好到期。这里不再补标记
+            // （本事务马上要回滚），交给下一次提交走 markExpired；listPending 也已经
+            // 把过期的挡在外面，所以用户看不到这条已经作废的任务。
             throw BusinessException.conflict("该测试已过期");
         }
 
@@ -219,6 +259,36 @@ public class TestService {
     }
 
     // ================= 内部工具 =================
+
+    private boolean isExpired(TestTask task) {
+        return task.getExpiredAt() != null && task.getExpiredAt().isBefore(LocalDateTime.now());
+    }
+
+    /**
+     * 把任务标成 EXPIRED，并<b>立刻独立提交</b>。
+     * <p>
+     * 为什么不能直接在外层事务里 {@code updateById}：调用方写完标记紧接着就 throw
+     * {@code BusinessException}（RuntimeException），而 {@code @Transactional} 默认对
+     * RuntimeException 回滚 —— 标记和异常一起被抹掉，任务永远停在 PENDING，
+     * 既继续出现在 listPending 里，也永远不会被真正作废。
+     * 之前就是栽在这里：写入写了，但没人看得到结果。
+     * <p>
+     * {@code PROPAGATION_REQUIRES_NEW} 把外层事务挂起，用一条新事务写完即提交，
+     * 之后外层怎么回滚都与它无关。安全的前提是调用点<b>尚未持有 test_task 的行锁</b>
+     * （答案提交里它排在 {@code selectByIdForUpdate} 之前），否则新事务会被外层自己挡住。
+     * <p>
+     * WHERE 带上 {@code status = PENDING}：只把「还待作答」的标成过期，
+     * 不会覆盖 ANSWERED —— 否则一个已经答完的测试会被这里改写成 EXPIRED。
+     */
+    private void markExpired(Long testId) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        template.executeWithoutResult(status -> testTaskMapper.update(null,
+                new LambdaUpdateWrapper<TestTask>()
+                        .eq(TestTask::getId, testId)
+                        .eq(TestTask::getStatus, TestTaskStatus.PENDING)
+                        .set(TestTask::getStatus, TestTaskStatus.EXPIRED)));
+    }
 
     private TestTask ownedTask(Long userId, Long testId) {
         TestTask task = testTaskMapper.selectById(testId);

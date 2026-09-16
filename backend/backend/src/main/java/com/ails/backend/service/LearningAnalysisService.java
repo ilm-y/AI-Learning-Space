@@ -276,7 +276,9 @@ public class LearningAnalysisService {
             throw e;
         } finally {
             run.setFinishedAt(LocalDateTime.now());
-            run.setDurationMs((int) Duration.between(startedAt, run.getFinishedAt()).toMillis());
+            // 封顶后再收窄到 int：裸的 (int) toMillis() 超过 24.8 天会翻成负数（agent_run.duration_ms 是 INT）
+            run.setDurationMs((int) Math.min(Integer.MAX_VALUE,
+                    Duration.between(startedAt, run.getFinishedAt()).toMillis()));
             agentRunMapper.updateById(run);
         }
         return written;

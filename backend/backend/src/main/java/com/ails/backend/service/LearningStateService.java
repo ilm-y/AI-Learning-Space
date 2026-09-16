@@ -19,6 +19,7 @@ import com.ails.backend.mapper.UnderstandingRevisionMapper;
 import com.ails.backend.model.MisconceptionLifecycle;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -62,21 +63,37 @@ public class LearningStateService {
     private final UnderstandingRevisionMapper revisionMapper;
     private final ConceptMapper conceptMapper;
     private final ConceptService conceptService;
+    private final LearningSpaceService spaceService;
 
     /**
      * 把理解快照投影为学习状态。这是本服务唯一的写入方法。
+     * <p>
+     * 与 {@link UnderstandingService#apply} 同理，这里是「查到就改、查不到就插」，
+     * 必须先拿到行锁：{@code uk_state_user_concept} 是唯一索引，不锁的话同一用户同一概念的
+     * 两个并发分析会各自查到 null 再各自 INSERT，后一个撞唯一键 → 整个分析事务
+     * （连同刚写好的 Evidence / Understanding）一起回滚。
      */
     @Transactional
     public LearningState project(Long userId, Long conceptId, LearningUnderstanding understanding, LocalDateTime evidenceAt) {
-        LearningState state = find(userId, conceptId);
+        // 顺序：先加锁读 → 判断 → 插入。不可颠倒，理由见 LearningStateMapper 的说明。
+        LearningState state = stateMapper.selectByUserAndConceptForUpdate(userId, conceptId);
         if (state == null) {
-            state = new LearningState();
-            state.setUserId(userId);
-            state.setConceptId(conceptId);
-            state.setReviewPriority(0);
-            applyProjection(state, understanding, evidenceAt);
-            stateMapper.insert(state);
-            return state;
+            LearningState created = new LearningState();
+            created.setUserId(userId);
+            created.setConceptId(conceptId);
+            created.setReviewPriority(0);
+            applyProjection(created, understanding, evidenceAt);
+            try {
+                stateMapper.insert(created);
+                return created;
+            } catch (DuplicateKeyException e) {
+                // 唯一索引上的 gap 锁不互斥，「两边都没查到」是可能的；重取加锁读拿赢家那行
+                LearningState winner = stateMapper.selectByUserAndConceptForUpdate(userId, conceptId);
+                if (winner == null) {
+                    throw e;
+                }
+                state = winner;
+            }
         }
         applyProjection(state, understanding, evidenceAt);
         stateMapper.updateById(state);
@@ -92,7 +109,11 @@ public class LearningStateService {
                 .orderByDesc(LearningState::getReviewPriority)
                 .orderByDesc(LearningState::getUpdatedAt));
         Map<Long, Concept> concepts = loadConcepts(states.stream().map(LearningState::getConceptId).toList());
+        // 概念被软删后 learning_state 行还在（投影不会跟着删），但概念本身已经查不到了。
+        // 这类行必须在这里滤掉：留着只会渲染成 conceptName=null 的空条目，
+        // 点进去又是 404（conceptDetail 走 accessibleConcept）。
         return states.stream()
+                .filter(state -> concepts.containsKey(state.getConceptId()))
                 .map(state -> LearningStateResponse.from(state, conceptName(concepts.get(state.getConceptId()))))
                 .toList();
     }
@@ -127,6 +148,9 @@ public class LearningStateService {
         LocalDateTime now = LocalDateTime.now();
 
         return states.stream()
+                // 同 overview：概念已被软删的投影行不参与「该关注什么」—— 一个打不开的概念
+                // 排在待办最前面（MISCONCEPTION 的优先级是 9，会排第一）比不展示更糟。
+                .filter(state -> concepts.containsKey(state.getConceptId()))
                 .map(state -> new AttentionItem(
                         state.getConceptId(),
                         conceptName(concepts.get(state.getConceptId())),
@@ -143,9 +167,15 @@ public class LearningStateService {
 
     /**
      * 某个学习空间下的知识点覆盖情况：哪些只是碰过、哪些真的建立了理解。
+     * <p>
+     * 这里的 spaceId 来自查询参数，所以必须先做归属校验 —— 其余所有按 spaceId 读的方法
+     * （{@code ConceptService.listBySpace}、{@code ConversationService.listBySpace}、
+     * {@code UnderstandingService.listBySpace}）都做了。少了它，任何人都能拿别人的 spaceId
+     * 读出对方的知识点名称，顺带把 spaceId 当成存在性探测器。
      */
     @Transactional(readOnly = true)
     public List<TopicCoverageItem> topicCoverage(Long userId, Long spaceId) {
+        spaceService.ownedSpace(userId, spaceId);
         List<Concept> concepts = conceptMapper.selectList(new LambdaQueryWrapper<Concept>()
                 .eq(Concept::getLearningSpaceId, spaceId)
                 .orderByAsc(Concept::getId));
@@ -197,7 +227,11 @@ public class LearningStateService {
                 ? UnderstandingStatus.UNKNOWN : understanding.getStatus();
         MisconceptionStatus misconception = misconceptionOf(understanding);
         state.setStatus(status);
-        if (evidenceAt != null) {
+        // lastEvidenceAt 只允许前进。多条分析是并发/乱序完成的，晚到的旧证据不能把时间戳拉回去 ——
+        // 拉回去会让下面的 nextReviewAt 从一个过期的时间点重算，把已经复习过的条目
+        // 重新顶成 NEEDS_REVIEW 塞回 attention。
+        if (evidenceAt != null
+                && (state.getLastEvidenceAt() == null || evidenceAt.isAfter(state.getLastEvidenceAt()))) {
             state.setLastEvidenceAt(evidenceAt);
         }
         LocalDateTime base = state.getLastEvidenceAt() == null ? LocalDateTime.now() : state.getLastEvidenceAt();
