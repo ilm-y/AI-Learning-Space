@@ -44,6 +44,9 @@ class RunTrace:
     """一次 run 的轨迹。所有事件都带「距 run 开始的毫秒数」，方便看耗时分布。"""
 
     run_id: int
+    # 后端生成的跨进程关联键（run_id 只在各自进程里有效，它才能把两跳的日志对上）。
+    # 老版本后端不带这个字段，所以是可选的：缺失只影响排查，不影响执行。
+    trace_id: str | None = None
     started_monotonic: float = field(default_factory=time.monotonic)
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     events: list[TraceEvent] = field(default_factory=list)
@@ -67,6 +70,7 @@ class RunTrace:
     def as_dict(self) -> dict[str, object]:
         return {
             "runId": self.run_id,
+            "traceId": self.trace_id,
             "startedAt": self.started_at.isoformat(),
             "elapsedMs": self.elapsed_ms,
             "events": [event.as_dict() for event in self.events],

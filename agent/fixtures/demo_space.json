@@ -90,40 +90,44 @@
   "memories": [
     {
       "id": 100,
+      "scopeType": "SPACE",
       "learningSpaceId": 1,
       "conceptId": null,
       "memoryType": "PREFERENCE",
-      "path": "os/teaching-style",
+      "memoryKey": "os/teaching-style",
       "content": "用户更喜欢从「硬件实际发生了什么」入手理解操作系统概念，例如按 CPU → MMU → TLB → Page Table 的因果链展开，而不是先讲抽象模型。",
       "status": "ACTIVE",
       "importance": 0.9
     },
     {
       "id": 101,
+      "scopeType": "CONCEPT",
       "learningSpaceId": 1,
       "conceptId": 13,
       "memoryType": "LEARNING",
-      "path": "os/virtual-memory",
+      "memoryKey": "os/virtual-memory",
       "content": "用户已经学过虚拟内存的基础部分，地址翻译这条线不需要从头讲。",
       "status": "ACTIVE",
       "importance": 0.7
     },
     {
       "id": 102,
+      "scopeType": "GLOBAL",
       "learningSpaceId": null,
       "conceptId": null,
       "memoryType": "USER",
-      "path": "profile",
+      "memoryKey": "profile",
       "content": "用户是计算机专业学生，正在系统学习操作系统。",
       "status": "ACTIVE",
       "importance": 0.5
     },
     {
       "id": 103,
+      "scopeType": "SPACE",
       "learningSpaceId": 1,
       "conceptId": null,
       "memoryType": "PREFERENCE",
-      "path": "os/teaching-style",
+      "memoryKey": "os/teaching-style-diagram",
       "content": "用户可能喜欢看图示。（AI 推断，尚未被用户确认）",
       "status": "CANDIDATE",
       "importance": 0.4

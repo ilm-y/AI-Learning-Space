@@ -40,11 +40,18 @@ public class MemoryController {
         return ApiResponse.ok(memoryService.list(SecurityUtil.currentUserId(), spaceId, conceptId, status));
     }
 
-    /** 记忆检索（第一版关键词匹配） */
+    /**
+     * 记忆检索（第一版关键词匹配）。
+     * <p>
+     * 与上面 {@link #list} 的精确过滤不同，这里走的是可见性规则（设计文档 §二十一）：
+     * GLOBAL 记忆对任意 spaceId 都可见。{@code conceptId} 决定 CONCEPT 级记忆要不要参与 ——
+     * 不传就只捞 GLOBAL 与当前 SPACE 的。
+     */
     @GetMapping("/search")
     public ApiResponse<List<MemoryResponse>> search(@RequestParam(required = false) Long spaceId,
+                                                    @RequestParam(required = false) Long conceptId,
                                                     @RequestParam(required = false) String keyword) {
-        return ApiResponse.ok(memoryService.search(SecurityUtil.currentUserId(), spaceId, keyword));
+        return ApiResponse.ok(memoryService.search(SecurityUtil.currentUserId(), spaceId, conceptId, keyword));
     }
 
     @GetMapping("/{id}")

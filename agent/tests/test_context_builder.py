@@ -17,6 +17,7 @@ from app.schemas import (
     MessageRole,
     Misconception,
     MisconceptionStatus,
+    SessionContext,
     Understanding,
     UnderstandingStatus,
 )
@@ -100,6 +101,51 @@ def test_no_retrieval_result_says_so_explicitly():
     context = ContextBuilder().build(make_state())
 
     assert "没有检索到任何历史认知记录" in context.messages[0].content
+
+
+def test_session_goal_and_focus_reach_the_model():
+    """本阶段学习目标要进 prompt —— 这是「新开一个对话接着学同一个目标」能接上的前提。"""
+    state = make_state(
+        session=SessionContext(
+            id=20,
+            title="虚拟内存地址转换",
+            goal="理解 VA → TLB → Page Table → PA",
+            current_focus="卡在 TLB Miss 与 Page Fault 的关系",
+        )
+    )
+
+    system = ContextBuilder().build(state).messages[0].content
+
+    assert "理解 VA → TLB → Page Table → PA" in system
+    assert "卡在 TLB Miss 与 Page Fault 的关系" in system
+
+
+def test_missing_session_adds_no_section():
+    """session 为 None 是常态（懒创建），不该为它渲染一个「未设置」的占位区块。"""
+    context = ContextBuilder().build(make_state())
+
+    assert not any(section.name == "session" for section in context.sections)
+    assert "本阶段学习目标" not in context.messages[0].content
+
+
+def test_session_without_goal_or_focus_is_skipped():
+    """只有 id 的空 Session 提供不了信息，跳过而不是渲染一个空标题。"""
+    context = ContextBuilder().build(make_state(session=SessionContext(id=20)))
+
+    assert not any(section.name == "session" for section in context.sections)
+
+
+def test_session_section_survives_history_pressure():
+    """目标区块很短，长对话里被挤掉历史时它应当在 —— 它是整轮回复的框架。"""
+    history = [HistoryMessage(role=MessageRole.USER, content=f"第{i}轮" + "长" * 60) for i in range(8)]
+    state = make_state(
+        history=history,
+        session=SessionContext(id=20, goal="理解虚拟内存地址转换"),
+    )
+
+    context = ContextBuilder(max_context_tokens=120).build(state)
+
+    assert "理解虚拟内存地址转换" in context.messages[0].content
 
 
 def test_history_duplicate_of_current_input_is_dropped():

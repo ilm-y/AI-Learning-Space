@@ -136,7 +136,7 @@ class AgentRuntime:
     # ---------- 同步路径 ----------
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[StreamEvent]:
-        trace = RunTrace(run_id=request.run_id)
+        trace = RunTrace(run_id=request.run_id, trace_id=request.trace_id)
         prepared: PreparedRun | None = None
         try:
             prepared = await self.prepare(request, trace)
@@ -197,13 +197,14 @@ class AgentRuntime:
 
     async def prepare(self, request: ChatRequest, trace: RunTrace | None = None) -> PreparedRun:
         """检索 + 组装，不调用模型。preview 接口直接复用它。"""
-        trace = trace or RunTrace(run_id=request.run_id)
+        trace = trace or RunTrace(run_id=request.run_id, trace_id=request.trace_id)
         state = AgentState.from_request(request, trace)
         trace.record(
             TraceEventType.RUN_START,
             userId=request.user_id,
             conversationId=request.conversation_id,
             spaceId=request.learning_space_id,
+            sessionId=request.session.id if request.session else None,
             messageChars=len(request.user_message or ""),
         )
 

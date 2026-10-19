@@ -3,6 +3,7 @@ package com.ails.backend.dto.understanding;
 import com.ails.backend.entity.LearningEvidence;
 import com.ails.backend.enums.EvidenceCorrectness;
 import com.ails.backend.enums.EvidenceFollowUpStatus;
+import com.ails.backend.enums.EvidenceType;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,6 +17,7 @@ public record EvidenceResponse(
         Long id,
         Long conceptId,
         Long understandingId,
+        EvidenceType evidenceType,
         String observation,
         EvidenceCorrectness correctness,
         Float reasoningQuality,
@@ -36,6 +38,7 @@ public record EvidenceResponse(
         }
         return new EvidenceResponse(
                 evidence.getId(), evidence.getConceptId(), evidence.getUnderstandingId(),
+                evidence.getEvidenceType(),
                 evidence.getObservation(), evidence.getCorrectness(), evidence.getReasoningQuality(),
                 evidence.getSpecificity(), evidence.getAiConfidence(), evidence.getNeedFollowUp(),
                 evidence.getFollowUpStatus(), evidence.getCreatedAt(),

@@ -20,6 +20,7 @@ from app.schemas import (
     EvidenceItem,
     KnowledgeChunk,
     MemoryItem,
+    MemoryScopeType,
     MemoryStatus,
     Understanding,
 )
@@ -64,8 +65,20 @@ class FixtureRetriever:
         self._ensure_loaded()
         wanted = set(concept_ids)
         active = [item for item in self._memories if item.status is MemoryStatus.ACTIVE]
-        # 与当前话题相关：挂在这个 Concept 上的，加上「全局」的（concept_id 为空）
-        related = [item for item in active if item.concept_id is None or item.concept_id in wanted]
+        # 可见性按后端 §二十一 的同一套规则（这里用 scope_type 表达，不再靠 concept_id 是否为空来猜）：
+        # GLOBAL 恒可见；SPACE 需要 space_id 对得上；CONCEPT 还要 concept_id 落在本轮命中的概念里。
+        # Fixture 与后端行为一致，才能在不起后端时用 mock 检索线验证 prompt 里到底有什么。
+        related = [
+            item
+            for item in active
+            if item.scope_type is MemoryScopeType.GLOBAL
+            or (item.scope_type is MemoryScopeType.SPACE and item.learning_space_id == space_id)
+            or (
+                item.scope_type is MemoryScopeType.CONCEPT
+                and item.learning_space_id == space_id
+                and item.concept_id in wanted
+            )
+        ]
         return related[: self._memory_top_k]
 
     async def get_knowledge(

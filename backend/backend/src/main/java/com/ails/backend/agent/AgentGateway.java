@@ -5,16 +5,18 @@ import com.ails.backend.dto.agent.ChatAgentRequest;
 /**
  * Backend 与 Agent Runtime 之间唯一的边界。
  * <p>
- * 现在由 {@link StubAgentGateway} 提供桩实现；将来接入 Python Agent 时，新增一个
- * {@code HttpPythonAgentGateway} 即可，ChatController / ChatService 不需要改动 ——
- * 需要替换的点只有这一个接口的实现，Controller 里因此不必留任何
- * 「以后要调 Python Agent」的注释。
+ * 现在有两个实现，由配置项 {@code ails.agent.gateway} 二选一：
+ * <ul>
+ *   <li>{@link StubAgentGateway} —— {@code stub}（缺省）。本机回显，不依赖任何外部进程。</li>
+ *   <li>{@link HttpPythonAgentGateway} —— {@code http}。真发给 Python Agent。</li>
+ * </ul>
+ * 换实现只改这一个配置项，ChatController / ChatService 不需要改动 —— 这正是这层抽象的意义，
+ * Controller 里因此也不必留任何「以后要调 Python Agent」的注释。
  * <p>
- * <b>注意替换时的一个坑：</b>{@link StubAgentGateway} 是普通 {@code @Component}，
- * 而这里注入的是<b>按类型</b>的 {@link AgentGateway}。直接再加一个 {@code @Component}
- * 实现会让容器里出现两个候选 Bean，启动即报 NoUniqueBeanDefinitionException。
- * 正确做法是二选一：给新实现加 {@code @Primary} / {@code @ConditionalOnProperty}，
- * 或者把桩实现改成 {@code @ConditionalOnMissingBean(AgentGateway.class)} 由它让位。
+ * <b>两个实现的装配方式：</b>这里注入的是<b>按类型</b>的 {@link AgentGateway}，
+ * 两个候选 Bean 同时存在会启动即报 NoUniqueBeanDefinitionException，所以两边都挂了
+ * {@code @ConditionalOnProperty}（桩带 {@code matchIfMissing = true}）。以后再加实现，
+ * 同样必须挂条件，不能只写一个裸的 {@code @Component}。
  *
  * <h3>实现契约（调用方 {@code ChatService} 就按这套语义写代码）</h3>
  * <ol>

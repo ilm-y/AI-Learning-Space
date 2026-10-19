@@ -27,6 +27,19 @@ public class Conversation {
 
     private Long learningSpaceId;
 
+    /**
+     * 所属的学习活动。
+     * <p>
+     * <b>可以为 null，而且这是正常状态</b>，不是「数据没填全」：
+     * <ul>
+     *   <li>刚建出来还没说话；</li>
+     *   <li>说了话，但没命中任何 Concept（闲聊、问一个全新的知识点）——
+     *       {@code SessionResolver} 这时给出 NONE，刻意不创建 Session。</li>
+     * </ul>
+     * 一旦第一条有效学习消息出现，{@code SessionService} 会把它填上，之后不再改回去。
+     */
+    private Long sessionId;
+
     /** AI 自动总结的标题，可空 */
     private String title;
 

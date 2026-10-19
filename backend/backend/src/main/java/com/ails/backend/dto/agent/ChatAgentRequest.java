@@ -13,13 +13,35 @@ import java.util.List;
  */
 public record ChatAgentRequest(
         Long runId,
+
+        /**
+         * 跨进程串联这次执行的关联键，由后端 {@code ChatService.createRun} 生成。
+         * <p>
+         * 这个项目是两跳（后端 → Agent），runId 只在各自进程里有效，traceId 才能把
+         * 后端日志里的这一条和 Agent 日志里的那一条对起来。
+         */
+        String traceId,
+
         Long userId,
         Long conversationId,
         Long learningSpaceId,
+
         /** 当前用户输入 */
         String userMessage,
+
         /** 该对话的历史（不含 userMessage） */
         List<ChatHistoryMessage> history,
+
+        /**
+         * 这条对话归属的学习活动，可为 null。
+         * <p>
+         * <b>null 是常态，不是异常</b>：Session 是懒创建的，一条刚建出来的对话在
+         * 第一条有效学习消息之前没有任何归属；而第一条消息本身恰好就带着 null 出发 ——
+         * 归属是这一轮刚刚才定下来的（见 {@code SessionService.resolveForConversation}）。
+         * 所以 Agent 侧必须容忍它缺失，不能当成错误。
+         */
+        SessionContext session,
+
         /**
          * 当前登录用户的原始 JWT，供 Agent 回访后端的鉴权只读接口时透传。
          * <p>
@@ -28,4 +50,20 @@ public record ChatAgentRequest(
          * 缺失时 Agent 侧不会报错，只会静默降级，所以这里宁可是必填字段。
          */
         String authToken) {
+
+    /**
+     * 学习活动的短期工作上下文（{@code docs/session-design.md} §一.4）。
+     * <p>
+     * 只带 Agent 需要的四个字段，不带 userId / status / 时间戳 ——
+     * Agent 要回答的是「这一阶段用户想解决什么、现在卡在哪」，别的都是噪声。
+     *
+     * @param goal         这一阶段最终要解决什么（长期）
+     * @param currentFocus 当前卡在哪里 / 正在解决什么（短期），可空
+     */
+    public record SessionContext(
+            Long id,
+            String title,
+            String goal,
+            String currentFocus) {
+    }
 }
