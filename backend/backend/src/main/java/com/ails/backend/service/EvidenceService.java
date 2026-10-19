@@ -8,20 +8,19 @@ import com.ails.backend.entity.LearningEvidence;
 import com.ails.backend.enums.EvidenceCorrectness;
 import com.ails.backend.enums.EvidenceFollowUpStatus;
 import com.ails.backend.enums.EvidenceSourceType;
+import com.ails.backend.enums.EvidenceType;
 import com.ails.backend.mapper.EvidenceSourceMapper;
 import com.ails.backend.mapper.LearningEvidenceMapper;
+import com.ails.backend.utils.Hashing;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.DigestUtils;
-import org.springframework.util.StringUtils;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * 证据链的唯一写入者。
@@ -30,16 +29,19 @@ import java.util.stream.Collectors;
  * 证据之间冲突时不是「改掉旧的」，而是「再追加一条」，让历史保持可追溯。
  * 因此本类没有 update / delete 方法，对外也没有对应的 REST 入口。
  * <p>
- * 关于幂等：目标不是「一个来源只能有一条 Evidence」。同一个 Message 本来就可以为不同
- * Concept 各产生一条 Evidence。真正要防的是<b>同一次 analysis run / 同一个 analyzer
- * 版本重复写入同一条观察</b>，所以按下面两个键查重：
+ * <b>去重口径：{@code dedupe_key} 是 Evidence 的唯一身份</b>（见 {@code docs/database&API_design.md}
+ * §十四~十六、§二十九）。它的值由
  * <pre>
- *   agent_run_id + concept_id + observation_hash          （agent_run_id 非空时）
- *   source_type + source_id + concept_id + analyzer_version + observation_hash
+ *   SHA256(user_id + concept_id + evidence_type + 主来源 + normalize(observation))
  * </pre>
- * 数据库侧另加 UNIQUE(agent_run_id, concept_id, observation_hash) 兜底；MySQL 唯一索引
- * 允许多个 NULL，所以没有 run 上下文的手工写入不受该约束限制。
+ * 确定性算出，数据库上有 {@code UNIQUE(dedupe_key)} 兜底。关键是<b>不含 agent_run_id</b>：
+ * 同一个 Message 被两个 run 各分析一次，是两件执行记录、但只是同一条 Evidence，
+ * 不该因为「开了两次 run」就多出一条。{@code agent_run_id} 因此降级为溯源元数据。
+ * <p>
+ * {@link #append} 是 upsert：命中已有 {@code dedupe_key} 时不新增行，只补挂新的
+ * {@link EvidenceSource} 并把 {@code last_seen_run_id} 推进到本次 run。
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class EvidenceService {
@@ -50,15 +52,19 @@ public class EvidenceService {
     /**
      * 一条待写入的证据。
      *
-     * @param agentRunId       产生它的 analysis run，可为空
-     * @param analyzerVersion  分析器版本，可为空
-     * @param observationHash  观察内容归一化后的 hash，为空时自动计算
-     * @param sources          真实来源，至少一个（Message / Highlight / TestAnswer）
+     * @param evidenceType     这条证据是怎么来的，参与 dedupe_key，不可为空
+     * @param agentRunId       本次产生的 run。写新行时记进 first_seen_run_id / last_seen_run_id；
+     *                         命中已有行时只推进 last_seen_run_id
+     * @param analyzerVersion  分析器版本，纯溯源用，<b>不再参与去重</b>
+     *                         （观察内容真的变了，dedupe_key 自然就变了，不需要版本号兜着）
+     * @param sources          真实来源，至少一个。**第一个是主来源**，参与 dedupe_key；
+     *                         其余只做溯源，顺序无意义但必须稳定
      */
     public record Draft(
             Long userId,
             Long conceptId,
             Long understandingId,
+            EvidenceType evidenceType,
             String observation,
             EvidenceCorrectness correctness,
             Float reasoningQuality,
@@ -67,7 +73,6 @@ public class EvidenceService {
             Boolean needFollowUp,
             Long agentRunId,
             String analyzerVersion,
-            String observationHash,
             List<SourceRef> sources) {
     }
 
@@ -76,29 +81,41 @@ public class EvidenceService {
     }
 
     /**
-     * 追加一条证据。命中查重键时跳过写入并返回 {@code null}，由调用方决定是否继续后续链路。
+     * {@link #append} 的结果。
+     *
+     * @param created true = 这次真的新增了一条 Evidence；false = 命中已有的一模一样的证据，
+     *                数据库里没有新行（但来源可能被补挂了）
+     */
+    public record AppendResult(LearningEvidence evidence, boolean created) {
+    }
+
+    /**
+     * 追加一条证据（upsert 语义）。
      * <p>
-     * 注意：即使跳过了 Evidence，调用方通常仍会继续跑 Understanding 投影 —— 因为重复的
-     * Evidence 本来就不会带来快照变化，投影出来自然也是空操作。
+     * 命中 {@code dedupe_key} 时返回 {@code created = false}，调用方据此<b>跳过</b>
+     * 后续的 Understanding 投影 —— 同一条观察重复进来，快照本来也不会变，
+     * 再跑一遍只会白白产生一条内容相同的 Revision。
      */
     @Transactional
-    public LearningEvidence append(Draft draft) {
+    public AppendResult append(Draft draft) {
         if (draft.sources() == null || draft.sources().isEmpty()) {
             throw new BusinessException(500, "Evidence 必须至少有一个来源");
         }
+        if (draft.evidenceType() == null) {
+            throw new BusinessException(500, "Evidence 必须指明类型");
+        }
 
-        String hash = StringUtils.hasText(draft.observationHash())
-                ? draft.observationHash()
-                : hashObservation(draft.observation());
-
-        if (isDuplicate(draft, hash)) {
-            return null;
+        String dedupeKey = dedupeKey(draft);
+        LearningEvidence existing = findByDedupeKey(dedupeKey);
+        if (existing != null) {
+            return new AppendResult(seenAgain(existing, draft), false);
         }
 
         LearningEvidence evidence = new LearningEvidence();
         evidence.setUserId(draft.userId());
         evidence.setConceptId(draft.conceptId());
         evidence.setUnderstandingId(draft.understandingId());
+        evidence.setEvidenceType(draft.evidenceType());
         evidence.setObservation(draft.observation());
         evidence.setCorrectness(draft.correctness() == null ? EvidenceCorrectness.UNKNOWN : draft.correctness());
         evidence.setReasoningQuality(draft.reasoningQuality());
@@ -107,19 +124,27 @@ public class EvidenceService {
         evidence.setNeedFollowUp(Boolean.TRUE.equals(draft.needFollowUp()));
         evidence.setFollowUpStatus(Boolean.TRUE.equals(draft.needFollowUp())
                 ? EvidenceFollowUpStatus.PENDING : EvidenceFollowUpStatus.NONE);
-        evidence.setAgentRunId(draft.agentRunId());
+        evidence.setFirstSeenRunId(draft.agentRunId());
+        evidence.setLastSeenRunId(draft.agentRunId());
         evidence.setAnalyzerVersion(draft.analyzerVersion());
-        evidence.setObservationHash(hash);
-        evidenceMapper.insert(evidence);
+        evidence.setDedupeKey(dedupeKey);
 
-        for (SourceRef ref : draft.sources()) {
-            EvidenceSource source = new EvidenceSource();
-            source.setEvidenceId(evidence.getId());
-            source.setSourceType(ref.sourceType());
-            source.setSourceId(ref.sourceId());
-            evidenceSourceMapper.insert(source);
+        try {
+            evidenceMapper.insert(evidence);
+        } catch (DuplicateKeyException e) {
+            // 唯一约束是最终保证，这里是真的会撞上的：两个并发 run 分析同一个 Message 时，
+            // 上面那次 findByDedupeKey 会双双扑空。MySQL 在遇到重复键后不会废掉整个事务，
+            // 所以这里可以安静地退化成「再次看到已有证据」这条路。
+            log.debug("Evidence dedupe_key 并发命中, key={}, runId={}", dedupeKey, draft.agentRunId());
+            LearningEvidence concurrent = findByDedupeKey(dedupeKey);
+            if (concurrent == null) {
+                throw e; // 不是并发去重，是别的完整性冲突，照常往上抛
+            }
+            return new AppendResult(seenAgain(concurrent, draft), false);
         }
-        return evidence;
+
+        attachSources(evidence.getId(), draft.sources());
+        return new AppendResult(evidence, true);
     }
 
     // ================= 查询 =================
@@ -165,45 +190,71 @@ public class EvidenceService {
 
     // ================= 内部工具 =================
 
-    private boolean isDuplicate(Draft draft, String hash) {
-        if (draft.agentRunId() != null) {
-            // 同一次 run 内，同一个 Concept 的同一条观察只写一次
-            Long same = evidenceMapper.selectCount(new LambdaQueryWrapper<LearningEvidence>()
-                    .eq(LearningEvidence::getAgentRunId, draft.agentRunId())
-                    .eq(LearningEvidence::getConceptId, draft.conceptId())
-                    .eq(LearningEvidence::getObservationHash, hash));
-            if (same != null && same > 0) {
-                return true;
+    /**
+     * 「又看到同一条证据」：不新增行，但把这次带来的新来源补挂上去，
+     * 并把 last_seen_run_id 推进到本次 run（文档 §二十九的 ON DUPLICATE KEY UPDATE 部分）。
+     */
+    private LearningEvidence seenAgain(LearningEvidence existing, Draft draft) {
+        attachSources(existing.getId(), draft.sources());
+
+        Long runId = draft.agentRunId();
+        if (runId != null && !runId.equals(existing.getLastSeenRunId())) {
+            LearningEvidence touch = new LearningEvidence();
+            touch.setId(existing.getId());
+            touch.setLastSeenRunId(runId);
+            evidenceMapper.updateById(touch); // updated_at 由 MetaObjectHandler 自动填
+            existing.setLastSeenRunId(runId);
+        }
+        return existing;
+    }
+
+    /** 补挂来源。evidence_source 上有 UNIQUE(evidence_id, source_type, source_id)，先查后插避免撞约束。 */
+    private void attachSources(Long evidenceId, List<SourceRef> sources) {
+        for (SourceRef ref : sources) {
+            Long already = evidenceSourceMapper.selectCount(new LambdaQueryWrapper<EvidenceSource>()
+                    .eq(EvidenceSource::getEvidenceId, evidenceId)
+                    .eq(EvidenceSource::getSourceType, ref.sourceType())
+                    .eq(EvidenceSource::getSourceId, ref.sourceId()));
+            if (already != null && already > 0) {
+                continue;
             }
+            EvidenceSource source = new EvidenceSource();
+            source.setEvidenceId(evidenceId);
+            source.setSourceType(ref.sourceType());
+            source.setSourceId(ref.sourceId());
+            evidenceSourceMapper.insert(source);
         }
-        if (!StringUtils.hasText(draft.analyzerVersion())) {
-            return false;
-        }
-        // 跨 run 的重复分析：同一个来源、同一个 analyzer 版本、同一个 Concept、同一条观察
-        Set<Long> candidateIds = draft.sources().stream()
-                .map(ref -> evidenceSourceMapper.selectList(new LambdaQueryWrapper<EvidenceSource>()
-                        .eq(EvidenceSource::getSourceType, ref.sourceType())
-                        .eq(EvidenceSource::getSourceId, ref.sourceId())))
-                .flatMap(List::stream)
-                .map(EvidenceSource::getEvidenceId)
-                .collect(Collectors.toSet());
-        if (candidateIds.isEmpty()) {
-            return false;
-        }
-        Long same = evidenceMapper.selectCount(new LambdaQueryWrapper<LearningEvidence>()
-                .in(LearningEvidence::getId, candidateIds)
-                .eq(LearningEvidence::getConceptId, draft.conceptId())
-                .eq(LearningEvidence::getAnalyzerVersion, draft.analyzerVersion())
-                .eq(LearningEvidence::getObservationHash, hash));
-        return same != null && same > 0;
+    }
+
+    private LearningEvidence findByDedupeKey(String dedupeKey) {
+        return evidenceMapper.selectOne(new LambdaQueryWrapper<LearningEvidence>()
+                .eq(LearningEvidence::getDedupeKey, dedupeKey)
+                .last("LIMIT 1"));
     }
 
     /**
-     * 观察内容的归一化 hash：折叠空白、去首尾、转小写，再取 MD5。
-     * 只是去重用的指纹，不做安全用途。
+     * 确定性去重指纹，见类注释。
+     * <p>
+     * 各段之间用 {@code |} 分隔：不加分隔符时 {@code user=1,concept=23} 与
+     * {@code user=12,concept=3} 会拼出同一个字符串，两条不相干的证据就撞成一条了。
      */
-    private static String hashObservation(String observation) {
-        String normalized = observation == null ? "" : observation.trim().replaceAll("\\s+", " ").toLowerCase();
-        return DigestUtils.md5DigestAsHex(normalized.getBytes(StandardCharsets.UTF_8));
+    static String dedupeKey(Draft draft) {
+        SourceRef primary = draft.sources().get(0);
+        String raw = draft.userId() + "|"
+                + draft.conceptId() + "|"
+                + draft.evidenceType().name() + "|"
+                + primary.sourceType().name() + "|"
+                + primary.sourceId() + "|"
+                + normalize(draft.observation());
+        return sha256Hex(raw);
+    }
+
+    /** 观察内容的归一化：折叠空白、去首尾、统一小写。只影响去重，不改写入的原文。 */
+    static String normalize(String observation) {
+        return Hashing.normalize(observation);
+    }
+
+    static String sha256Hex(String text) {
+        return Hashing.sha256Hex(text);
     }
 }

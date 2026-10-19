@@ -1,19 +1,21 @@
 package com.ails.backend.enums;
 
 /**
- * Agent 执行类型（agent_run.run_type）。
+ * agent_run 的类型，对齐 {@code docs/database&API_design.md} §二十七。
  * <p>
- * 与 {@link AgentRunStatus} 正交：run_type 说明「在做什么」，status 说明「做得怎么样」。
+ * 取值和数据库的 {@code ENUM} 一一对应，改名等于改 schema，两边必须一起动。
  */
 public enum AgentRunType {
-    /** 一轮对话（对应一次 SSE 请求） */
+
+    /** 一次面向用户的对话生成（SSE 那一跳，由 ChatService 创建）。 */
     CHAT,
-    /** 从 Message / Highlight / TestAnswer 抽取 Evidence */
-    EXTRACTION,
-    /** 更新 Understanding 并产生 Revision */
-    UPDATE,
-    /** 生成 / 评价测试 */
+
+    /** 一次后台学习分析：从消息 / 批注里抽 Evidence 并投影 Understanding。 */
+    ANALYSIS,
+
+    /** 一次测试回答的判定。 */
     TEST,
-    /** Memory 调和 */
+
+    /** 一次 Memory 收敛。 */
     MEMORY
 }

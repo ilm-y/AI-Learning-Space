@@ -25,6 +25,7 @@ from app.schemas import (
     HistoryMessage,
     KnowledgeChunk,
     MemoryItem,
+    SessionContext,
     Understanding,
 )
 from app.trace import RunTrace
@@ -58,6 +59,12 @@ class AgentState:
     user_message: str
     history: list[HistoryMessage] = field(default_factory=list)
 
+    # ---------- 短期工作上下文 ----------
+    # 这条对话归属的学习活动（后端 session-design.md §一.4）。为 None 是常态：
+    # Session 懒创建，一条刚建出来的对话在第一条有效学习消息之前没有任何归属，
+    # 而第一条消息本身恰好就带着 None 出发。渲染层据此跳过该区块。
+    session: SessionContext | None = None
+
     # ---------- 检索结果 ----------
     detected_concepts: list[DetectedConcept] = field(default_factory=list)
     understandings: list[Understanding] = field(default_factory=list)
@@ -82,6 +89,7 @@ class AgentState:
             space_id=request.learning_space_id,
             user_message=request.user_message,
             history=list(request.history),
+            session=request.session,
             trace=trace,
             # 异步学习分析还没有接入 Agent，先如实记下来，避免误以为已经做了闭环
             pending_tasks=["evidence_extraction", "understanding_update", "memory_consolidation"],
@@ -102,6 +110,7 @@ class AgentState:
             "userId": self.user_id,
             "conversationId": self.conversation_id,
             "spaceId": self.space_id,
+            "sessionId": self.session.id if self.session else None,
             "userMessage": self.user_message,
             "detectedConcepts": self.concept_names,
             "retrieved": {

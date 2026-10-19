@@ -2,6 +2,7 @@ package com.ails.backend.entity;
 
 import com.ails.backend.enums.EvidenceCorrectness;
 import com.ails.backend.enums.EvidenceFollowUpStatus;
+import com.ails.backend.enums.EvidenceType;
 import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
@@ -19,9 +20,10 @@ import java.time.LocalDateTime;
  * <p>
  * 本表不提供删除入口 —— 学习历史必须长期可追溯。
  * <p>
- * 去重口径：不是「一个 source 只能产生一条 Evidence」（同一个 Message 本就可以为不同
- * Concept 各产生一条），而是「同一次 analysis run / 同一个 analyzer version 不重复写入
- * 相同 Evidence」。因此带 agentRunId / analyzerVersion / observationHash 三列。
+ * 去重口径由 {@code dedupeKey} 唯一决定，见 {@link EvidenceService}：
+ * 同一个 user × concept × 证据类型 × 主来源 × 同一条观察，<b>无论由哪一次 run 产生</b>，
+ * 都只算一条逻辑 Evidence。{@code firstSeenRunId} / {@code lastSeenRunId} 因此只是溯源元数据，
+ * 不参与去重。
  */
 @Data
 @TableName("learning_evidence")
@@ -36,6 +38,9 @@ public class LearningEvidence {
 
     /** 关联的理解快照，由 getOrCreateUnderstanding 保证存在 */
     private Long understandingId;
+
+    /** 这条证据是怎么来的（用户解释 / 观察 / 测试 / 纠正 / 批注信号） */
+    private EvidenceType evidenceType;
 
     /** Agent 观察到的内容 */
     private String observation;
@@ -58,15 +63,31 @@ public class LearningEvidence {
     /** 需要跟进的后续对话 */
     private Long followUpConversationId;
 
-    /** 产生本条 Evidence 的 analysis run，用于溯源与去重 */
-    private Long agentRunId;
+    /**
+     * 首次看到本条观测的 run。
+     * <p>
+     * 注意它<b>不参与去重</b> —— 去重完全由 {@code dedupeKey} 决定，这两个 runId
+     * 只回答「这条证据是哪次分析看到的、最近一次又是谁看到的」。
+     */
+    private Long firstSeenRunId;
 
-    /** 分析器版本，用于去重与回溯 */
+    private Long lastSeenRunId;
+
+    /** 分析器版本，用于回溯 */
     private String analyzerVersion;
 
-    /** observation 归一化后的 hash，用于去重 */
-    private String observationHash;
+    /**
+     * 去重指纹（SHA-256 十六进制，64 位）。
+     * <p>
+     * 值 = SHA256(user_id + concept_id + evidence_type + 主来源 + 归一化 observation)。
+     * 数据库上有 UNIQUE(dedupe_key)，是「重复分析不产生重复证据」的最终兜底 ——
+     * 应用层查重只是省一次写入，不是保证。
+     */
+    private String dedupeKey;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updatedAt;
 }

@@ -42,6 +42,21 @@ ails:
     # 过期时间（毫秒），默认 7 天
     expiration-ms: ${JWT_EXPIRATION_MS:604800000}
 
+  agent:
+    # AgentGateway 的实现选择，决定「后端把问题发给谁」：
+    #   stub —— StubAgentGateway，本机回显，不依赖任何外部进程（默认值，见类注释）
+    #   http —— HttpPythonAgentGateway，真发给下面的 Python Agent
+    # 默认 stub 是刻意的：新克隆的仓库没装 Python 环境也能启动，
+    # scripts/e2e-*.sh 也不会因为 Agent 没起而失败。
+    gateway: ${AILS_AGENT_GATEWAY:stub}
+    base-url: ${AILS_AGENT_BASE_URL:http://127.0.0.1:8000}
+    # 建连超时：Agent 进程在不在，3 秒内就能判定
+    connect-timeout-ms: ${AILS_AGENT_CONNECT_TIMEOUT_MS:3000}
+    # 整段交换的总时长上限（不是空闲超时）。
+    # 必须严格小于 ChatService 的 SSE_TIMEOUT_MS（5 分钟），否则前端先看到超时断流，
+    # 而网关还在傻等 —— 那样失败原因会指向错误的一方。
+    read-timeout-ms: ${AILS_AGENT_READ_TIMEOUT_MS:240000}
+
 logging:
   level:
     com.ails.backend: debug

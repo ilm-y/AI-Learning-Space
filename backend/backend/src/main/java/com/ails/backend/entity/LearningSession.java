@@ -28,6 +28,10 @@ public class LearningSession {
     private String title;
 
     /** 当前关注点 */
+    /** 这一阶段最终要解决什么（长期）。与 {@link #currentFocus} 的区别见 docs/session-design.md §一.1 */
+    private String goal;
+
+    /** 当前卡在哪里 / 正在解决什么（短期）。主要给 Agent 用。 */
     private String currentFocus;
 
     private SessionStatus status;

@@ -32,8 +32,10 @@ from app.prompts import BASE_SYSTEM_INSTRUCTION
 from app.schemas import (
     EvidenceCorrectness,
     MemoryItem,
+    MemoryScopeType,
     MemoryType,
     MisconceptionStatus,
+    SessionContext,
     Understanding,
     UnderstandingStatus,
 )
@@ -43,14 +45,17 @@ from app.state.agent_state import AgentState
 # 顺序照抄 agent-architecture.md 第六节，不要随手调整。
 PRIORITY_USER_INPUT = 100
 PRIORITY_HISTORY = 90
+# 学习目标：一到两行的框定信息，很便宜。排在历史之后、认知背景之前 ——
+# 丢了它只是少一层「我们正在做什么」的框架，丢了 Understanding 才是丢了「你之前是怎么理解的」。
+PRIORITY_SESSION = 85
 PRIORITY_UNDERSTANDING = 70
 PRIORITY_MEMORY = 50
 PRIORITY_KNOWLEDGE = 40
 PRIORITY_EVIDENCE = 20
 
 # 渲染进 System Instruction 时的区块顺序（与优先级无关：优先级决定谁被丢，
-# 顺序决定人读起来顺不顺）
-RENDER_ORDER = ("understanding", "memory", "knowledge", "evidence")
+# 顺序决定人读起来顺不顺）。session 放最前：它是后面一切内容的框架。
+RENDER_ORDER = ("session", "understanding", "memory", "knowledge", "evidence")
 
 # 一段被裁到小于这个 Token 数就没有意义了，不如整段丢掉
 MIN_USEFUL_SECTION_TOKENS = 40
@@ -67,6 +72,14 @@ _MEMORY_LABEL = {
     MemoryType.USER: "长期事实",
     MemoryType.LEARNING: "学习状态",
     MemoryType.PREFERENCE: "偏好",
+}
+
+# 记忆的作用域，渲染进 prompt 是为了让模型知道这条事实的适用范围：
+# 标记成「全局」的是跨知识点都成立的长期偏好，不该被当成只是当前话题的细节。
+_MEMORY_SCOPE_LABEL = {
+    MemoryScopeType.GLOBAL: "全局",
+    MemoryScopeType.SPACE: "本空间",
+    MemoryScopeType.CONCEPT: "本知识点",
 }
 
 _CORRECTNESS_LABEL = {
@@ -188,6 +201,23 @@ class ContextBuilder:
                     role="user" if message.is_user() else "assistant",
                 )
             )
+
+        # 本阶段学习目标：短期的「我们在做什么」，与下面 understanding 的「你学到哪了」是两回事。
+        # session 为 None 是常态（懒创建，见 AgentState.session 的说明），跳过即可 ——
+        # 不要为它编一个「未设置」的占位区块，那会让模型以为自己知道什么。
+        if state.session is not None:
+            rendered = _render_session(state.session)
+            if rendered:
+                sections.append(
+                    ContextSection(
+                        name="session",
+                        title="本阶段学习目标",
+                        content=rendered,
+                        priority=PRIORITY_SESSION,
+                        source_ids=[f"session:{state.session.id}"],
+                        dedupe_key="session",
+                    )
+                )
 
         # 认知背景
         for understanding in state.understandings:
@@ -354,6 +384,11 @@ class ContextBuilder:
 
 
 _BLOCK_HEADINGS = {
+    "session": (
+        "本阶段学习目标（当前这段学习活动）",
+        "> 用户正在进行的这一段学习最终想解决什么、此刻卡在哪里。它是这一轮回答的框架与落点，"
+        "不等于用户已经掌握的内容。回答要往这个目标上靠，但不要逐字复述它。",
+    ),
     "understanding": (
         "学习者的当前认知（系统长期记录）",
         "> 这是系统对「这个用户现在怎么理解这些概念」的判断，用来决定**从哪讲起**。"
@@ -379,6 +414,16 @@ def _kind(section: ContextSection) -> str:
     return section.name.split(":", 1)[0]
 
 
+def _render_session(session: SessionContext) -> str:
+    """渲染本阶段学习目标。两个字段都没有时返回空串，让调用方整块跳过。"""
+    lines: list[str] = []
+    if session.goal:
+        lines.append(f"- 这一阶段要解决：{session.goal}")
+    if session.current_focus:
+        lines.append(f"- 当前焦点：{session.current_focus}")
+    return "\n".join(lines)
+
+
 def _render_understanding(understanding: Understanding) -> str:
     label = _STATUS_LABEL.get(understanding.status, understanding.status.value)
     lines = [f"### {understanding.concept_name} ｜ 状态：{label}"]
@@ -400,8 +445,8 @@ def _render_understanding(understanding: Understanding) -> str:
 
 def _render_memory(memory: MemoryItem) -> str:
     label = _MEMORY_LABEL.get(memory.memory_type, memory.memory_type.value)
-    scope = f"，范围：{memory.path}" if memory.path else ""
-    return f"- [{label}{scope}] {memory.content}"
+    scope = _MEMORY_SCOPE_LABEL.get(memory.scope_type, memory.scope_type.value)
+    return f"- [{label}，作用域：{scope}] {memory.content}"
 
 
 def _render_knowledge(chunk) -> str:

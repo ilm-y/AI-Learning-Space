@@ -6,7 +6,7 @@
 | --- | --- |
 | Concept | `GET /api/spaces/{spaceId}/concepts` |
 | Understanding | `GET /api/understandings/{conceptId}` |
-| Memory | `GET /api/memories/search?spaceId=&keyword=` |
+| Memory | `GET /api/memories/search?spaceId=&conceptId=&keyword=` |
 | Evidence | `GET /api/understandings/{conceptId}/evidence` |
 | Knowledge | 无 —— 文档接口还是 501，第一版固定返回空 |
 
@@ -93,9 +93,17 @@ class HttpBackendRetriever:
         # 命中任意一个词就算候选。所以「一句话」正是它期待的输入形态。
         # 反过来，如果哪天后端改回「整串当子串」，这里传原话就会永远返回空列表，
         # 而空列表和不报错长得一模一样 —— 排查时先看后端 search 的实现。
+        #
+        # conceptId 传本轮命中的第一个概念：后端的可见性规则里，CONCEPT 级记忆只有在
+        # 「spaceId 与 conceptId 同时给对」时才可见。不传的话它们会被静默排除 ——
+        # 结果依然是个正常返回的空列表，看不出任何异常。取第一个而不是全部，是因为
+        # 后端一个请求只认一个 conceptId；本轮的首要话题就是第一个命中的概念。
+        params: dict[str, Any] = {"spaceId": space_id, "keyword": query[:60]}
+        if concept_ids:
+            params["conceptId"] = concept_ids[0]
         data = await self._get(
             "/api/memories/search",
-            params={"spaceId": space_id, "keyword": query[:60]},
+            params=params,
             fatal=False,
         )
         return _parse_list(data, MemoryItem)[: self._memory_top_k]

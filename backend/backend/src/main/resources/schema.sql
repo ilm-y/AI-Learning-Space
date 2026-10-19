@@ -14,11 +14,22 @@
 --     Memory          Agent 长期上下文，用 CANDIDATE / ACTIVE / ARCHIVED 管生命周期
 --     LearningState   Understanding.status 的 Materialized Projection，只读派生
 --
--- 与文档列清单的三处刻意加强（详见 README）：
+-- 与文档列清单的五处刻意偏离（详见 README 第八节）：
 --   1. message 加 UNIQUE(conversation_id, sequence_no) —— 防并发撞号
---   2. learning_evidence 加 agent_run_id / analyzer_version / observation_hash —— 分析去重
---   3. deleted_at 软删只覆盖用户内容（learning_space / conversation / message / concept）；
+--   2. deleted_at 软删只覆盖用户内容（learning_space / conversation / message / concept）；
 --      证据链不设软删、也不提供删除入口
+--   3. misconceptions 语义收窄为「当前未解除」并存对象（JSON 列，不影响表结构）
+--   4. learning_understanding 用 SELECT ... FOR UPDATE 而不是乐观锁（version 列保留但只作诊断）
+--   5. memory.memory_key 可为 NULL，缺省由 content 哈希兜底（见该表注释）
+--
+-- 反过来，下面这些是 B 阶段「代码向文档靠齐」补上的、曾经缺失的列，不是偏离：
+--   evidence_type / dedupe_key / first_seen_run_id / last_seen_run_id（learning_evidence）
+--   scope_type / scope_key / version（memory，path 更名 memory_key）
+--   session_id（conversation，可空）、goal（learning_session）、PAUSED（learning_session.status）
+--   trace_id（agent_run）、run_type 枚举改名 EXTRACTION → ANALYSIS
+--
+-- 建表顺序有约束：conversation 有指向 learning_session 的外键，所以
+-- learning_session（模块 13）必须排在 conversation（模块 4）之前，不能按模块号排。
 --
 -- 约定：枚举列直接使用 MySQL ENUM，Java 侧枚举常量名与 ENUM 值一致
 --      （MyBatis-Plus 按 Enum.name() 存取）。
@@ -86,11 +97,35 @@ CREATE TABLE IF NOT EXISTS `concept_relation` (
     CONSTRAINT `fk_rel_target` FOREIGN KEY (`target_concept_id`) REFERENCES `concept` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+-- 模块 13：学习活动容器（不承担长期记忆）
+CREATE TABLE IF NOT EXISTS `learning_session` (
+    `id`                BIGINT       NOT NULL AUTO_INCREMENT,
+    `user_id`           BIGINT       NOT NULL,
+    `learning_space_id` BIGINT       NOT NULL,
+    `title`             VARCHAR(255)          DEFAULT NULL,
+    `goal`              TEXT                  DEFAULT NULL COMMENT '这一阶段最终要解决什么（长期），见 docs/session-design.md §一.1',
+    `current_focus`     VARCHAR(255)          DEFAULT NULL COMMENT '当前卡在哪里 / 正在解决什么（短期）',
+    -- PAUSED：暂时停下但目标未完成。一周没学不该被当成「学完了」，也不该被自动复活成新 Session
+    `status`            ENUM ('ACTIVE', 'PAUSED', 'COMPLETED', 'ABANDONED') NOT NULL DEFAULT 'ACTIVE',
+    `started_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `last_active_at`    DATETIME              DEFAULT NULL,
+    `completed_at`      DATETIME              DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_sess_user` (`user_id`),
+    KEY `idx_sess_space` (`learning_space_id`),
+    CONSTRAINT `fk_sess_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+    CONSTRAINT `fk_sess_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+
 -- 模块 4：对话（软删）
 CREATE TABLE IF NOT EXISTS `conversation` (
     `id`                BIGINT       NOT NULL AUTO_INCREMENT,
     `user_id`           BIGINT       NOT NULL,
     `learning_space_id` BIGINT       NOT NULL,
+    -- 懒创建：建对话时还不知道用户要学什么，第一条有效学习消息出现后由 SessionResolver 决定归属。
+    -- NULL 是正常业务状态，不是「数据缺失」，见 docs/session-design.md §四。
+    `session_id`        BIGINT                DEFAULT NULL COMMENT '所属学习活动；NULL = 尚未归入任何 Session',
     `title`             VARCHAR(255)          DEFAULT NULL,
     `status`            ENUM ('ACTIVE', 'ARCHIVED') NOT NULL DEFAULT 'ACTIVE',
     `last_message_at`   DATETIME              DEFAULT NULL,
@@ -99,8 +134,10 @@ CREATE TABLE IF NOT EXISTS `conversation` (
     `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_conv_user_space_updated` (`user_id`, `learning_space_id`, `updated_at`),
+    KEY `idx_conv_session` (`session_id`, `updated_at`),
     CONSTRAINT `fk_conv_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
-    CONSTRAINT `fk_conv_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`)
+    CONSTRAINT `fk_conv_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`),
+    CONSTRAINT `fk_conv_session` FOREIGN KEY (`session_id`) REFERENCES `learning_session` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- 模块 4：消息（软删）
@@ -164,6 +201,7 @@ CREATE TABLE IF NOT EXISTS `learning_evidence` (
     `user_id`                   BIGINT  NOT NULL,
     `concept_id`                BIGINT  NOT NULL,
     `understanding_id`          BIGINT           DEFAULT NULL COMMENT '关联理解（getOrCreateUnderstanding 保证有值）',
+    `evidence_type`             ENUM ('USER_EXPLANATION', 'OBSERVATION', 'TEST_RESULT', 'USER_CORRECTION', 'HIGHLIGHT_SIGNAL') NOT NULL COMMENT '这条证据怎么来的，参与 dedupe_key',
     `observation`               TEXT    NOT NULL,
     `correctness`               ENUM ('CORRECT', 'INCORRECT', 'PARTIAL', 'UNKNOWN') NOT NULL DEFAULT 'UNKNOWN',
     `reasoning_quality`         FLOAT            DEFAULT NULL COMMENT '推理质量，内部分析信号',
@@ -172,17 +210,20 @@ CREATE TABLE IF NOT EXISTS `learning_evidence` (
     `need_follow_up`            BOOLEAN          DEFAULT NULL,
     `follow_up_status`          ENUM ('NONE', 'PENDING', 'RESOLVED') NOT NULL DEFAULT 'NONE',
     `follow_up_conversation_id` BIGINT           DEFAULT NULL,
-    -- 刻意加强：分析去重与溯源（文档列清单之外，见 plan.md §47/Phase 8）
-    `agent_run_id`              BIGINT           DEFAULT NULL COMMENT '产生本条 Evidence 的 analysis run',
-    `analyzer_version`          VARCHAR(64)      DEFAULT NULL,
-    `observation_hash`          VARCHAR(64)      DEFAULT NULL COMMENT 'observation 归一化后的 hash',
+    -- Evidence 身份与溯源。去重完全由 dedupe_key 决定，两个 run_id 只回答「哪次分析看到的」
+    `dedupe_key`                CHAR(64)         NOT NULL COMMENT 'SHA256(user+concept+type+主来源+归一化 observation)，Evidence 的唯一身份',
+    `first_seen_run_id`         BIGINT           DEFAULT NULL COMMENT '首次看到本条观测的 run',
+    `last_seen_run_id`          BIGINT           DEFAULT NULL COMMENT '最近一次「又看到同一条观测」的 run',
+    `analyzer_version`          VARCHAR(64)      DEFAULT NULL COMMENT '分析器版本，仅溯源，不参与去重',
     `created_at`                DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`                DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    -- 唯一索引允许多个 NULL，因此无 run 上下文的手工写入不受此约束
-    UNIQUE KEY `uk_evidence_dedupe` (`agent_run_id`, `concept_id`, `observation_hash`),
+    -- 数据库唯一约束是「重复分析不产生重复 Evidence」的最终保证，应用层查重只是优化
+    UNIQUE KEY `uk_evidence_dedupe` (`dedupe_key`),
     KEY `idx_ev_user` (`user_id`),
     KEY `idx_ev_concept` (`concept_id`),
     KEY `idx_ev_understanding` (`understanding_id`),
+    KEY `idx_ev_concept_created` (`user_id`, `concept_id`, `created_at`),
     CONSTRAINT `fk_ev_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
     CONSTRAINT `fk_ev_concept` FOREIGN KEY (`concept_id`) REFERENCES `concept` (`id`),
     CONSTRAINT `fk_ev_understanding` FOREIGN KEY (`understanding_id`) REFERENCES `learning_understanding` (`id`),
@@ -243,20 +284,31 @@ CREATE TABLE IF NOT EXISTS `learning_state` (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- 模块 11：Agent 长期记忆（不物理删除，用 status 管生命周期）
+--
+-- 刻意偏离设计文档 §十八：文档的 memory_key 是 NOT NULL，这里放宽为可空。
+-- 理由：memory_key 表示「同作用域内这是哪一条记忆」，而调用方（前端 / Agent）
+-- 经常只知道内容、不关心标识。放开为可空后，服务层在缺省时用 content 的哈希兜底，
+-- 于是缺少 memory_key **不会**变成「每次 PUT 都插一条新记忆」，
+-- 唯一约束 uk_memory_identity 仍然真的在兜底。
 CREATE TABLE IF NOT EXISTS `memory` (
     `id`                BIGINT       NOT NULL AUTO_INCREMENT,
     `user_id`           BIGINT       NOT NULL,
-    `learning_space_id` BIGINT                DEFAULT NULL COMMENT '可选：空间范围',
-    `concept_id`        BIGINT                DEFAULT NULL COMMENT '可选：Concept 范围',
+    `scope_type`        ENUM ('GLOBAL', 'SPACE', 'CONCEPT') NOT NULL COMMENT '作用域类型，由学习空间/知识点推导，不接受调用方指定',
+    `scope_key`         VARCHAR(128) NOT NULL COMMENT 'GLOBAL / SPACE:{id} / CONCEPT:{id}；见文档 §十九',
+    `learning_space_id` BIGINT                DEFAULT NULL COMMENT 'SPACE / CONCEPT 作用域所属空间；GLOBAL 时为 NULL',
+    `concept_id`        BIGINT                DEFAULT NULL COMMENT 'CONCEPT 作用域的知识点；其余为 NULL',
     `memory_type`       ENUM ('USER', 'LEARNING', 'PREFERENCE') NOT NULL,
-    `path`              VARCHAR(255)          DEFAULT NULL COMMENT '层次路径，如 os/hardware-first',
+    `memory_key`        VARCHAR(255)          DEFAULT NULL COMMENT '同作用域内的记忆标识，如 os/teaching-style；缺省时由 content 哈希兜底',
     `content`           TEXT         NOT NULL,
     `status`            ENUM ('CANDIDATE', 'ACTIVE', 'ARCHIVED') NOT NULL DEFAULT 'CANDIDATE',
     `importance`        FLOAT                 DEFAULT NULL,
+    `version`           INT          NOT NULL DEFAULT 0 COMMENT '乐观锁；需要 MybatisPlusConfig 注册 OptimisticLockerInnerInterceptor 才生效',
     `embedding_ref`     VARCHAR(255)          DEFAULT NULL COMMENT '向量存储引用',
     `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_memory_identity` (`user_id`, `scope_key`, `memory_key`),
+    KEY `idx_memory_retrieval` (`user_id`, `scope_type`, `learning_space_id`, `concept_id`, `status`),
     KEY `idx_memory_user` (`user_id`),
     KEY `idx_memory_space` (`learning_space_id`),
     KEY `idx_memory_concept` (`concept_id`),
@@ -314,24 +366,6 @@ CREATE TABLE IF NOT EXISTS `test_answer` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_answer_task` (`task_id`) COMMENT '一个任务只允许一次有效回答',
     CONSTRAINT `fk_answer_task` FOREIGN KEY (`task_id`) REFERENCES `test_task` (`id`) ON DELETE CASCADE
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
-
--- 模块 13：学习活动容器（不承担长期记忆）
-CREATE TABLE IF NOT EXISTS `learning_session` (
-    `id`                BIGINT       NOT NULL AUTO_INCREMENT,
-    `user_id`           BIGINT       NOT NULL,
-    `learning_space_id` BIGINT       NOT NULL,
-    `title`             VARCHAR(255)          DEFAULT NULL,
-    `current_focus`     VARCHAR(255)          DEFAULT NULL COMMENT '当前关注点',
-    `status`            ENUM ('ACTIVE', 'COMPLETED', 'ABANDONED') NOT NULL DEFAULT 'ACTIVE',
-    `started_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `last_active_at`    DATETIME              DEFAULT NULL,
-    `completed_at`      DATETIME              DEFAULT NULL,
-    PRIMARY KEY (`id`),
-    KEY `idx_sess_user` (`user_id`),
-    KEY `idx_sess_space` (`learning_space_id`),
-    CONSTRAINT `fk_sess_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
-    CONSTRAINT `fk_sess_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- 模块 14：文档
@@ -412,18 +446,21 @@ CREATE TABLE IF NOT EXISTS `agent_run` (
     `user_id`         BIGINT   NOT NULL,
     `conversation_id` BIGINT            DEFAULT NULL,
     `session_id`      BIGINT            DEFAULT NULL,
-    `run_type`        ENUM ('CHAT', 'EXTRACTION', 'UPDATE', 'TEST', 'MEMORY') NOT NULL,
+    `run_type`        ENUM ('CHAT', 'ANALYSIS', 'TEST', 'MEMORY') NOT NULL,
     `status`          ENUM ('RUNNING', 'COMPLETED', 'FAILED') NOT NULL DEFAULT 'RUNNING',
+    -- 两跳链路（Postman → 后端 → Agent）里唯一能跨进程把两半日志对上的键
+    `trace_id`        CHAR(32)           DEFAULT NULL COMMENT '由后端生成并透传给 Agent',
     `input_summary`   TEXT,
     `output_summary`  TEXT,
     `duration_ms`     INT               DEFAULT NULL,
-    `error_stack`     TEXT,
+    `error_message`   TEXT              COMMENT '给人看的失败说明，不存堆栈',
     `created_at`      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `finished_at`     DATETIME          DEFAULT NULL,
     PRIMARY KEY (`id`),
     KEY `idx_agent_user` (`user_id`),
     KEY `idx_agent_conv` (`conversation_id`),
     KEY `idx_agent_session` (`session_id`),
+    KEY `idx_agent_run_trace` (`trace_id`),
     CONSTRAINT `fk_agent_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
     CONSTRAINT `fk_agent_conv` FOREIGN KEY (`conversation_id`) REFERENCES `conversation` (`id`),
     CONSTRAINT `fk_agent_session` FOREIGN KEY (`session_id`) REFERENCES `learning_session` (`id`)

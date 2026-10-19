@@ -5,7 +5,9 @@ import com.ails.backend.agent.AgentStreamHandler;
 import com.ails.backend.common.BusinessException;
 import com.ails.backend.dto.agent.ChatAgentRequest;
 import com.ails.backend.entity.AgentRun;
+import com.ails.backend.entity.Concept;
 import com.ails.backend.entity.Conversation;
+import com.ails.backend.entity.LearningSession;
 import com.ails.backend.entity.Message;
 import com.ails.backend.enums.AgentRunStatus;
 import com.ails.backend.enums.AgentRunType;
@@ -20,9 +22,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -81,6 +86,8 @@ public class ChatService {
     private static final long SSE_TIMEOUT_MS = 5 * 60 * 1000L;
     /** 送给 Agent 的历史消息条数：最近 20 条，控制 prompt 长度 */
     private static final int HISTORY_LIMIT = 20;
+    /** trace id 的随机源，见 {@link #newTraceId()} */
+    private static final SecureRandom TRACE_RANDOM = new SecureRandom();
 
     private final ConversationService conversationService;
     private final MessageService messageService;
@@ -113,10 +120,23 @@ public class ChatService {
 
         // 2) 同步落库用户消息（仍在请求线程）—— 此刻前端再 GET /messages 就能看到它
         Message userMessage = messageService.appendUserMessage(userId, conversationId, content);
-        // 3) 建 agent_run 轨迹行（RUNNING）—— runId 是后续所有 SSE 事件携带的 id，也是排查失败的入口
-        AgentRun run = createRun(userId, conversationId, content);
 
-        // 4) 创建 SSE 连接句柄。SseEmitter 是 Spring MVC 的异步响应对象：
+        // 3) 在调用 Agent 之前先落定「这条对话属于哪个学习活动」。
+        //    顺序是硬要求，不能挪到生成之后：Session 是懒创建的，新对话的第一条消息发出时
+        //    session_id 还是 NULL，而 Agent 的上下文里要带「本阶段学习目标」。
+        //    放到回复生成完之后，最该继承上个 Session 目标的那一轮（新开对话接着学同一个知识点）
+        //    反而什么都带不上 —— 见 docs/session-design.md §一.4 / §六。
+        //    这一步也顺手把这一轮的 Concept 匹配算好，后面 analyzeQuietly 直接复用，不重复查库。
+        //
+        //    它排在 createRun 之前，是为了让 agent_run.session_id 在插入时就写对 ——
+        //    否则得再补一次 UPDATE，而且中间那段时间里这行轨迹的归属是错的。
+        LearningAnalysisService.TurnOpening opening =
+                learningAnalysisService.beginTurn(conversation, content);
+
+        // 4) 建 agent_run 轨迹行（RUNNING）—— runId 是后续所有 SSE 事件携带的 id，也是排查失败的入口
+        AgentRun run = createRun(userId, conversationId, content, sessionId(opening));
+
+        // 5) 创建 SSE 连接句柄。SseEmitter 是 Spring MVC 的异步响应对象：
         //    返回给 Controller 后 HTTP 响应不再被请求线程阻塞，
         //    之后任何线程都能通过 emitter.send() 往里推数据，直到 emitter.complete() 关流。
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
@@ -131,14 +151,14 @@ public class ChatService {
         emitter.onTimeout(() -> finishRunIfRunning(run, AgentRunStatus.FAILED, "SSE 超时", startedAt));
         emitter.onError(e -> finishRunIfRunning(run, AgentRunStatus.FAILED, String.valueOf(e.getMessage()), startedAt));
 
-        // 5) 丢进线程池：生成 + 推送在 chat-stream-* 线程上执行，
+        // 6) 丢进线程池：生成 + 推送在 chat-stream-* 线程上执行，
         //    本请求线程此刻立即把 emitter 返回给 Controller，回池子接下一个请求。
         //    必须包一层：线程池饱和时 execute 会抛 RejectedExecutionException。等它冒到
         //    DispatcherServlet 时响应头早就发出去（Content-Type: text/event-stream），
         //    异常处理器再想写 JSON 错误体也来不及了 —— 只能顺着这条已经建立的流把失败说清楚。
         try {
-            chatStreamExecutor.execute(() ->
-                    streamReply(emitter, run, conversation, userMessage, authToken, finished, startedAt));
+            chatStreamExecutor.execute(() -> streamReply(
+                    emitter, run, conversation, userMessage, authToken, opening, finished, startedAt));
         } catch (RejectedExecutionException e) {
             log.warn("chat stream rejected, runId={}, chatStreamExecutor saturated", run.getId());
             // 先补 message.start 再发 message.error：前端按事件名驱动的状态机是从 start 进入
@@ -172,8 +192,9 @@ public class ChatService {
      * 与前端的交互：所有输出统一经 {@link #send} 写成 SSE 事件，且只发生在本线程（单线程写 emitter）。
      */
     private void streamReply(SseEmitter emitter, AgentRun run, Conversation conversation,
-                             Message userMessage, String authToken, AtomicBoolean finished,
-                             LocalDateTime startedAt) {
+                             Message userMessage, String authToken,
+                             LearningAnalysisService.TurnOpening opening,
+                             AtomicBoolean finished, LocalDateTime startedAt) {
         // 回复全文缓冲：每来一个 delta 攒一段，结束时整段落库成一条助手消息。
         // 不逐 delta 落库 —— 否则一条回复会变成 N 条 message 行，污染序号和 GET /messages 列表。
         StringBuilder buffer = new StringBuilder();
@@ -187,16 +208,21 @@ public class ChatService {
         try {
             // 组装发给 Agent 的请求：
             // - runId 让 Agent 侧的日志 / 埋点能跟后端的轨迹行对上；
+            // - traceId 是跨进程的那个键，runId 只能在各自进程里找到自己那一半；
             // - history 取本对话最近 20 条，<b>并排掉刚落库的这条用户消息</b>：本轮输入已经由
             //   userMessage 字段单独承载，再出现在历史末尾就是同一句话发了两遍。
+            // - session 让 Agent 知道「这一阶段要解决什么、现在卡在哪」。可空 —— 刚建出来的
+            //   对话可能还没归属任何学习活动（闲聊就是这个结果）。
             // - authToken 透传用户本人的 JWT，Agent 用它回访后端的只读检索接口。
             ChatAgentRequest request = new ChatAgentRequest(
                     run.getId(),
+                    run.getTraceId(),
                     run.getUserId(),
                     conversation.getId(),
                     conversation.getLearningSpaceId(),
                     userMessage.getContent(),
                     messageService.history(conversation.getId(), userMessage.getId(), HISTORY_LIMIT),
+                    sessionContext(opening),
                     authToken);
 
             // —— 与 Agent 交互的核心：阻塞在这里，直到 Agent 的流结束。
@@ -249,7 +275,7 @@ public class ChatService {
                     // 它只依赖用户消息，与回复是否落库成功无关，所以放在 try/finally 之外照常执行。
                     // 顺序上也刻意排在 emitter.complete() 之后：这一步要写 Evidence / Understanding /
                     // Revision / State，慢且与前端的即时体验无关，不该让 SSE 连接多挂一秒。
-                    analyzeQuietly(userMessage);
+                    analyzeQuietly(userMessage, opening.matched());
                 }
 
                 @Override
@@ -292,12 +318,22 @@ public class ChatService {
      * 分析失败绝不能影响已经推完的对话 —— 用户已经拿到回复了，回滚没有意义，
      * 所以这里吞掉异常，只留 error 日志供排查。
      */
-    private void analyzeQuietly(Message userMessage) {
+    private void analyzeQuietly(Message userMessage, List<Concept> matched) {
         try {
-            learningAnalysisService.analyzeMessage(userMessage);
+            learningAnalysisService.analyzeMessage(userMessage, matched);
         } catch (Exception e) {
             log.error("analyze message failed, messageId={}", userMessage.getId(), e);
         }
+    }
+
+    /** 把学习活动转成 Agent 需要的那一小块上下文；没有归属时返回 null（Agent 侧据此不渲染该区块）。 */
+    private static ChatAgentRequest.SessionContext sessionContext(LearningAnalysisService.TurnOpening opening) {
+        LearningSession session = opening == null ? null : opening.session();
+        if (session == null) {
+            return null;
+        }
+        return new ChatAgentRequest.SessionContext(
+                session.getId(), session.getTitle(), session.getGoal(), session.getCurrentFocus());
     }
 
     // ================= agent_run =================
@@ -306,15 +342,37 @@ public class ChatService {
      * 为本次生成写一条轨迹行（RUNNING）。
      * inputSummary 截断到 255 字符，匹配 agent_run.input_summary 列宽。
      */
-    private AgentRun createRun(Long userId, Long conversationId, String content) {
+    private AgentRun createRun(Long userId, Long conversationId, String content, Long sessionId) {
         AgentRun run = new AgentRun();
         run.setUserId(userId);
         run.setConversationId(conversationId);
+        // 归属的学习活动。可能为 null：闲聊不产生也不归属任何 Session（Resolver 的 NONE 分支），
+        // 这不是数据缺失，见 docs/session-design.md §五。
+        run.setSessionId(sessionId);
         run.setRunType(AgentRunType.CHAT);
         run.setStatus(AgentRunStatus.RUNNING);
         run.setInputSummary(truncate(content, 255));
+        run.setTraceId(newTraceId());
         agentRunMapper.insert(run);
         return run;
+    }
+
+    /** 本轮归属的 Session id；{@link LearningAnalysisService.TurnOpening#session()} 可能为 null。 */
+    private static Long sessionId(LearningAnalysisService.TurnOpening opening) {
+        return opening.session() == null ? null : opening.session().getId();
+    }
+
+    /**
+     * 生成 trace id：16 字节随机数的 32 位十六进制（匹配 {@code agent_run.trace_id CHAR(32)}）。
+     * <p>
+     * 用 {@link SecureRandom} 而不是 {@code ThreadLocalRandom}：这个值会出现在日志里，
+     * 可预测的 trace id 让「构造一个 id 去翻别人的执行记录」变得容易。
+     * 它不参与任何业务判断，纯粹是关联键，所以不需要全局唯一约束。
+     */
+    private static String newTraceId() {
+        byte[] bytes = new byte[16];
+        TRACE_RANDOM.nextBytes(bytes);
+        return HexFormat.of().formatHex(bytes);
     }
 
     /**
@@ -330,7 +388,7 @@ public class ChatService {
         patch.setId(run.getId());
         patch.setStatus(status);
         patch.setOutputSummary(outputSummary);
-        patch.setErrorStack(truncate(error, 1000));
+        patch.setErrorMessage(truncate(error, 1000));
         patch.setFinishedAt(LocalDateTime.now());
         patch.setDurationMs(toMillis(startedAt, patch.getFinishedAt()));
         agentRunMapper.updateById(patch);
@@ -354,7 +412,7 @@ public class ChatService {
         AgentRun patch = new AgentRun();
         patch.setId(run.getId());
         patch.setStatus(status);
-        patch.setErrorStack(truncate(error, 1000));
+        patch.setErrorMessage(truncate(error, 1000));
         patch.setFinishedAt(LocalDateTime.now());
         patch.setDurationMs(toMillis(startedAt, patch.getFinishedAt()));
         agentRunMapper.update(patch, new LambdaUpdateWrapper<AgentRun>()

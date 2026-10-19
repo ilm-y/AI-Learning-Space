@@ -2,6 +2,7 @@ package com.ails.backend.agent;
 
 import com.ails.backend.dto.agent.ChatAgentRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -18,9 +19,16 @@ import org.springframework.stereotype.Component;
  * <p>
  * 回显内容里<b>刻意不含</b>任何从 {@code request} 里捞出来的业务数据（不引概念、
  * 不引历史），这样「后端自己有没有算错」不会被桩回复掩盖掉：看到的每一句都是它自己写的。
+ * <p>
+ * <b>它与 {@link HttpPythonAgentGateway} 是二选一的。</b>两者都实现同一个接口，
+ * 容器里同时存在两个候选 Bean 会启动即报 NoUniqueBeanDefinitionException，
+ * 所以两边都挂 {@code @ConditionalOnProperty} 由 {@code ails.agent.gateway} 决定谁上场。
+ * 桩这边带 {@code matchIfMissing = true}：配置项缺省时仍然用它，这样「刚克隆下来
+ * 没装 Python 环境」也能直接启动。
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(name = "ails.agent.gateway", havingValue = "stub", matchIfMissing = true)
 public class StubAgentGateway implements AgentGateway {
 
     /** 模拟流式输出的分块大小。取小值是为了让前端能肉眼看到逐段渲染的过程。 */

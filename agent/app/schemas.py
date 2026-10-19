@@ -69,6 +69,19 @@ class MemoryStatus(str, Enum):
     ARCHIVED = "ARCHIVED"
 
 
+class MemoryScopeType(str, Enum):
+    """Memory 的作用域（后端 scope_type）。
+
+    决定一条记忆在什么上下文里可见：GLOBAL 对任意空间可见，SPACE 只在本空间，
+    CONCEPT 只在本空间的某个知识点下。后端已经按这个规则过滤过，
+    Agent 侧只用来在 prompt 里标注「这条记忆是什么级别的事实」。
+    """
+
+    GLOBAL = "GLOBAL"
+    SPACE = "SPACE"
+    CONCEPT = "CONCEPT"
+
+
 class EvidenceCorrectness(str, Enum):
     CORRECT = "CORRECT"
     INCORRECT = "INCORRECT"
@@ -87,6 +100,21 @@ class HistoryMessage(CamelModel):
         return self.role is MessageRole.USER
 
 
+class SessionContext(CamelModel):
+    """本阶段学习活动的短期工作上下文（后端 `session-design.md` §一.4）。
+
+    只有 `goal`（这一阶段最终要解决什么）和 `current_focus`（此刻卡在哪）会进 prompt ——
+    `id` / `title` 是给日志和溯源用的，不渲染。
+
+    `current_focus` 会随对话推进变化，所以同一个 Session 在不同轮次渲染出的区块可能不同。
+    """
+
+    id: int
+    title: str | None = None
+    goal: str | None = None
+    current_focus: str | None = None
+
+
 class ChatRequest(CamelModel):
     """Backend → Agent 的一次对话请求。
 
@@ -96,11 +124,16 @@ class ChatRequest(CamelModel):
     """
 
     run_id: int
+    # 跨进程关联键：后端生成的 32 位十六进制，两跳（后端 → Agent）靠它对日志。
+    trace_id: str | None = None
     user_id: int
     conversation_id: int
     learning_space_id: int
     user_message: str
     history: list[HistoryMessage] = Field(default_factory=list)
+    # 可为 None —— Session 是懒创建的，一条刚建出来的对话在第一条有效学习消息之前
+    # 还没有归属。这是正常状态，不是数据缺失。
+    session: SessionContext | None = None
     auth_token: str | None = None
 
 
@@ -162,10 +195,12 @@ class Understanding(CamelModel):
 
 class MemoryItem(CamelModel):
     id: int
+    scope_type: MemoryScopeType = MemoryScopeType.GLOBAL
     learning_space_id: int | None = None
     concept_id: int | None = None
     memory_type: MemoryType = MemoryType.LEARNING
-    path: str | None = None
+    # 同作用域内的记忆标识（后端旧字段名是 path）。仅用于溯源，不参与 prompt 渲染。
+    memory_key: str | None = None
     content: str
     status: MemoryStatus = MemoryStatus.ACTIVE
     importance: float | None = None

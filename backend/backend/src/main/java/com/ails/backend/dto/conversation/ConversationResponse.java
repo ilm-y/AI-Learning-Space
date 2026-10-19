@@ -11,6 +11,14 @@ import java.time.LocalDateTime;
 public record ConversationResponse(
         Long id,
         Long learningSpaceId,
+        /**
+         * 所属学习活动。
+         * <p>
+         * <b>为 null 是正常状态</b>，不是「还没填」：要么用户建了对话还没说话，
+         * 要么第一条消息没命中任何 Concept（{@code SessionResolver} 给出 NONE，
+         * 闲聊不该产生学习活动）。见 {@code docs/session-design.md} §四。
+         */
+        Long sessionId,
         String title,
         ConversationStatus status,
         LocalDateTime createdAt,
@@ -21,7 +29,8 @@ public record ConversationResponse(
             return null;
         }
         return new ConversationResponse(
-                conversation.getId(), conversation.getLearningSpaceId(), conversation.getTitle(),
-                conversation.getStatus(), conversation.getCreatedAt(), conversation.getUpdatedAt());
+                conversation.getId(), conversation.getLearningSpaceId(), conversation.getSessionId(),
+                conversation.getTitle(), conversation.getStatus(),
+                conversation.getCreatedAt(), conversation.getUpdatedAt());
     }
 }
