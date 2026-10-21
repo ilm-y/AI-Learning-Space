@@ -227,7 +227,10 @@ check "终事件是 message.end"   "$E_Z" "event:message.end"
 grep -c '^event:message.delta' /tmp/reg_sse_a.txt | xargs -I{} echo "  delta 事件数：{}"
 
 step "11. Agent 侧确实收到了 session / trace（B3/B4 的注入契约）"
-LOG=/tmp/agent.log
+# Agent 的日志路径允许外部覆盖：这个脚本只负责断言，不规定你怎么起 Agent。
+# 找不到文件时直接说清楚，而不是让下面四条 grep 静默全空、报成「契约没传到」。
+LOG=${AGENT_LOG:-/tmp/agent.log}
+[ -f "$LOG" ] || echo "  ! 找不到 Agent 日志 $LOG（用 AGENT_LOG=/path/to/log 指定）"
 
 echo "  -- 显式带上 traceId/session 的 preview：字段是否原样落到 Agent 侧 --"
 api -X POST "$AGENT/agent/context/preview" -H 'Content-Type: application/json' \
@@ -249,7 +252,8 @@ check "Conversation A 首次发消息时 sessionId 已注入（CREATE 分支，s
 check "Conversation B 注入的是同一个 sessionId（ATTACH 分支）" "$SESS_B" "$CA_SESS_AFTER"
 check "Conversation C 的 sessionId 是 None（NONE 分支，闲聊不产生学习活动）" "$SESS_C" "None"
 
-TRACES=$(grep -c "'traceId': '[0-9a-f]\{32\}'" "$LOG")
+TRACES=$(grep -c "'traceId': '[0-9a-f]\{32\}'" "$LOG" 2>/dev/null || true)
+TRACES=${TRACES:-0}
 [ "$TRACES" -ge 3 ] && ok "每一次 run 都带了 32 位 hex 的 trace_id（本段 $TRACES 条）" \
   || bad "有 run 没带 trace_id（只找到 $TRACES 条）"
 echo "  -- 后端 agent_run 里落库的 trace_id（两跳对得上的那个键）--"
