@@ -18,9 +18,10 @@ Tutor → LLM Adapter          ← tutor/tutor.py → llm/*
 SSE 推回后端
 ```
 
-链路下游的「异步学习分析」（Evidence 抽取 → Understanding 更新 → Memory 收敛）
-**不在本轮范围内**，会在 `AgentState.pending_tasks` 里如实标出来 ——
-现在这部分仍由后端 `LearningAnalysisService` 的规则版分析器顶着。
+链路下游的「学习分析」（Evidence 抽取 → Understanding 提案 → Memory 候选 →
+验证决策）走**另一条入口** `analyze()`，对应 `POST /agent/analyze`。
+两条链路共用 LLM 适配器与 Retriever，但不共用上下文组装：教学要的是「怎么讲」，
+分析要的是「这一轮暴露了什么」。
 
 一条设计约束：Runtime 是**无状态**的。它持有的只有配置与 LLM 适配器，
 每次请求自己开一个 Retriever、构造一个 AgentState、结束就丢。
@@ -35,13 +36,14 @@ import logging
 from dataclasses import dataclass
 from typing import AsyncIterator
 
+from app.analysis import LearningAnalyzer
 from app.config import Settings
 from app.context.builder import BuiltContext, ContextBuilder
 from app.llm.base import LLMAdapter, LLMError
 from app.retriever import build_retriever, detect_concepts
 from app.retriever.base import RetrievalError
 from app.retriever.routing import FallbackRetriever
-from app.schemas import ChatRequest
+from app.schemas import AnalyzeRequest, AnalyzeResult, ChatRequest
 from app.state.agent_state import AgentState, DetectedConcept
 from app.trace import RunTrace, TraceEventType
 from app.tutor import Tutor
@@ -128,6 +130,9 @@ class AgentRuntime:
             recent_history_limit=settings.recent_history_limit,
         )
         self._tutor = Tutor(llm)
+        # 分析链路与教学链路共用同一个 LLM 适配器（连接池、配置、Mock 行为一致），
+        # 但各自持有独立的 prompt 与解析逻辑 —— 见 analysis/prompts.py 的说明。
+        self._analyzer = LearningAnalyzer(settings, llm)
 
     @property
     def llm_name(self) -> str:
@@ -194,6 +199,34 @@ class AgentRuntime:
         finally:
             if prepared is not None:
                 log.info("run %s 结束：%s", request.run_id, prepared.trace.as_dict())
+
+    # ---------- 分析路径 ----------
+
+    async def analyze(self, request: AnalyzeRequest) -> AnalyzeResult:
+        """从一轮已经完成的对话里抽取学习候选。
+
+        与 `stream` 的关系是**前后脚**：后端在助手回复落库、SSE 结束后调用这里，
+        拿到结果再写 Evidence / Understanding / Memory。它不产生用户可见的流，
+        失败时由调用方决定是否退回本地规则（而不是把错误展示给用户）。
+        """
+        trace = RunTrace(run_id=request.run_id, trace_id=request.trace_id)
+        trace.record(
+            TraceEventType.RUN_START,
+            mode="analyze",
+            userId=request.user_id,
+            conversationId=request.conversation_id,
+            spaceId=request.learning_space_id,
+            messageId=request.message_id,
+            messageChars=len(request.user_message or ""),
+        )
+        try:
+            return await self._analyzer.analyze(request, trace)
+        except Exception as exc:
+            trace.record(TraceEventType.RUN_ERROR, error=repr(exc))
+            log.warning("analyze run %s 失败：%s", request.run_id, exc)
+            raise
+        finally:
+            log.info("analyze run %s 结束：%s", request.run_id, trace.as_dict())
 
     async def prepare(self, request: ChatRequest, trace: RunTrace | None = None) -> PreparedRun:
         """检索 + 组装，不调用模型。preview 接口直接复用它。"""
