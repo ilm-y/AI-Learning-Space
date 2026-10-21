@@ -12,6 +12,7 @@ import com.ails.backend.enums.UnderstandingStatus;
 import com.ails.backend.mapper.ConceptMapper;
 import com.ails.backend.model.Misconception;
 import com.ails.backend.model.MisconceptionLifecycle;
+import com.ails.backend.model.UnderstandingProposalDraft;
 import com.ails.backend.mapper.LearningUnderstandingMapper;
 import com.ails.backend.mapper.UnderstandingRevisionMapper;
 import com.ails.backend.utils.JsonUtil;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -200,6 +202,149 @@ public class UnderstandingService {
         understandingMapper.updateById(understanding);
 
         return new ApplyResult(understanding, revision);
+    }
+
+    /**
+     * 用 Agent 的增量提案推进当前理解快照。
+     * <p>
+     * 与 {@link #apply} 的分工：
+     * <ul>
+     *   <li>{@code apply} 处理<b>一条证据</b>：把正确/错误观察映射成 known / misconception，
+     *       误区走 {@link MisconceptionLifecycle} 的完整迁移；</li>
+     *   <li>{@code applyProposal} 处理<b>Agent 的合并建议</b>：known / uncertain 直接去重合并，
+     *       新增误区按「一次错误证据」处理（ACTIVE），但不负责解除 —— 解除仍必须由足够的
+     *       反向正确证据驱动。</li>
+     * </ul>
+     * 两条路径都遵守同一条铁律：<b>只有内容真的变化才写 Revision</b>。
+     * 否则 Agent 重放同一份提案会不断产生内容相同的版本，Revision 历史就失去意义。
+     *
+     * @param triggerEvidenceId 触发本次变化的 Evidence，可为 null（纯提案变化）
+     * @return 更新后的快照与本次 Revision；内容无变化时 revision 为 null；
+     *         proposal 为空时返回 null（连快照都不创建）
+     */
+    @Transactional
+    public ApplyResult applyProposal(Long userId, Long conceptId,
+                                     UnderstandingProposalDraft proposal, Long triggerEvidenceId) {
+        if (proposal == null || proposal.isEmpty()) {
+            return null;
+        }
+        LearningUnderstanding understanding = loadOrCreateLocked(userId, conceptId);
+
+        String beforeSummary = understanding.getSummary();
+        String beforeKnown = understanding.getKnownParts();
+        String beforeMisconceptions = understanding.getMisconceptions();
+        String beforeUncertain = understanding.getUncertainParts();
+        String beforeExplanation = understanding.getLatestUserExplanation();
+        UnderstandingStatus beforeStatus = understanding.getStatus();
+
+        List<String> known = new ArrayList<>(JsonUtil.toStringList(understanding.getKnownParts()));
+        List<String> uncertain = new ArrayList<>(JsonUtil.toStringList(understanding.getUncertainParts()));
+        proposal.knownParts().forEach(item -> addDistinct(known, item));
+        proposal.uncertainParts().forEach(item -> addDistinct(uncertain, item));
+
+        // 误区不是只增不减的列表：这里只负责「新增 / 重新激活」，
+        // 解除必须由 apply() 里足够数量的反向证据完成。
+        List<Misconception> misconceptions =
+                new ArrayList<>(MisconceptionLifecycle.parse(understanding.getMisconceptions()));
+        LocalDateTime at = LocalDateTime.now();
+        proposal.misconceptions().forEach(text -> applyProposedMisconception(misconceptions, text, at));
+
+        understanding.setKnownParts(JsonUtil.fromStringList(known));
+        understanding.setUncertainParts(JsonUtil.fromStringList(uncertain));
+        understanding.setMisconceptions(MisconceptionLifecycle.serialize(misconceptions));
+        understanding.setSummary(buildSummary(known, misconceptions, uncertain));
+        if (StringUtils.hasText(proposal.latestUserExplanation())) {
+            understanding.setLatestUserExplanation(proposal.latestUserExplanation());
+        }
+        understanding.setStatus(resolveStatus(understanding, beforeStatus));
+
+        boolean changed = !Objects.equals(beforeSummary, understanding.getSummary())
+                || !Objects.equals(beforeKnown, understanding.getKnownParts())
+                || !Objects.equals(beforeMisconceptions, understanding.getMisconceptions())
+                || !Objects.equals(beforeUncertain, understanding.getUncertainParts())
+                || !Objects.equals(beforeExplanation, understanding.getLatestUserExplanation())
+                || beforeStatus != understanding.getStatus();
+        if (!changed) {
+            return new ApplyResult(understanding, null);
+        }
+
+        understandingMapper.updateById(understanding);
+
+        UnderstandingRevision revision = new UnderstandingRevision();
+        revision.setUnderstandingId(understanding.getId());
+        revision.setRevisionNo(nextRevisionNo(understanding.getId()));
+        revision.setSummary(understanding.getSummary());
+        revision.setKnownParts(understanding.getKnownParts());
+        revision.setMisconceptions(understanding.getMisconceptions());
+        revision.setUncertainParts(understanding.getUncertainParts());
+        revision.setUserExplanation(understanding.getLatestUserExplanation());
+        revision.setStatus(understanding.getStatus());
+        revision.setTriggerEvidenceId(triggerEvidenceId);
+        revisionMapper.insert(revision);
+
+        understanding.setCurrentRevisionId(revision.getId());
+        understandingMapper.updateById(understanding);
+        return new ApplyResult(understanding, revision);
+    }
+
+    /**
+     * 有证据但 Agent 没有给出理解提案时的最小推进：{@code UNKNOWN → EXPOSED}。
+     * <p>
+     * 状态语义里 EXPOSED 表示「接触过，但还判断不了理解程度」。用户针对某个概念提问、
+     * 或者 Agent 只记录了一条观察而没有形成判断时，证据已经证明他碰过这个概念；
+     * 如果什么都不做，概念会一直停在 UNKNOWN，学习状态页上看起来像从未出现。
+     * <p>
+     * <b>只做 UNKNOWN → EXPOSED 这一格。</b>更强的状态（PARTIAL / DEMONSTRATED /
+     * MISCONCEPTION）必须由 Agent 的 proposal 或测试结果给出 —— 仅凭「提到过」就推断
+     * 他理解了（或误解了）是在编造判断。
+     * <p>
+     * 已经是 EXPOSED 或更靠后的状态时直接返回，不产生 Revision：
+     * 每一轮谈同一个概念都会新增证据，但理解并没有因此变化。
+     */
+    @Transactional
+    public ApplyResult markExposed(Long userId, Long conceptId, Long triggerEvidenceId) {
+        LearningUnderstanding understanding = loadOrCreateLocked(userId, conceptId);
+        if (understanding.getStatus() != UnderstandingStatus.UNKNOWN) {
+            return new ApplyResult(understanding, null);
+        }
+        understanding.setStatus(UnderstandingStatus.EXPOSED);
+        understandingMapper.updateById(understanding);
+
+        UnderstandingRevision revision = new UnderstandingRevision();
+        revision.setUnderstandingId(understanding.getId());
+        revision.setRevisionNo(nextRevisionNo(understanding.getId()));
+        revision.setSummary(understanding.getSummary());
+        revision.setKnownParts(understanding.getKnownParts());
+        revision.setMisconceptions(understanding.getMisconceptions());
+        revision.setUncertainParts(understanding.getUncertainParts());
+        revision.setUserExplanation(understanding.getLatestUserExplanation());
+        revision.setStatus(UnderstandingStatus.EXPOSED);
+        revision.setTriggerEvidenceId(triggerEvidenceId);
+        revisionMapper.insert(revision);
+
+        understanding.setCurrentRevisionId(revision.getId());
+        understandingMapper.updateById(understanding);
+        return new ApplyResult(understanding, revision);
+    }
+
+    private static void applyProposedMisconception(List<Misconception> list, String text, LocalDateTime at) {
+        String normalized = text.trim().replaceAll("\\s+", " ");
+        for (int i = 0; i < list.size(); i++) {
+            Misconception existing = list.get(i);
+            if (!normalized.equals(existing.text())) {
+                continue;
+            }
+            // 再次出现同一条误区：回到 ACTIVE。之前累计的反向确认必须清空 ——
+            // 那些确认针对的是「旧一轮还没解决的状态」，不能拿来抵扣这一次的错误。
+            list.set(i, new Misconception(
+                    normalized,
+                    MisconceptionStatus.ACTIVE,
+                    existing.firstDetectedAt() == null ? at : existing.firstDetectedAt(),
+                    at,
+                    List.of()));
+            return;
+        }
+        list.add(new Misconception(normalized, MisconceptionStatus.ACTIVE, at, at, List.of()));
     }
 
     // ================= 查询 =================

@@ -6,10 +6,12 @@ import com.ails.backend.dto.memory.MemoryResponse;
 import com.ails.backend.entity.Concept;
 import com.ails.backend.entity.Memory;
 import com.ails.backend.entity.MemorySource;
+import com.ails.backend.enums.MemoryReconcileAction;
 import com.ails.backend.enums.MemoryScopeType;
 import com.ails.backend.enums.MemorySourceType;
 import com.ails.backend.enums.MemoryStatus;
 import com.ails.backend.enums.MemoryType;
+import com.ails.backend.model.MemoryCandidateDraft;
 import com.ails.backend.mapper.MemoryMapper;
 import com.ails.backend.mapper.MemorySourceMapper;
 import com.ails.backend.utils.Hashing;
@@ -95,6 +97,142 @@ public class MemoryService {
         source.setSourceId(sourceId);
         memorySourceMapper.insert(source);
         return memory;
+    }
+
+    /** 一条 Agent 候选记忆被收敛后的结果，用于 agent_run 的 outputSummary 与测试断言。 */
+    public enum ReconcileOutcome {
+        /** 新建了一条 CANDIDATE */
+        ADDED,
+        /** 更新了已有 CANDIDATE 的内容 */
+        UPDATED,
+        /** 没有写入：候选非法、动作为 IGNORE，或目标记忆已经不是 CANDIDATE */
+        SKIPPED
+    }
+
+    /**
+     * 收敛一条 Agent 提出的长期记忆。
+     * <p>
+     * 与 {@link #createCandidate} 的区别：这个方法接收的是「Agent 的意图」（ADD / UPDATE / IGNORE），
+     * 由后端决定它最终能不能落地。规则按记忆的生命周期收窄：
+     * <pre>
+     *   不存在        ADD   → 新建 CANDIDATE
+     *   不存在        UPDATE→ 不做（没有可更新的对象，也不凭空创建）
+     *   已存在 CANDIDATE
+     *                 ADD   → 跳过（已经有同一条）
+     *                 UPDATE→ 覆盖 content / type / importance
+     *   ACTIVE / ARCHIVED
+     *                 任意  → 跳过
+     * </pre>
+     * <b>ACTIVE 永不被 Agent 覆盖</b>：那是用户已经确认过的内容，模型的再次推断不能把它改回去。
+     * ARCHIVED 同理 —— 归档是用户的决定，Agent 重放同一份推断不应该让它复活。
+     * <p>
+     * Agent 推断出的记忆一律只能是 CANDIDATE（和 {@link #createCandidate} 一致）：
+     * 「模型觉得应该记住」不等于「用户同意记住」。
+     *
+     * @param sourceType 这条推断来自什么（当前是 MESSAGE）
+     * @param sourceId   来源 id；为 null 时不写 memory_source，但记忆本身仍可落库
+     */
+    @Transactional
+    public ReconcileOutcome reconcileCandidate(Long userId, MemoryCandidateDraft draft,
+                                               MemorySourceType sourceType, Long sourceId) {
+        if (draft == null || !draft.isWritable() || draft.action() == MemoryReconcileAction.IGNORE) {
+            return ReconcileOutcome.SKIPPED;
+        }
+        Scope scope = resolveCandidateScope(userId, draft);
+        if (scope == null) {
+            return ReconcileOutcome.SKIPPED;
+        }
+        String memoryKey = effectiveMemoryKey(draft.memoryKey(), draft.content());
+        Memory existing = findByScopeAndKey(userId, scope.scopeKey(), memoryKey);
+
+        if (existing != null) {
+            return draft.action() == MemoryReconcileAction.UPDATE
+                    && existing.getStatus() == MemoryStatus.CANDIDATE
+                    ? updateCandidate(existing, draft, sourceType, sourceId)
+                    : ReconcileOutcome.SKIPPED;
+        }
+        if (draft.action() == MemoryReconcileAction.UPDATE) {
+            // 没有目标却要求 UPDATE：模型可能是在纠正一条它以为存在、其实已被归档/删除的记忆。
+            // 这时新建会把一次「更新意图」变成一条没人确认过的新记忆，语义是错的。
+            return ReconcileOutcome.SKIPPED;
+        }
+        return insertCandidate(userId, scope, memoryKey, draft, sourceType, sourceId);
+    }
+
+    private ReconcileOutcome insertCandidate(Long userId, Scope scope, String memoryKey,
+                                             MemoryCandidateDraft draft,
+                                             MemorySourceType sourceType, Long sourceId) {
+        Memory memory = new Memory();
+        memory.setUserId(userId);
+        applyScope(memory, scope, memoryKey);
+        memory.setMemoryType(draft.memoryType());
+        memory.setContent(draft.content());
+        memory.setStatus(MemoryStatus.CANDIDATE);
+        memory.setImportance(draft.importance());
+        try {
+            memoryMapper.insert(memory);
+        } catch (DuplicateKeyException e) {
+            // 并发分析同时提出了同一条记忆。唯一索引已经保证了「只有一条」，
+            // 这里安静地当成「已经存在」即可 —— 不是错误，也不需要把分析事务打回。
+            return ReconcileOutcome.SKIPPED;
+        }
+        attachSource(memory.getId(), sourceType, sourceId);
+        return ReconcileOutcome.ADDED;
+    }
+
+    private ReconcileOutcome updateCandidate(Memory existing, MemoryCandidateDraft draft,
+                                             MemorySourceType sourceType, Long sourceId) {
+        existing.setMemoryType(draft.memoryType());
+        existing.setContent(draft.content());
+        existing.setImportance(draft.importance());
+        // memoryKey / 作用域不跟着改：身份一变就是另一条记忆，而 identity 是检索可见性的依据。
+        requireUpdated(memoryMapper.updateById(existing), "记忆已被其他请求修改，请刷新后重试");
+        attachSource(existing.getId(), sourceType, sourceId);
+        return ReconcileOutcome.UPDATED;
+    }
+
+    /**
+     * Agent 给出的作用域转成 {@link Scope}，同时做最小合法性检查。
+     * <p>
+     * 与 {@link #resolveScope} 的区别：这里缺 id 时返回 null 而不是抛 400 ——
+     * 输入来自模型，一条字段不全的候选应该被丢掉，不能让整轮分析失败。
+     * 真正的归属校验仍由 {@link #resolveScope} 完成（它会对空间/知识点做 owner 检查）。
+     */
+    private Scope resolveCandidateScope(Long userId, MemoryCandidateDraft draft) {
+        return switch (draft.scopeType()) {
+            case GLOBAL -> resolveScope(userId, null, null);
+            case SPACE -> draft.learningSpaceId() == null
+                    ? null : resolveScope(userId, draft.learningSpaceId(), null);
+            case CONCEPT -> draft.conceptId() == null
+                    ? null : resolveScope(userId, draft.learningSpaceId(), draft.conceptId());
+        };
+    }
+
+    private Memory findByScopeAndKey(Long userId, String scopeKey, String memoryKey) {
+        return memoryMapper.selectOne(new LambdaQueryWrapper<Memory>()
+                .eq(Memory::getUserId, userId)
+                .eq(Memory::getScopeKey, scopeKey)
+                .eq(Memory::getMemoryKey, memoryKey)
+                .last("LIMIT 1"));
+    }
+
+    /** 与 {@code createCandidate} 相同的来源记录；source_id 缺失时跳过，没有来源好写。 */
+    private void attachSource(Long memoryId, MemorySourceType sourceType, Long sourceId) {
+        if (sourceType == null || sourceId == null) {
+            return;
+        }
+        Long already = memorySourceMapper.selectCount(new LambdaQueryWrapper<MemorySource>()
+                .eq(MemorySource::getMemoryId, memoryId)
+                .eq(MemorySource::getSourceType, sourceType)
+                .eq(MemorySource::getSourceId, sourceId));
+        if (already != null && already > 0) {
+            return;
+        }
+        MemorySource source = new MemorySource();
+        source.setMemoryId(memoryId);
+        source.setSourceType(sourceType);
+        source.setSourceId(sourceId);
+        memorySourceMapper.insert(source);
     }
 
     @Transactional(readOnly = true)
