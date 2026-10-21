@@ -96,6 +96,12 @@ async def _run_one(
             result.detail = {"actual": actual}
             result.checks = evaluate(case.expect, actual)
 
+        if not result.checks:
+            # 空断言集会让 all([]) 为 True，用例「什么都没验」却判通过。
+            # live 执行器已有同样的保护，这里保持两边一致。
+            result.error = "用例没有任何断言 —— 请提供 expect 或 expectError"
+            return result
+
         result.status = STATUS_PASSED if all(check.passed for check in result.checks) else STATUS_FAILED
         return result
     except Exception as exc:  # noqa: BLE001 —— 加载 fixture / 构造请求失败也要落到报告里

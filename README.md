@@ -546,7 +546,7 @@ python -m evaluation --mode all
 bash scripts/regress-closed-loop.sh
 ```
 
-当前结果：Agent 42 个单测、后端 54 个执行用例、评测 39 offline + 9 live 全绿。
+当前结果：Agent 44 个单测、后端 58 个执行用例、评测 40 offline + 9 live 全绿。
 
 ---
 

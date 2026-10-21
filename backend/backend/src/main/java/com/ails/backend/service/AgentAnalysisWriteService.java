@@ -49,8 +49,11 @@ import java.util.stream.Collectors;
  * {@code apply} 是本地规则版的映射（CORRECT → knownParts、INCORRECT → 误区）。
  * 接入 Agent 后，<b>理解如何演进由 Agent 的 proposal 决定</b>，Evidence 只是被记录的观察。
  * 两条路径同时跑会把同一个观察计算两遍，产生一次假的理解变化。
- * 误区解除仍然只发生在 {@code apply} 里 —— Agent 的 proposal 只能新增误区，
- * 不能凭一次输出把已存在的误区「说没了」。
+ * <p>
+ * 但误区不能因此失去生命周期：{@code applyProposal} 会先用本轮证据推进已有误区
+ * （INCORRECT 新建 / 高质量 CORRECT 解除），再合并提案；没有提案的概念走
+ * {@link UnderstandingService#evolveMisconceptions}。Agent 仍不能凭一次输出
+ * 把误区「说没了」—— 解除必须由独立的反向证据驱动。
  *
  * <h3>为什么先集中校验 conceptId</h3>
  * conceptId 来自模型输出，不能假设它一定属于当前学习空间。这里一次查出空间下的
@@ -114,10 +117,17 @@ public class AgentAnalysisWriteService {
 
         List<LearningEvidence> written = new ArrayList<>();
         Map<Long, LearningEvidence> latestEvidence = new LinkedHashMap<>();
-        writeEvidence(context, result, concepts, written, latestEvidence);
+        // 按概念分组的两份中间产物，供 writeProposal 使用：
+        // - evidences：同一概念的多条证据要一起推进误区生命周期；
+        // - explanations：Agent 在证据上带的用户原话，不能因为「没有提案」而丢掉。
+        Map<Long, List<LearningEvidence>> evidencesByConcept = new LinkedHashMap<>();
+        Map<Long, String> userExplanations = new LinkedHashMap<>();
+        writeEvidence(context, result, concepts, written, latestEvidence,
+                evidencesByConcept, userExplanations);
 
         Map<Long, LearningUnderstanding> proposals = new LinkedHashMap<>();
-        int proposalsApplied = writeProposal(context, result, concepts, latestEvidence, proposals);
+        int proposalsApplied = writeProposal(context, result, concepts, latestEvidence,
+                evidencesByConcept, userExplanations, proposals);
 
         projectState(context, written, proposals, latestEvidence);
 
@@ -140,7 +150,9 @@ public class AgentAnalysisWriteService {
     private void writeEvidence(TurnContext context, AnalyzeAgentResult result,
                                Map<Long, Concept> concepts,
                                List<LearningEvidence> written,
-                               Map<Long, LearningEvidence> latestEvidence) {
+                               Map<Long, LearningEvidence> latestEvidence,
+                               Map<Long, List<LearningEvidence>> evidencesByConcept,
+                               Map<Long, String> userExplanations) {
         if (context.messageId() == null) {
             // Evidence 必须有来源；没有消息 id 说明这条分析是离线触发的，
             // 此时宁可不写证据，也不能编一个来源出来。
@@ -180,10 +192,17 @@ public class AgentAnalysisWriteService {
             if (!appended.created()) {
                 continue;
             }
-            written.add(appended.evidence());
+            LearningEvidence evidence = appended.evidence();
+            written.add(evidence);
             // 同一概念的多条证据里，保留最后一条作为 Revision 的 trigger：
             // 它是本轮最新的观察，指向它比指向第一条更符合「这次变化由什么触发」。
-            latestEvidence.put(conceptId, appended.evidence());
+            latestEvidence.put(conceptId, evidence);
+            evidencesByConcept.computeIfAbsent(conceptId, key -> new ArrayList<>()).add(evidence);
+            // 用户自己的原话是 Understanding 最强的信号，必须留存：
+            // 提案可能只覆盖一个概念，甚至完全为空，不能只靠 proposal 那条路。
+            if (StringUtils.hasText(candidate.userExplanation())) {
+                userExplanations.putIfAbsent(conceptId, candidate.userExplanation().trim());
+            }
         }
     }
 
@@ -192,34 +211,82 @@ public class AgentAnalysisWriteService {
     private int writeProposal(TurnContext context, AnalyzeAgentResult result,
                               Map<Long, Concept> concepts,
                               Map<Long, LearningEvidence> latestEvidence,
+                              Map<Long, List<LearningEvidence>> evidencesByConcept,
+                              Map<Long, String> userExplanations,
                               Map<Long, LearningUnderstanding> proposals) {
+        int applied = 0;
+        // 已经被提案（或原话）处理过的概念；它们不再走下面的「纯误区演进」分支。
+        Set<Long> covered = new LinkedHashSet<>();
+
         AnalyzeAgentResult.UnderstandingProposal proposal = result.understandingProposal();
-        if (proposal == null || proposal.conceptId() == null) {
-            return 0;
+        if (proposal != null && proposal.conceptId() != null) {
+            Long conceptId = proposal.conceptId();
+            if (!concepts.containsKey(conceptId)) {
+                log.warn("跳过理解提案：conceptId 不属于当前空间, userId={}, conceptId={}",
+                        context.userId(), conceptId);
+            } else {
+                // 提案没带用户原话时，用证据里的那句话补上：两者是同一轮的用户表达，
+                // 但只有写入快照的这一路能把它带到下一轮上下文。
+                String explanation = StringUtils.hasText(proposal.latestUserExplanation())
+                        ? proposal.latestUserExplanation()
+                        : userExplanations.get(conceptId);
+                UnderstandingProposalDraft draft = new UnderstandingProposalDraft(
+                        proposal.knownParts(),
+                        proposal.uncertainParts(),
+                        proposal.misconceptions(),
+                        explanation);
+                if (!draft.isEmpty()) {
+                    UnderstandingService.ApplyResult appliedResult = understandingService.applyProposal(
+                            context.userId(), conceptId, draft,
+                            evidencesByConcept.getOrDefault(conceptId, List.of()),
+                            evidenceId(latestEvidence.get(conceptId)));
+                    if (appliedResult != null) {
+                        proposals.put(conceptId, appliedResult.understanding());
+                        covered.add(conceptId);
+                        // revision == null 表示与当前快照完全一致，不该记成一次「应用了提案」
+                        if (appliedResult.revision() != null) {
+                            applied++;
+                        }
+                    }
+                }
+            }
         }
-        if (!concepts.containsKey(proposal.conceptId())) {
-            log.warn("跳过理解提案：conceptId 不属于当前空间, userId={}, conceptId={}",
-                    context.userId(), proposal.conceptId());
-            return 0;
+
+        // 提案只覆盖一个概念，而本轮证据可能提到多个。没被覆盖的用户原话单独落一条，
+        // 不能因为「主提案在别的概念上」就把这句话丢掉。
+        for (Map.Entry<Long, String> entry : userExplanations.entrySet()) {
+            if (covered.contains(entry.getKey())) {
+                continue;
+            }
+            UnderstandingProposalDraft draft = new UnderstandingProposalDraft(
+                    List.of(), List.of(), List.of(), entry.getValue());
+            UnderstandingService.ApplyResult appliedResult = understandingService.applyProposal(
+                    context.userId(), entry.getKey(), draft,
+                    evidencesByConcept.getOrDefault(entry.getKey(), List.of()),
+                    evidenceId(latestEvidence.get(entry.getKey())));
+            if (appliedResult != null) {
+                proposals.put(entry.getKey(), appliedResult.understanding());
+                covered.add(entry.getKey());
+                if (appliedResult.revision() != null) {
+                    applied++;
+                }
+            }
         }
-        UnderstandingProposalDraft draft = new UnderstandingProposalDraft(
-                proposal.knownParts(),
-                proposal.uncertainParts(),
-                proposal.misconceptions(),
-                proposal.latestUserExplanation());
-        if (draft.isEmpty()) {
-            return 0;
+
+        // 既没有提案、也没有用户原话的概念：仍要按证据推进误区生命周期
+        // （INCORRECT 新建 ACTIVE、足够强的 CORRECT 解除），否则 Agent 路径的误区只增不减。
+        for (Map.Entry<Long, List<LearningEvidence>> entry : evidencesByConcept.entrySet()) {
+            if (covered.contains(entry.getKey())) {
+                continue;
+            }
+            UnderstandingService.ApplyResult evolved = understandingService.evolveMisconceptions(
+                    context.userId(), entry.getKey(), entry.getValue(),
+                    evidenceId(latestEvidence.get(entry.getKey())));
+            if (evolved != null) {
+                proposals.put(entry.getKey(), evolved.understanding());
+            }
         }
-        LearningEvidence trigger = latestEvidence.get(proposal.conceptId());
-        UnderstandingService.ApplyResult applied = understandingService.applyProposal(
-                context.userId(), proposal.conceptId(), draft,
-                trigger == null ? null : trigger.getId());
-        if (applied == null) {
-            return 0;
-        }
-        proposals.put(proposal.conceptId(), applied.understanding());
-        // revision == null 表示提案与当前快照完全一致；没有演进就不该记一次「应用了提案」
-        return applied.revision() == null ? 0 : 1;
+        return applied;
     }
 
     // ================= 3. Learning State =================
@@ -230,9 +297,11 @@ public class AgentAnalysisWriteService {
      * 投影是幂等的物化视图，重复调用不会错，但会在同一事务里多做几次加锁读；
      * 更重要的是，一次分析里「证据 + 提案」应该被看成同一个新的理解状态。
      * <p>
-     * <b>有证据、没有提案</b>的概念会先经过 {@link UnderstandingService#markExposed}：
-     * 证据已经证明用户接触过这个概念，只是 Agent 还没形成判断。不做这一步的话，
-     * 提问类的对话永远停在 UNKNOWN，状态页看不出「他其实已经碰到这里了」。
+     * 正常情况下 {@link #writeProposal} 已经保证「每个有证据的概念都有快照」：
+     * 提案合并、原话落库、纯误区演进三条路都会返回 ApplyResult，并让状态推进到
+     * EXPOSED（证据证明用户接触过，只是 Agent 还没形成判断）。
+     * {@link UnderstandingService#markExposed} 保留为兜底，覆盖将来新增写入分支时
+     * 「证据写了但理解没被推进」的情况。
      *
      * @param proposals 有提案的概念 → 提案应用后的快照（可能没有 Revision，但快照仍是最新的）
      */
@@ -362,6 +431,11 @@ public class AgentAnalysisWriteService {
                         .eq(Concept::getLearningSpaceId, learningSpaceId))
                 .stream()
                 .collect(Collectors.toMap(Concept::getId, c -> c, (a, b) -> a, LinkedHashMap::new));
+    }
+
+    /** 证据可能不存在（例如这一轮没有新证据），Revision 的 trigger 允许为空。 */
+    private static Long evidenceId(LearningEvidence evidence) {
+        return evidence == null ? null : evidence.getId();
     }
 
     /** 观察文本截断；null 原样返回，由调用方判断是否为空。 */
