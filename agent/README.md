@@ -2,23 +2,29 @@
 
 Python 侧的 Learning Agent Runtime，**最小可用版本**。
 
-它负责一件事：**在回答用户之前，先把「这个用户现在是怎么理解这个知识点的」读进来，
-并据此决定从哪里讲起。**
+它负责两件事：
+
+1. **回答之前**：把「这个用户现在是怎么理解这个知识点的」读进来，据此决定从哪里讲起；
+2. **回答之后**：分析这一轮是否产生了学习信号，产出 Evidence / Understanding / Memory /
+   验证策略的**候选**，交给后端在事务里落库。
 
 ```text
+回答（POST /agent/chat）：
 ChatRequest
-     ↓
-概念识别 → 检索（Understanding / Memory / Knowledge，按需 Evidence）
-     ↓
-Context Builder（排序、去重、控 Token、组织结构）
-     ↓
-Tutor → LLM Adapter
-     ↓
-SSE 流式回答
+  → 概念识别 → 检索（Understanding / Memory / Knowledge，按需 Evidence）
+  → Context Builder（排序 / 去重 / Token 预算 / 区块）
+  → Tutor → LLM Adapter → SSE 流式回答
+
+分析（POST /agent/analyze）：
+AnalyzeRequest
+  → 概念识别 → 检索（同一套只读接口）
+  → LearningAnalyzer → LLM Adapter
+  → AnalyzeResult（候选，不落库）→ 后端事务写入
 ```
 
-下游的**异步学习分析**（Evidence 抽取 → Understanding 更新 → Memory 收敛）**不在本轮范围**，
-目前仍由后端 `LearningAnalysisService` 的规则版分析器（`rules-v1`）顶着。
+Agent **始终不连数据库**：analyze 返回的是提案，Evidence 去重、Understanding 合并、
+Memory 生命周期、验证任务创建全部由后端负责。后端的写入链路见
+`backend/README.md` 第五节。
 
 - 各层职责与数据契约：[docs/pipeline.md](docs/pipeline.md)
 - 完成进度、边界与下一步：[docs/progress.md](docs/progress.md)
@@ -32,7 +38,8 @@ Flutter
    │  REST / SSE
    ↓
 Spring Boot  ────────────────  MySQL
-   │  HTTP  POST /agent/chat            ← HttpPythonAgentGateway（已接通）
+   │  HTTP  POST /agent/chat            ← HttpPythonAgentGateway（回答）
+   │  HTTP  POST /agent/analyze         ← HttpPythonAgentAnalysisGateway（分析）
    ↓
 Python Learning Agent
    │  HTTP 只读回调（Concepts / Understanding / Memory / Evidence）
@@ -44,11 +51,11 @@ Python Learning Agent
 | 原则                                           | 落地方式                                        |
 | ---------------------------------------------- | ----------------------------------------------- |
 | 业务数据由 Backend 管理，认知判断由 Agent 管理 | Agent **不连数据库**，读写都走后端接口          |
-| Agent 不拥有 `DROP` / 删除能力                 | 本轮 Agent **一个写接口都没有**，全部是只读检索 |
+| Agent 只提出候选，写入语义归 Backend           | analyze 返回 `AnalyzeResult`，不执行任何写操作  |
 
-第二条不是偷懒，是刻意的：先证明「检索 → 组装 → 教学」这一段真的有用，
-再谈让 Agent 写回证据。写回一旦接上，链路会变长、出错面会变大，
-所以把验证顺序倒过来做风险更低。
+analyze 返回的 Evidence / Proposal / Memory 都是**建议**：后端会再次校验 conceptId、
+按 `dedupe_key` 去重、走误区生命周期与 Memory 状态机。这样 Agent 的判断可以错、
+可以重放，但数据库不会因此出现重复或越权数据。
 
 **边界的落点是 token，不是 userId。** Agent 检索时不「以服务身份访问」，
 而是**拿着用户自己的 JWT** 去调后端读接口（`ChatAgentRequest.authToken`），
@@ -188,7 +195,7 @@ curl -s -X POST http://127.0.0.1:8000/agent/context/preview \
 ### 测试
 
 ```bash
-python -m pytest -q          # 33 个用例，0.3 秒，不需要数据库与网络
+python -m pytest -q          # 42 个用例，0.6 秒，不需要数据库与网络
 ```
 
 ---
@@ -198,7 +205,8 @@ python -m pytest -q          # 33 个用例，0.3 秒，不需要数据库与网
 ```text
 agent/
 ├── app/
-│   ├── main.py                       HTTP 入口：/agent/chat、/agent/context/preview、/health
+│   ├── main.py                       HTTP 入口：/agent/chat、/agent/analyze、
+│   │                                 /agent/context/preview、/health
 │   ├── cli.py                        命令行入口：不起服务跑一次流水线
 │   ├── runtime.py                    ★ AgentRuntime：把各层串成一次运行
 │   ├── config.py                     配置（环境变量前缀 AILS_）
@@ -225,10 +233,14 @@ agent/
 │   │   ├── builder.py                去重 / 优先级 / Token 预算 / 区块渲染
 │   │   └── tokens.py                 Token 估算与截断
 │   │
+│   ├── analysis/                     ★ Learning Analyzer
+│   │   ├── analyzer.py               结构化输出 → 候选收敛（校验 / 去重 / 裁剪 / 验证策略）
+│   │   └── prompts.py                分析契约（只提出候选，不做判断以外的写入）
+│   │
 │   └── tutor/tutor.py                ★ Tutor：守住教学契约与流式链路
 │
 ├── fixtures/demo_space.json          样例认知数据（README 里那个 TLB 场景）
-├── tests/                            33 个用例：概念识别 / 上下文组装 / Session 区块 / 端到端
+├── tests/                            42 个用例：概念识别 / 上下文组装 / 分析器 / 端到端
 ├── docs/pipeline.md                  各层职责与数据契约
 ├── docs/progress.md                  进度、边界与下一步
 ├── requirements.txt / requirements-dev.txt
@@ -275,8 +287,8 @@ agent/
 - 换模型厂商，只改 `config.py` 的三个配置项；
 - 换业务逻辑，不动适配器。
 
-它同时提供 `stream_chat`（Tutor 用）与 `complete`（将来的 Evidence 抽取 / 简答判分用）。
-`complete` 本轮**没有调用方**，留着是因为抽取是下一个明确要做的动作，先占住协议而已。
+它同时提供 `stream_chat`（Tutor 用）与 `complete`（LearningAnalyzer 用）。
+分析必须等模型把整段 JSON 输出完才能解析，所以那条链路天生不适合流式。
 
 ### 2. 为什么 AgentState 用完即弃
 
@@ -370,6 +382,55 @@ error   { runId, code, message }     code: 500 内部错误 / 502 模型上游�
 `error` 里的 `code` 是 int，直接喂给后端的 `AgentStreamHandler.onError(int, String)` ——
 网关在这一跳上不要再自己编一个常量，否则「谁的错」就丢了。
 
+### `POST /agent/analyze`
+
+回答结束后，后端把这一轮（用户消息 + 助手回复 + 历史 + Session）发过来，Agent 返回
+**候选**而不是写入结果：
+
+```json
+{
+  "evidenceCandidates": [
+    {
+      "conceptId": 10,
+      "evidenceType": "USER_EXPLANATION",
+      "observation": "用户知道 TLB 是页表项缓存",
+      "correctness": "CORRECT",
+      "reasoningQuality": 0.7,
+      "specificity": 0.8,
+      "aiConfidence": 0.85,
+      "needFollowUp": false,
+      "userExplanation": "我理解 TLB 就是页表项的缓存"
+    }
+  ],
+  "understandingProposal": {
+    "conceptId": 10,
+    "knownParts": ["TLB 是页表项缓存"],
+    "uncertainParts": ["TLB Miss 与 Page Fault 的关系"],
+    "misconceptions": [],
+    "latestUserExplanation": "我理解 TLB 就是页表项的缓存"
+  },
+  "memoryCandidates": [],
+  "verificationDecision": { "action": "SKIP" },
+  "analyzerVersion": "agent-v1",
+  "detectedConcepts": ["TLB"]
+}
+```
+
+几个契约要点：
+
+- **`conceptId` 必须来自本轮检索到的 Concept。** 模型给出不存在的 id 时，分析器会
+  丢弃该条候选或回退到主概念 —— 宁可少写，也不把证据挂到别的知识点上；
+- **`correctness = UNKNOWN` 不等于「没有学习信号」**：只要消息提到了已注册的
+  Concept，就会产生一条 `OBSERVATION`，后端的 `markExposed` 据此把状态从
+  `UNKNOWN` 推进到 `EXPOSED`（见 `evaluation/bad_cases/BC-001-*.md`）；
+- **`verificationDecision.action`** 三选一：`ASK_NOW` 必须带 `questionText`；
+  `ASK_LATER` 只记录、不打断；`SKIP` 表示这一轮不需要验证；
+- 越界分数会被裁剪到 `[0, 1]`，未知字段被忽略（`extra="ignore"`）；但**枚举值不认识、
+  结构不符合契约**时整份结果作废：抛 `AnalysisError` → HTTP 502，后端回退 `rules-v1`。
+  刻意不把坏输出当成「这一轮没有学习信号」—— 那会变成一次没有任何记录的静默降级；
+- `llm_provider=mock` 走**启发式分析**（不调用模型），用于离线测试与本地联调；
+  其他 provider 走结构化 JSON 输出，解析失败时同样有明确的错误码。
+
 ### `POST /agent/context/preview`
 
 同样的请求体，返回检索与组装结果（不调用模型）：
@@ -409,23 +470,24 @@ error   { runId, code, message }     code: 500 内部错误 / 502 模型上游�
 
 ## 七、当前状态
 
-**已完成**：这条同步链路是通的 —— LLM Adapter、AgentState、Retriever（含真实后端读接口）、
-Context Builder（含 Session 区块）、Tutor，以及 33 个不依赖数据库与网络的测试。
+**已完成**：两条链路都已接通 ——
 
-**已被后端真实调用**：`POST /agent/chat` 现在会收到来自 Spring Boot 的请求
-（`HttpPythonAgentGateway`），不再是只能靠 `cli.py` 手工触发。端到端验收见
-`scripts/regress-closed-loop.sh`。
+- **回答**：LLM Adapter、AgentState、Retriever（含真实后端读接口）、Context Builder
+  （含 Session 区块）、Tutor，经 `POST /agent/chat` 被后端真实调用；
+- **分析**：LearningAnalyzer 经 `POST /agent/analyze` 产出 Evidence / Proposal /
+  Memory / Verification 候选，后端 `AgentAnalysisWriteService` 在事务里落库；
+- 42 个不依赖数据库与网络的测试；端到端验收见 `scripts/regress-closed-loop.sh`
+  与 `evaluation/`。
 
-**明确没做**（`AgentState.pending_tasks` 里如实标着）：
+**明确没做**：
 
 | 项目                                        | 现状                                     | 计划阶段 |
 | ------------------------------------------- | ---------------------------------------- | -------- |
-| Evidence 抽取                               | 无。后端 `rules-v1` 规则版顶着           | M2/M3    |
-| Understanding 更新、Revision、LearningState | 无，同上                                 | M3       |
-| Memory 写入（`createCandidate`）            | 无调用方                                 | M3       |
-| 语义概念识别                                | 规则版匹配名称                           | M2       |
+| 语义概念识别                                | 规则版匹配名称 + 别名 + 历史回看         | M2       |
 | 向量检索 / RAG                              | 无。`get_knowledge` 走 HTTP 时固定返回空 | M6       |
-| 主动验证（Evidence Gap → Test）             | 无                                       | M5       |
-| 异步分析链路（HTTP 或 RabbitMQ）            | 无                                       | M2/M7    |
+| 主动验证的执行闭环                          | Agent 给出 `ASK_NOW / ASK_LATER / SKIP`，TestTask 由后端创建；作答判分仍是后端启发式 | M5 |
+| 真实模型的记忆收敛                          | Memory 候选已能落库，冲突合并规则在后端  | M3       |
+| 多轮工具调用（Agent Tools）                 | 无。analyze 是一次线性结构化输出         | 后续     |
+| 异步分析队列（RabbitMQ）                    | 无。后端在 SSE 关闭后用线程池同步执行    | M7       |
 
 细节与优先级见 [docs/progress.md](docs/progress.md)。

@@ -91,8 +91,11 @@ class AgentState:
             history=list(request.history),
             session=request.session,
             trace=trace,
-            # 异步学习分析还没有接入 Agent，先如实记下来，避免误以为已经做了闭环
-            pending_tasks=["evidence_extraction", "understanding_update", "memory_consolidation"],
+            # 学习分析是回答结束后独立的一次 POST /agent/analyze，不属于本次 chat run。
+            # 不要把「Evidence 抽取 / Understanding 更新 / Memory 收敛」固定塞成待办：
+            # 那会让每一次 chat 的 summary 都永远显示「未完成」，等于把另一条链路的
+            # 状态错误地写进了这一条。
+            pending_tasks=[],
         )
 
     @property

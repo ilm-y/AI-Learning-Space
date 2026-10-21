@@ -23,9 +23,17 @@ Conversation → Evidence → Understanding(+Revision) / Memory → LearningStat
   回访后端的只读检索接口，把 Understanding / Memory / Session 装进 prompt。
 
 后端就是这条环的**唯一权威实现**。Python Agent Runtime 负责「理解自然语言、判断学得怎么样」，
-它产出的结论必须回到后端走同一条写入链路，不存在第二条改状态的捷径。**当前的闭环只接了
-chat 这一跳**：Agent 只读检索 + 生成回复，还不会写回分析结果（`/agent/analyze` 尚未接），
-所以「从普通聊天里自动抽出用户的理解」这件事仍然是规则版分析器在做，会漏抽 —— 见第十节。
+它产出的结论必须回到后端走同一条写入链路，不存在第二条改状态的捷径。两条 Agent 链路都已接通：
+
+```text
+回答：POST /agent/chat     → 流式回复（Agent 只读检索）
+分析：POST /agent/analyze  → AnalyzeResult（候选）
+        ↓
+      AgentAnalysisWriteService（后端事务：去重 / 合并 / 生命周期 / 投影）
+```
+
+Agent 仍不写库；如果 analyze 不可用或输出不合契约，`TurnAnalysisService` 会**有记录地**
+退回 `rules-v1`，而不是静默当成「这一轮没有学习信号」—— 见第十节。
 
 **后端不做什么**：不做任何掌握度打分。你看不到 `mastery` / `confidence` / `stability` 这类数字 —— 状态是 5 个离散值（`UNKNOWN / EXPOSED / PARTIAL / DEMONSTRATED / MISCONCEPTION`），想知道依据就去翻 Evidence 和 Revision。
 
@@ -276,24 +284,42 @@ CANDIDATE（Agent 推断，待确认） → ACTIVE（生效） → ARCHIVED（�
 
 ## 五、一次分析跑完整条链路
 
-`LearningAnalysisService` 是编排者。顺序本身就是语义，不能调换：
+`TurnAnalysisService` 是编排者，真正的写入在 `AgentAnalysisWriteService`。顺序本身就是语义：
 
 ```text
-1. getOrCreateUnderstanding(user, concept)   不存在则建 UNKNOWN 快照
-2. Evidence                                     append-only + dedupe_key upsert
-3. Understanding Update                         当前快照
-4. INSERT UnderstandingRevision                 历史版本
-5. UPDATE current_revision_id                   指向最新版本
-6. LearningState Projection                     物化投影
+0. 选择分析器
+   agentAnalysisGateway.enabled() ? Agent : rules-v1
+        ↓ Agent
+1. 调 POST /agent/analyze                      拿到候选（不写库）
+2. Evidence Candidate → dedupe_key upsert      append-only
+3. Understanding Proposal → 合并快照           内容真的变化才写 Revision
+4. Memory Candidate → CANDIDATE + 冲突检查     ADD / UPDATE / IGNORE
+5. VerificationDecision → ASK_NOW 才建 TestTask
+6. 有证据但无提案 → markExposed                UNKNOWN → EXPOSED
+        ↓ rules-v1（Agent 不可用 / 输出不合契约）
+LearningAnalysisService.analyzeMessage         按 Concept 名称匹配生成 OBSERVATION
+        ↓ 两条路径共用
+getOrCreateUnderstanding → Evidence 写入时挂 understanding_id
+        ↓
+INSERT Revision（仅内容变化）→ current_revision_id → LearningState 投影
 ```
 
-第 1 步必须在第 2 步之前 —— Evidence 要挂 `understanding_id`，快照得先存在。
-第 2 步命中 `dedupe_key` 时，3~6 步整段跳过（理由见上一节）。
+几个不变量：
 
-整段由一条 `agent_run` 串起来（`run_type = ANALYSIS`），它记录**本次执行**的轨迹
-（`first_seen_run_id` / `last_seen_run_id` 指向它），但**不再是去重依据**。
+- **快照必须先于 Evidence 存在**：Evidence 要挂 `understanding_id`；
+- 证据命中 `dedupe_key` 时，后续整段跳过（理由见上一节）；
+- **Agent 失败是有记录的降级**：`agent_run.error_message` 留下原因，然后退回
+  `rules-v1`。不会出现「分析没跑，但看起来像这一轮没有学习信号」；
+- **Agent 的提案是增量**：合并、误区生命周期、状态派生全部由
+  `UnderstandingService` 决定，Agent 不能直接覆盖快照。
+
+Agent 那条路径由一条 `agent_run`（`run_type = ANALYSIS`）串起来，它记录**本次执行**的
+轨迹（`first_seen_run_id` / `last_seen_run_id` 指向它），但**不再是去重依据**。
 
 ### 证据从哪来
+
+两条分析器都能产出证据，但粒度不同。下表是 `rules-v1` 的确定性映射（也是 Agent
+不可用时的兜底）；Agent 路径由模型判断 `evidenceType / correctness`，枚举在同一份契约里：
 
 | 来源                                | `evidence_type`    | correctness                                     |
 | ----------------------------------- | ------------------ | ----------------------------------------------- |
@@ -309,7 +335,8 @@ CANDIDATE（Agent 推断，待确认） → ACTIVE（生效） → ARCHIVED（�
 「**用户自己标记了「这里有疑问」**」这个动作，而不是「系统观察到他在谈这个概念」。
 两者混成一个取值，以后想统计「用户主动标注的疑点有多少」就分不出来了。
 
-**返回 0 条证据是完全正常的。** 普通闲聊不涉及任何已注册 Concept 时，`analyzeMessage` 返回空列表，不写证据、不动理解。
+**返回 0 条证据是完全正常的。** 普通闲聊不涉及任何已注册 Concept 时返回空列表，
+不写证据、不动理解。Agent 路径同样如此：没有命中 Concept 就没有可以挂证据的对象。
 
 ### 这一轮归属哪个学习活动
 
@@ -383,7 +410,10 @@ knownParts 非空                → PARTIAL
 `ACTIVE` 还是 `PENDING` 属于 Understanding，`learning_state` 表里**没有**冗余这一列 ——
 投影只把结论落到 `review_priority`（9 / 6），attention 的推荐理由回读快照现算。
 
-> 当前的「抽取」是**本地规则版**（按 Concept 名称匹配文本 + 批注类型映射），分析器版本号 `rules-v1`。接入 Python Agent 后由 Agent 的分析结果替换，链路与写入语义不变。
+> 抽取有两条路径：`ails.agent.gateway=http` 时由 Python Agent 的 `POST /agent/analyze`
+> 产出候选（`analyzer_version = agent-v1`），失败再退回本地 `rules-v1`；
+> `stub` 模式直接跑规则版。批注与测试回答仍走规则映射 —— 它们不是「自然语言判断」，
+> 而是用户明确标注了类型，交给模型反而增加不确定性。
 
 ---
 
@@ -679,6 +709,7 @@ bash scripts/regress-closed-loop.sh
 
 它覆盖 Evidence 去重的库级保证、Memory 三档作用域的可见性、Session Resolver 的
 CREATE / ATTACH / NONE 三个分支（从 Agent 日志反查）、以及 SSE 事件序列。
+Agent 日志不在默认的 `/tmp/agent.log` 时，用 `AGENT_LOG=/path/to/agent.log` 覆盖。
 
 ### 编译
 
@@ -690,18 +721,21 @@ CREATE / ATTACH / NONE 三个分支（从 Agent 日志反查）、以及 SSE 事
 ### 测试
 
 ```bash
-./mvnw test                                    # 全部 43 条，不需要 MySQL 之外的任何东西
+./mvnw test                                    # 54 条执行 + 1 条跳过，不需要 MySQL
 ./mvnw test -Dtest=MisconceptionLifecycleTest  # 单跑某个纯函数测试类
 ```
 
-现有测试全是**纯 JUnit 5 + AssertJ，不起 Spring 上下文、不连数据库**：
+现有测试全是**纯 JUnit 5 + AssertJ + Mockito，不起 Spring 上下文、不连数据库**：
 
-| 测试类                          | 覆盖                                                                 |
-| ------------------------------- | -------------------------------------------------------------------- |
-| `MisconceptionLifecycleTest`     | 误区的状态迁移规则                                                   |
-| `SessionResolverTest`            | CREATE / ATTACH / NONE 四类判定，含「7 天内」这条时间规则            |
-| `EvidenceDedupeKeyTest`          | 去重指纹的规则（**不含 `agent_run_id`** 是核心断言）                 |
-| `HttpPythonAgentGatewayTest`     | SSE 事件翻译与失败映射，用 JDK 自带的 `HttpServer` 起假 Agent        |
+| 测试类                                | 覆盖                                                                 |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| `MisconceptionLifecycleTest`           | 误区的状态迁移规则                                                   |
+| `SessionResolverTest`                  | CREATE / ATTACH / NONE 四类判定，含「7 天内」这条时间规则            |
+| `EvidenceDedupeKeyTest`                | 去重指纹的规则（**不含 `agent_run_id`** 是核心断言）                 |
+| `HttpPythonAgentGatewayTest`           | Chat SSE 事件翻译与失败映射，用 JDK 自带的 `HttpServer` 起假 Agent   |
+| `HttpPythonAgentAnalysisGatewayTest`   | Analyze 请求/响应契约、超时与错误映射                                |
+| `TurnAnalysisServiceTest`              | Agent 失败时退回 `rules-v1`、`agent_run` 终态收敛                    |
+| `JwtAuthenticationFilterTest`          | ASYNC 分发仍解析 JWT（防 SSE 流被安全链硬断，见 `evaluation/BC-003`） |
 
 `BackendApplicationTests` 是脚手架自带的 `@SpringBootTest` 上下文加载冒烟测试，
 标了 `@Disabled("需要本地 MySQL 与库表已初始化，CI/无库环境下跳过")`，所以默认的
@@ -717,23 +751,26 @@ Conversation / Chat（SSE）/ Highlight / Understanding / Evidence / Memory / Te
 加上 **Session（学习活动，含 Resolver 自动归属）**，共九个域 —— 包括完整的证据闭环、
 Revision 历史、状态投影与推荐，以及 `Postman → 后端 → Python Agent → LLM` 这一跳。
 
-闭环的验收方式见第九节：`bash scripts/regress-closed-loop.sh`（20 项断言，全绿）。
+- **回答链路**：`ChatService` → `HttpPythonAgentGateway`（`ails.agent.gateway=http`）；
+- **分析链路**：SSE 关闭后 `TurnAnalysisService` → `/agent/analyze` →
+  `AgentAnalysisWriteService`（事务），失败回退 `rules-v1`；
+- **验收**：`scripts/regress-closed-loop.sh`（20 项断言）与 `evaluation/`
+  （39 offline + 9 live，覆盖六类回归与 3 条 Bad Case）。
 
 ### 待接入
 
 | 项目               | 现状                               | 接入方式                                                                              |
 | ------------------ | ---------------------------------- | ------------------------------------------------------------------------------------- |
-| 证据抽取与判分     | 本地规则版 `rules-v1`              | 由 Agent 产出分析结果替换 `LearningAnalysisService` 的抽取逻辑与 `TestService` 的判分 |
-| 出题策略           | 由调用方指定或生成本地简答题       | Evidence Gap + 验证策略应由 Agent 决定                                                |
+| 测试作答判分       | `TestService` 启发式（长度 + 是否点到概念名） | 由 Agent 给出判分与针对性反馈，`TEST_RESULT` 证据契约不变                    |
 | 文档 / 导出 / 导入 / 学习计划 | Controller 返回 501    | 表结构已在位                                                                          |
 | Memory 向量检索    | 关键词 `LIKE`                      | 填 `memory.embedding_ref`，接向量库                                                   |
-| Agent 写 Memory    | `createCandidate` 已就绪但无调用方 | Agent 推断结果走 `createCandidate` 落 `CANDIDATE`                                     |
-| `run_type = MEMORY` | 枚举值已在位但无调用方            | Agent 接管记忆收敛时使用                                                              |
+| `run_type = MEMORY` | 枚举值已在位但无调用方            | 记忆收敛从分析事务中拆出来时使用                                                      |
+| 分析异步化         | SSE 关闭后在线程池里同步调用        | 换成队列消费者，`agent_run` 状态机可直接复用                                          |
 | Session 归属升级   | 文本命中近似（见 session-design.md §六） | 换成「与 Session 内 Evidence 的 Concept 交集」，只改 `SessionResolver` 一个类   |
 
 ### 已知取舍
 
-- **`LearningAnalysisService` 的规则版分析器会漏抽**。匹配不到 Concept 名称就不产生证据 —— 这是刻意的：宁可少抽，也不瞎猜。真正的语义理解是 Agent 的活。
+- **规则版分析器仍会漏抽**。它现在是 Agent 不可用时的兜底：匹配不到 Concept 名称就不产生证据 —— 这是刻意的：宁可少抽，也不瞎猜。真正的语义理解是 Agent 的活。
 - **`TestService` 的简答题判分是启发式**。没有标准答案时看长度和是否点到概念名，这不是语义判断，等 Agent 接管后整段替换。
 - **`learning_state` 的复习间隔与优先级是硬编码的状态映射**，不是调度算法。
 - **误区的解除规则是「两条独立正确证据」，而且不区分反驳的是哪一条误区**。规则版分析器只能给出整条证据的 `correctness`，无法指出它针对的是哪个误区，所以对该 Concept 下所有未解除的误区一视同仁地计一次确认。接入 Agent 后由 Agent 指明目标误区，并把「两次确认」升级成更细的规则 —— 改 `MisconceptionLifecycle` 一个类即可，数据模型与已有历史都不用动。

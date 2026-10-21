@@ -1480,11 +1480,16 @@ Learning State
 ---
 
 > **本节与下一节是设计意图，不是当前实现的契约。** 真正落地的字段清单见
-> `agent/README.md` 第六节与 `backend/.../dto/agent/ChatAgentRequest.java`，
-> 两边字段逐个同名、零映射。差异今天就能看出来：实际路径是 `POST /agent/chat`
-> （不是 `/internal/agent/chat`）、`spaceId` 实际叫 `learningSpaceId`、没有 `messageId`、
+> `agent/README.md` 第六节与 `backend/.../dto/agent/`，
+> 两边字段逐个同名、零映射。差异今天就能看出来：实际路径是 `POST /agent/chat` /
+> `POST /agent/analyze`（不是 `/internal/agent/*`）、`spaceId` 实际叫 `learningSpaceId`、
+> Chat 没有 `messageId`（Analyze 有，用于挂 Evidence 来源）、
 > `context` 不由后端组装（后端只发 `session` + 历史，检索在 Python 侧做）。
-> 第 2 个 API（Analyze）**尚未实现**，当前由后端 `rules-v1` 规则版顶着。
+> Analyze 已实现：请求见后端 `AnalyzeAgentRequest`，响应在 Python 侧是
+> `AnalyzeResult`、后端对应 `AnalyzeAgentResult`
+> （`evidenceCandidates / understandingProposal / memoryCandidates /
+> verificationDecision / analyzerVersion`）；后端在 `AgentAnalysisWriteService`
+> 里完成去重与写入，失败时退回 `rules-v1`。
 
 ## Agent API 1：Chat
 
