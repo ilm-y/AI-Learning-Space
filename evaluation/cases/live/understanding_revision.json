@@ -1,0 +1,93 @@
+{
+  "cases": [
+    {
+      "id": "live-revision-question-exposes-concept",
+      "category": "understanding_revision",
+      "description": "Bad Case BC-001 回归：用户只是提问、Agent 没有形成判断时，状态也必须从 UNKNOWN 推进到 EXPOSED",
+      "setup": {
+        "space": {"name": "操作系统"},
+        "concepts": [
+          {"key": "page_fault", "canonicalName": "page fault", "displayName": "缺页异常", "description": "页面不在物理内存时触发的异常"}
+        ]
+      },
+      "steps": [
+        {
+          "action": "sendMessage",
+          "conversation": "a",
+          "content": "缺页异常是什么？",
+          "expect": {"data.ended": true}
+        },
+        {
+          "action": "waitForUnderstanding",
+          "concept": "page_fault",
+          "until": {"statusIn": ["EXPOSED", "PARTIAL", "DEMONSTRATED", "MISCONCEPTION"]},
+          "expect": {"data.status": "EXPOSED", "timedOut": false}
+        },
+        {
+          "action": "getRevisions",
+          "concept": "page_fault",
+          "expect": {
+            "data.count": {"op": "gte", "value": 1},
+            "data.statuses": {"op": "contains", "value": "EXPOSED"}
+          }
+        }
+      ]
+    },
+    {
+      "id": "live-revision-correction-appends",
+      "category": "understanding_revision",
+      "description": "用户先自述（CORRECT）再自我纠正（INCORRECT）时，Revision 只追加不覆盖，状态推进到 MISCONCEPTION",
+      "setup": {
+        "space": {"name": "操作系统"},
+        "concepts": [
+          {"key": "tlb", "canonicalName": "tlb", "displayName": "TLB", "description": "页表项缓存"},
+          {"key": "page_fault", "canonicalName": "page fault", "displayName": "缺页异常", "description": "页面不在物理内存时触发的异常"}
+        ]
+      },
+      "steps": [
+        {
+          "action": "sendMessage",
+          "conversation": "a",
+          "content": "我理解 TLB 就是页表项的缓存",
+          "expect": {"data.ended": true}
+        },
+        {
+          "action": "highlight",
+          "conversation": "a",
+          "markType": "MY_UNDERSTANDING",
+          "selectedText": "我理解 TLB 就是页表项的缓存",
+          "expect": {"httpStatus": 200}
+        },
+        {
+          "action": "waitForUnderstanding",
+          "concept": "tlb",
+          "until": {"knownPartsNonEmpty": true},
+          "expect": {"data.status": "PARTIAL"}
+        },
+        {
+          "action": "highlight",
+          "conversation": "a",
+          "markType": "MISCONCEPTION_CANDIDATE",
+          "selectedText": "我把 TLB Miss 当成了缺页",
+          "note": "我总觉得 TLB Miss 就是缺页",
+          "expect": {"httpStatus": 200}
+        },
+        {
+          "action": "waitForUnderstanding",
+          "concept": "tlb",
+          "until": {"misconceptionsNonEmpty": true},
+          "expect": {"data.status": "MISCONCEPTION"}
+        },
+        {
+          "action": "getRevisions",
+          "concept": "tlb",
+          "expect": {
+            "data.count": {"op": "gte", "value": 2},
+            "data.hasPartial": true,
+            "data.hasMisconception": true
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "cases": [
+    {
+      "id": "live-verification-no-interrupt-on-first-question",
+      "category": "verification",
+      "description": "首次接触概念且用户在提问时，Agent 只记 ASK_LATER，不创建 TestTask（不打断教学）",
+      "setup": {
+        "space": {"name": "操作系统"},
+        "concepts": [
+          {"key": "page_fault", "canonicalName": "page fault", "displayName": "缺页异常", "description": "页面不在物理内存时触发的异常"}
+        ]
+      },
+      "steps": [
+        {
+          "action": "sendMessage",
+          "conversation": "a",
+          "content": "缺页异常是什么？",
+          "expect": {"data.ended": true}
+        },
+        {
+          "action": "waitForUnderstanding",
+          "concept": "page_fault",
+          "until": {"statusIn": ["EXPOSED", "PARTIAL", "DEMONSTRATED", "MISCONCEPTION"]},
+          "expect": {"data.status": "EXPOSED", "timedOut": false}
+        },
+        {
+          "action": "pendingTests",
+          "expect": {"data.count": 0}
+        }
+      ]
+    }
+  ]
+}

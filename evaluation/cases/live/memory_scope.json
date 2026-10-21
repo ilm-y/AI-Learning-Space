@@ -1,0 +1,107 @@
+{
+  "cases": [
+    {
+      "id": "live-memory-scopes-visible",
+      "category": "memory_scope",
+      "description": "同一空间 + 概念下检索时，GLOBAL / SPACE / CONCEPT 三种作用域都应可见",
+      "setup": {
+        "space": {"name": "操作系统"},
+        "concepts": [
+          {"key": "tlb", "canonicalName": "tlb", "displayName": "TLB", "description": "页表项缓存"}
+        ]
+      },
+      "steps": [
+        {
+          "action": "createMemory",
+          "body": {
+            "memoryType": "PREFERENCE",
+            "content": "用户喜欢从硬件实际执行路径理解操作系统",
+            "importance": 0.9
+          },
+          "expect": {
+            "code": 0,
+            "data.scopeType": "GLOBAL",
+            "data.learningSpaceId": null,
+            "data.conceptId": null
+          }
+        },
+        {
+          "action": "createMemory",
+          "body": {
+            "learningSpaceId": "${space.id}",
+            "memoryType": "LEARNING",
+            "content": "这个空间里已经学过虚拟内存基础"
+          },
+          "expect": {"code": 0, "data.scopeType": "SPACE", "data.learningSpaceId": "${space.id}"}
+        },
+        {
+          "action": "createMemory",
+          "body": {
+            "learningSpaceId": "${space.id}",
+            "conceptId": "${concept.tlb.id}",
+            "memoryType": "LEARNING",
+            "content": "TLB 这条线用户已经能自己讲清楚"
+          },
+          "expect": {"code": 0, "data.scopeType": "CONCEPT", "data.conceptId": "${concept.tlb.id}"}
+        },
+        {
+          "action": "searchMemories",
+          "space": true,
+          "concept": "tlb",
+          "expect": {
+            "data.count": {"op": "gte", "value": 3},
+            "data.hasGlobal": true,
+            "data.hasSpace": true,
+            "data.hasConcept": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "live-memory-scope-isolation",
+      "category": "memory_scope",
+      "description": "带别的 spaceId 检索时只能看到 GLOBAL：SPACE / CONCEPT 记忆不能跨空间泄漏",
+      "setup": {
+        "space": {"name": "操作系统"},
+        "concepts": [
+          {"key": "tlb", "canonicalName": "tlb", "displayName": "TLB", "description": "页表项缓存"}
+        ]
+      },
+      "steps": [
+        {
+          "action": "createMemory",
+          "body": {"memoryType": "USER", "content": "全局可见的用户画像"},
+          "expect": {"code": 0}
+        },
+        {
+          "action": "createMemory",
+          "body": {
+            "learningSpaceId": "${space.id}",
+            "memoryType": "PREFERENCE",
+            "content": "只属于当前空间的偏好"
+          },
+          "expect": {"code": 0}
+        },
+        {
+          "action": "createMemory",
+          "body": {
+            "learningSpaceId": "${space.id}",
+            "conceptId": "${concept.tlb.id}",
+            "memoryType": "LEARNING",
+            "content": "只属于当前知识点的一条记忆"
+          },
+          "expect": {"code": 0}
+        },
+        {
+          "action": "searchMemories",
+          "spaceId": 99999,
+          "expect": {
+            "data.count": 1,
+            "data.scopes": ["GLOBAL"],
+            "data.contents": ["全局可见的用户画像"]
+          }
+        }
+      ]
+    }
+  ]
+}
