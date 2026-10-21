@@ -5,7 +5,6 @@ import com.ails.backend.agent.AgentStreamHandler;
 import com.ails.backend.common.BusinessException;
 import com.ails.backend.dto.agent.ChatAgentRequest;
 import com.ails.backend.entity.AgentRun;
-import com.ails.backend.entity.Concept;
 import com.ails.backend.entity.Conversation;
 import com.ails.backend.entity.LearningSession;
 import com.ails.backend.entity.Message;
@@ -13,6 +12,7 @@ import com.ails.backend.enums.AgentRunStatus;
 import com.ails.backend.enums.AgentRunType;
 import com.ails.backend.enums.ConversationStatus;
 import com.ails.backend.mapper.AgentRunMapper;
+import com.ails.backend.utils.TraceIds;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,12 +22,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -86,14 +83,14 @@ public class ChatService {
     private static final long SSE_TIMEOUT_MS = 5 * 60 * 1000L;
     /** 送给 Agent 的历史消息条数：最近 20 条，控制 prompt 长度 */
     private static final int HISTORY_LIMIT = 20;
-    /** trace id 的随机源，见 {@link #newTraceId()} */
-    private static final SecureRandom TRACE_RANDOM = new SecureRandom();
 
     private final ConversationService conversationService;
     private final MessageService messageService;
     private final AgentGateway agentGateway;
     private final AgentRunMapper agentRunMapper;
     private final LearningAnalysisService learningAnalysisService;
+    /** 回复落库之后的学习分析（Agent 优先，失败退回 rules-v1）；见 {@link TurnAnalysisService}。 */
+    private final TurnAnalysisService turnAnalysisService;
     /** 见 {@link com.ails.backend.config.AsyncConfig}：自定义 TaskExecutor 会让 Spring Boot
      *  的 applicationTaskExecutor 自动退让，因此这里不会有第二个同类型 Bean 造成歧义 */
     private final TaskExecutor chatStreamExecutor;
@@ -246,9 +243,10 @@ public class ChatService {
                     if (!finished.compareAndSet(false, true)) {
                         return;
                     }
+                    Message assistantMessage = null;
                     try {
                         // 把 buffer 里的全文存成一条助手消息 —— 从这一刻起 GET /messages 才能看到 AI 回复
-                        Message assistantMessage = messageService.appendAssistantMessage(
+                        assistantMessage = messageService.appendAssistantMessage(
                                 conversation.getId(), buffer.toString());
                         // 结束事件：messageId 让前端把「刚流式出来的那段字」锚定到消息列表的具体行上
                         send(emitter, "message.end", Map.of(
@@ -271,11 +269,15 @@ public class ChatService {
                         // 无论中间哪步抛异常，都保证 SSE 连接被关闭，容器资源随之释放
                         emitter.complete();
                     }
-                    // 对话闭环的最后一步：静默做学习分析（从用户消息提取 Concept → 产 Evidence）。
-                    // 它只依赖用户消息，与回复是否落库成功无关，所以放在 try/finally 之外照常执行。
-                    // 顺序上也刻意排在 emitter.complete() 之后：这一步要写 Evidence / Understanding /
+                    // 对话闭环的最后一步：静默做学习分析。
+                    // 助手回复用 buffer 的全文而不是回读数据库 —— 即使落库失败（assistantMessage 为 null），
+                    // Agent 仍能结合它判断这一轮是否产生了学习信号；此时历史里也不会有它，
+                    // 因为那条消息根本没有落库。
+                    // 顺序上刻意排在 emitter.complete() 之后：这一步要写 Evidence / Understanding /
                     // Revision / State，慢且与前端的即时体验无关，不该让 SSE 连接多挂一秒。
-                    analyzeQuietly(userMessage, opening.matched());
+                    analyzeQuietly(conversation, userMessage, buffer.toString(),
+                            assistantMessage == null ? null : assistantMessage.getId(),
+                            authToken, opening);
                 }
 
                 @Override
@@ -313,14 +315,20 @@ public class ChatService {
     }
 
     /**
-     * 让学习闭环跟上：这次用户消息里提到的 Concept 会产生 Evidence（进而推动 Understanding 演进）。
+     * 让学习闭环跟上：这一轮对话会产生 Evidence（进而推动 Understanding 演进）。
      * <p>
      * 分析失败绝不能影响已经推完的对话 —— 用户已经拿到回复了，回滚没有意义，
      * 所以这里吞掉异常，只留 error 日志供排查。
+     * <p>
+     * 具体走 Agent 还是本地规则版由 {@link TurnAnalysisService} 决定；本方法只负责
+     * 「无论如何都别把异常抛回 SSE 线程」。
      */
-    private void analyzeQuietly(Message userMessage, List<Concept> matched) {
+    private void analyzeQuietly(Conversation conversation, Message userMessage,
+                                String assistantContent, Long assistantMessageId,
+                                String authToken, LearningAnalysisService.TurnOpening opening) {
         try {
-            learningAnalysisService.analyzeMessage(userMessage, matched);
+            turnAnalysisService.analyzeTurn(conversation, userMessage, assistantContent,
+                    assistantMessageId, authToken, opening);
         } catch (Exception e) {
             log.error("analyze message failed, messageId={}", userMessage.getId(), e);
         }
@@ -352,7 +360,7 @@ public class ChatService {
         run.setRunType(AgentRunType.CHAT);
         run.setStatus(AgentRunStatus.RUNNING);
         run.setInputSummary(truncate(content, 255));
-        run.setTraceId(newTraceId());
+        run.setTraceId(TraceIds.newId());
         agentRunMapper.insert(run);
         return run;
     }
@@ -360,19 +368,6 @@ public class ChatService {
     /** 本轮归属的 Session id；{@link LearningAnalysisService.TurnOpening#session()} 可能为 null。 */
     private static Long sessionId(LearningAnalysisService.TurnOpening opening) {
         return opening.session() == null ? null : opening.session().getId();
-    }
-
-    /**
-     * 生成 trace id：16 字节随机数的 32 位十六进制（匹配 {@code agent_run.trace_id CHAR(32)}）。
-     * <p>
-     * 用 {@link SecureRandom} 而不是 {@code ThreadLocalRandom}：这个值会出现在日志里，
-     * 可预测的 trace id 让「构造一个 id 去翻别人的执行记录」变得容易。
-     * 它不参与任何业务判断，纯粹是关联键，所以不需要全局唯一约束。
-     */
-    private static String newTraceId() {
-        byte[] bytes = new byte[16];
-        TRACE_RANDOM.nextBytes(bytes);
-        return HexFormat.of().formatHex(bytes);
     }
 
     /**

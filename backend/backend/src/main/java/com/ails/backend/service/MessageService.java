@@ -18,6 +18,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -76,6 +77,25 @@ public class MessageService {
     }
 
     /**
+     * 落一条嵌在对话里的题卡消息（{@code message_type = TEST}）。
+     * <p>
+     * content 是结构化 JSON（testId / conceptId / questionText…），由
+     * {@link VerificationService} 生成。之所以仍然走 {@link #append}：
+     * 它需要和普通消息共享同一套序号分配与 conversation.last_message_at 维护，
+     * 否则前端按 sequence_no 排序时会看到一张「插队」的题卡。
+     * <p>
+     * 不校验对话归属 —— 调用方（分析链路）已经确认过这条对话属于该用户。
+     */
+    @Transactional
+    public Message appendTestEvent(Long conversationId, String content) {
+        Conversation conversation = conversationMapper.selectById(conversationId);
+        if (conversation == null) {
+            throw BusinessException.notFound("对话不存在");
+        }
+        return append(conversation, MessageRole.ASSISTANT, MessageType.TEST, content);
+    }
+
+    /**
      * 组装送给 Agent 的历史消息，按时间正序返回，最多 limit 条。
      * <p>
      * <b>必须传 excludeMessageId 把本轮提问排掉。</b>本轮用户消息在 {@link ChatService}
@@ -88,18 +108,35 @@ public class MessageService {
      * <p>
      * 排除写进 SQL 而不是查回来在内存里滤：LIMIT 作用于过滤<b>之后</b>，
      * 这样 limit=20 拿到的是 20 条真实历史，而不是 19 条历史 + 1 条重复。
+     * <p>
+     * <b>只取 TEXT。</b> TEST 消息的内容是给前端渲染的题卡 JSON，EVENT 是状态事件；
+     * 把它们当自然语言塞进 prompt，模型会看到一段没人说过的 JSON。
      *
      * @param excludeMessageId 本轮用户消息 id，可为 null（纯回放场景）
      */
     @Transactional(readOnly = true)
     public List<ChatHistoryMessage> history(Long conversationId, Long excludeMessageId, int limit) {
+        return history(conversationId,
+                excludeMessageId == null ? List.of() : List.of(excludeMessageId), limit);
+    }
+
+    /**
+     * 同时排除多条消息的历史。
+     * <p>
+     * 学习分析发生在助手回复<b>落库之后</b>，本轮的用户消息与助手消息都已经在表里，
+     * 而两者都通过 {@code AnalyzeAgentRequest} 的独立字段传给了 Agent。历史里再出现一次，
+     * 就是在 prompt 里把同一轮对话说了两遍。
+     */
+    @Transactional(readOnly = true)
+    public List<ChatHistoryMessage> history(Long conversationId, Collection<Long> excludeMessageIds, int limit) {
         LambdaQueryWrapper<Message> query = new LambdaQueryWrapper<Message>()
                 .eq(Message::getConversationId, conversationId)
+                .eq(Message::getMessageType, MessageType.TEXT)
                 .orderByDesc(Message::getSequenceNo)
                 .orderByDesc(Message::getId)
                 .last("LIMIT " + Math.max(1, limit));
-        if (excludeMessageId != null) {
-            query.ne(Message::getId, excludeMessageId);
+        if (excludeMessageIds != null && !excludeMessageIds.isEmpty()) {
+            query.notIn(Message::getId, excludeMessageIds);
         }
         List<Message> chronological = new ArrayList<>(messageMapper.selectList(query));
         // 上面按序号倒序取的「最近 limit 条」，翻正成时间正序 —— Agent 侧约定最后一个元素是最新一条

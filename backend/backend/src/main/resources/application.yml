@@ -56,6 +56,10 @@ ails:
     # 必须严格小于 ChatService 的 SSE_TIMEOUT_MS（5 分钟），否则前端先看到超时断流，
     # 而网关还在傻等 —— 那样失败原因会指向错误的一方。
     read-timeout-ms: ${AILS_AGENT_READ_TIMEOUT_MS:240000}
+    # 学习分析（POST /agent/analyze）的超时。分析发生在回复之后，但仍占着
+    # chatStreamExecutor 的一条线程，所以不能沿用对话的 240 秒。
+    # 超时后后端退回 rules-v1，用户无感知；痕迹留在 agent_run.error_message。
+    analyze-timeout-ms: ${AILS_AGENT_ANALYZE_TIMEOUT_MS:90000}
 
 logging:
   level:
