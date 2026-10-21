@@ -1,0 +1,83 @@
+{
+  "cases": [
+    {
+      "id": "live-cross-session-attaches",
+      "category": "cross_session",
+      "description": "对话 A 里写下的自述，会进入对话 B 的 Agent 上下文（跨会话理解检索）",
+      "setup": {
+        "space": {"name": "操作系统"},
+        "concepts": [
+          {"key": "tlb", "canonicalName": "tlb", "displayName": "TLB", "description": "页表项缓存"},
+          {"key": "page_table", "canonicalName": "page table", "displayName": "Page Table", "description": "页表"}
+        ]
+      },
+      "steps": [
+        {
+          "action": "sendMessage",
+          "conversation": "a",
+          "content": "我理解 TLB 就是 Page Table 的缓存",
+          "expect": {"data.started": true, "data.ended": true, "data.sessionId": {"op": "truthy"}}
+        },
+        {
+          "action": "highlight",
+          "conversation": "a",
+          "markType": "MY_UNDERSTANDING",
+          "selectedText": "我理解 TLB 就是 Page Table 的缓存",
+          "note": "自己琢磨出来的",
+          "expect": {"httpStatus": 200, "data.markType": "MY_UNDERSTANDING"}
+        },
+        {
+          "action": "waitForUnderstanding",
+          "concept": "tlb",
+          "until": {"knownPartsNonEmpty": true},
+          "expect": {
+            "data.status": "PARTIAL",
+            "data.latestUserExplanation": {"op": "contains", "value": "我理解 TLB"}
+          }
+        },
+        {
+          "action": "getRevisions",
+          "concept": "tlb",
+          "expect": {
+            "data.count": {"op": "gte", "value": 1},
+            "data.statuses": {"op": "contains", "value": "PARTIAL"}
+          }
+        },
+        {
+          "action": "contextPreview",
+          "conversation": "b",
+          "content": "那 TLB Miss 之后呢？",
+          "expect": {
+            "data.hasUnderstanding": true,
+            "data.systemInstruction": {"op": "contains", "value": "我理解 TLB"}
+          }
+        }
+      ]
+    },
+    {
+      "id": "live-cross-session-session-attach",
+      "category": "cross_session",
+      "description": "同一个学习活动下的第二个对话应 ATTACH 到已有 Session，而不是新建一个",
+      "setup": {
+        "space": {"name": "操作系统"},
+        "concepts": [
+          {"key": "tlb", "canonicalName": "tlb", "displayName": "TLB", "description": "页表项缓存"}
+        ]
+      },
+      "steps": [
+        {
+          "action": "sendMessage",
+          "conversation": "a",
+          "content": "我理解 TLB 就是页表项的缓存",
+          "expect": {"data.sessionId": {"op": "truthy"}}
+        },
+        {
+          "action": "sendMessage",
+          "conversation": "b",
+          "content": "那 TLB Miss 之后呢？",
+          "expect": {"data.sessionId": {"op": "eq", "value": "${conversation.a.sessionId}"}}
+        }
+      ]
+    }
+  ]
+}

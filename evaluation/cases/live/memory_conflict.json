@@ -1,0 +1,94 @@
+{
+  "cases": [
+    {
+      "id": "live-memory-identity-conflict",
+      "category": "memory_conflict",
+      "description": "同作用域同身份（缺省 key = content 哈希）重复创建返回 409；显式给不同 key 才能并存",
+      "setup": {
+        "space": {"name": "操作系统"},
+        "concepts": []
+      },
+      "steps": [
+        {
+          "action": "createMemory",
+          "body": {"memoryType": "PREFERENCE", "content": "用户喜欢从硬件实际执行路径理解操作系统"},
+          "expect": {"code": 0, "data.scopeType": "GLOBAL"}
+        },
+        {
+          "action": "createMemory",
+          "body": {"memoryType": "PREFERENCE", "content": "用户喜欢从硬件实际执行路径理解操作系统"},
+          "expect": {"code": 409, "data": null}
+        },
+        {
+          "action": "createMemory",
+          "body": {
+            "memoryType": "PREFERENCE",
+            "memoryKey": "eval-explicit-1",
+            "content": "用户喜欢从硬件实际执行路径理解操作系统"
+          },
+          "expect": {"code": 0, "data.memoryKey": "eval-explicit-1"}
+        },
+        {
+          "action": "createMemory",
+          "body": {
+            "memoryType": "PREFERENCE",
+            "memoryKey": "eval-explicit-2",
+            "content": "用户喜欢从硬件实际执行路径理解操作系统"
+          },
+          "expect": {"code": 0, "data.memoryKey": "eval-explicit-2"}
+        },
+        {
+          "action": "searchMemories",
+          "spaceId": 99999,
+          "expect": {
+            "data.count": {"op": "gte", "value": 3},
+            "data.keys": {"op": "contains", "value": "eval-explicit-1"}
+          }
+        }
+      ]
+    },
+    {
+      "id": "live-memory-global-visible-everywhere",
+      "category": "memory_conflict",
+      "description": "GLOBAL 记忆对任意空间可见，且不会被空间的同名 scope_key 覆盖",
+      "setup": {
+        "space": {"name": "操作系统"},
+        "concepts": []
+      },
+      "steps": [
+        {
+          "action": "createMemory",
+          "body": {"memoryType": "USER", "content": "用户是计算机专业学生"},
+          "expect": {"code": 0, "data.scopeType": "GLOBAL"}
+        },
+        {
+          "action": "createMemory",
+          "body": {
+            "learningSpaceId": "${space.id}",
+            "memoryType": "PREFERENCE",
+            "content": "当前空间的偏好"
+          },
+          "expect": {"code": 0, "data.scopeType": "SPACE"}
+        },
+        {
+          "action": "searchMemories",
+          "spaceId": "${space.id}",
+          "expect": {
+            "data.count": 2,
+            "data.hasGlobal": true,
+            "data.hasSpace": true
+          }
+        },
+        {
+          "action": "searchMemories",
+          "spaceId": 99999,
+          "expect": {
+            "data.count": 1,
+            "data.hasGlobal": true,
+            "data.hasSpace": false
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,5561 @@
+{
+  "generatedAt": "2026-10-21T20:51:16+08:00",
+  "commit": "45d7cf6",
+  "mode": "all",
+  "environment": {
+    "backend": "http://127.0.0.1:8080",
+    "agent": "http://127.0.0.1:8000"
+  },
+  "summary": {
+    "total": 48,
+    "passed": 48,
+    "failed": 0,
+    "skipped": 0,
+    "passRate": 1.0,
+    "assertionCount": 193,
+    "assertionPassed": 193,
+    "assertionPassRate": 1.0,
+    "byCategory": {
+      "cross_session": {
+        "label": "跨会话上下文",
+        "total": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "passRate": 1.0,
+        "assertionPassRate": 1.0
+      },
+      "evidence_dedup": {
+        "label": "证据去重",
+        "total": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "passRate": 1.0,
+        "assertionPassRate": 1.0
+      },
+      "memory_scope": {
+        "label": "记忆作用域",
+        "total": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "passRate": 1.0,
+        "assertionPassRate": 1.0
+      },
+      "understanding_revision": {
+        "label": "理解演进",
+        "total": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "passRate": 1.0,
+        "assertionPassRate": 1.0
+      },
+      "memory_conflict": {
+        "label": "记忆冲突收敛",
+        "total": 7,
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0,
+        "passRate": 1.0,
+        "assertionPassRate": 1.0
+      },
+      "verification": {
+        "label": "验证策略",
+        "total": 7,
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0,
+        "passRate": 1.0,
+        "assertionPassRate": 1.0
+      },
+      "analysis_contract": {
+        "label": "分析输出契约",
+        "total": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+        "passRate": 1.0,
+        "assertionPassRate": 1.0
+      }
+    },
+    "byMode": {
+      "offline": {
+        "total": 39,
+        "passed": 39,
+        "failed": 0,
+        "skipped": 0,
+        "passRate": 1.0
+      },
+      "live": {
+        "total": 9,
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "passRate": 1.0
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "contract-fenced-json",
+      "category": "analysis_contract",
+      "mode": "offline",
+      "status": "passed",
+      "description": "模型把 JSON 包在 ```json 围栏里时，仍能取出对象并解析",
+      "durationMs": 5,
+      "checks": [
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.types",
+          "op": "eq",
+          "expected": [
+            "USER_EXPLANATION"
+          ],
+          "actual": [
+            "USER_EXPLANATION"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.conceptIds",
+          "op": "eq",
+          "expected": [
+            10
+          ],
+          "actual": [
+            10
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "analyzerVersion",
+          "op": "eq",
+          "expected": "agent-v1",
+          "actual": "agent-v1",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "detectedConcepts",
+          "op": "contains",
+          "expected": "TLB（快表）",
+          "actual": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 1,
+            "conceptIds": [
+              10
+            ],
+            "types": [
+              "USER_EXPLANATION"
+            ],
+            "correctness": [
+              "PARTIAL"
+            ],
+            "observations": [
+              "用户认为 TLB 是页表项缓存"
+            ],
+            "needFollowUp": [
+              false
+            ],
+            "reasoningQuality": [
+              null
+            ],
+            "specificity": [
+              null
+            ],
+            "aiConfidence": [
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "contract-malformed-json",
+      "category": "analysis_contract",
+      "mode": "offline",
+      "status": "passed",
+      "description": "模型输出里没有 JSON 对象时，抛 AnalysisError，而不是静默返回空结果",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "error",
+          "op": "raises",
+          "expected": "AnalysisError(找不到 JSON)",
+          "actual": "AnalysisError: 模型输出里找不到 JSON 对象",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {}
+    },
+    {
+      "id": "contract-invalid-enum",
+      "category": "analysis_contract",
+      "mode": "offline",
+      "status": "passed",
+      "description": "未知的 evidenceType 属于契约违约：整份结果作废，不能把半份写进库",
+      "durationMs": 4,
+      "checks": [
+        {
+          "path": "error",
+          "op": "raises",
+          "expected": "AnalysisError(不符合契约)",
+          "actual": "AnalysisError: 分析结果不符合契约：1 validation error for AnalyzeResult evidenceCandidates.0.evidenceType   Input should be 'USER_EXPLANATION', 'OBSERVATION', 'TEST_RESUL…",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {}
+    },
+    {
+      "id": "contract-empty-input",
+      "category": "analysis_contract",
+      "mode": "offline",
+      "status": "passed",
+      "description": "空白消息直接返回空结果，不检索、不调用模型",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.present",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.action",
+          "op": "eq",
+          "expected": "SKIP",
+          "actual": "SKIP",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "detectedConcepts",
+          "op": "eq",
+          "expected": [],
+          "actual": [],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "analyzerVersion",
+          "op": "eq",
+          "expected": "agent-v1",
+          "actual": "agent-v1",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "contract-no-concept",
+      "category": "analysis_contract",
+      "mode": "offline",
+      "status": "passed",
+      "description": "闲聊不命中任何 Concept 时返回空结果（没有可挂证据的对象）",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "detectedConcepts",
+          "op": "eq",
+          "expected": [],
+          "actual": [],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.action",
+          "op": "eq",
+          "expected": "SKIP",
+          "actual": "SKIP",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "contract-unknown-field-and-clamp",
+      "category": "analysis_contract",
+      "mode": "offline",
+      "status": "passed",
+      "description": "未知字段被忽略；越界质量分被裁剪到 [0,1]；analyzerVersion 由分析器决定而不是模型决定",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.reasoningQuality",
+          "op": "eq",
+          "expected": [
+            1.0
+          ],
+          "actual": [
+            1.0
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.specificity",
+          "op": "eq",
+          "expected": [
+            0.0
+          ],
+          "actual": [
+            0.0
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.aiConfidence",
+          "op": "eq",
+          "expected": [
+            0.5
+          ],
+          "actual": [
+            0.5
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "analyzerVersion",
+          "op": "eq",
+          "expected": "agent-v1",
+          "actual": "agent-v1",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 1,
+            "conceptIds": [
+              10
+            ],
+            "types": [
+              "OBSERVATION"
+            ],
+            "correctness": [
+              "UNKNOWN"
+            ],
+            "observations": [
+              "用户能说出 TLB 是页表项缓存"
+            ],
+            "needFollowUp": [
+              false
+            ],
+            "reasoningQuality": [
+              1.0
+            ],
+            "specificity": [
+              0.0
+            ],
+            "aiConfidence": [
+              0.5
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "cross-session-history-user-hit",
+      "category": "cross_session",
+      "mode": "offline",
+      "status": "passed",
+      "description": "本轮消息不含概念名时，从最近的用户历史里找回 TLB（跨轮上下文）",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "detectedConcepts",
+          "op": "eq",
+          "expected": [
+            "TLB（快表）"
+          ],
+          "actual": [
+            "TLB（快表）"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.conceptIds",
+          "op": "eq",
+          "expected": [
+            10
+          ],
+          "actual": [
+            10
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.types",
+          "op": "eq",
+          "expected": [
+            "OBSERVATION"
+          ],
+          "actual": [
+            "OBSERVATION"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.needFollowUp",
+          "op": "eq",
+          "expected": [
+            true
+          ],
+          "actual": [
+            true
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.action",
+          "op": "eq",
+          "expected": "SKIP",
+          "actual": "SKIP",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 1,
+            "conceptIds": [
+              10
+            ],
+            "types": [
+              "OBSERVATION"
+            ],
+            "correctness": [
+              "UNKNOWN"
+            ],
+            "observations": [
+              "那它之后会发生什么？"
+            ],
+            "needFollowUp": [
+              true
+            ],
+            "reasoningQuality": [
+              null
+            ],
+            "specificity": [
+              null
+            ],
+            "aiConfidence": [
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "cross-session-prefers-user-over-assistant",
+      "category": "cross_session",
+      "mode": "offline",
+      "status": "passed",
+      "description": "用户与 AI 的历史都提到概念时，优先采信用户自己说的（避免被 AI 的措辞带偏）",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "detectedConcepts",
+          "op": "eq",
+          "expected": [
+            "缺页异常"
+          ],
+          "actual": [
+            "缺页异常"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.conceptIds",
+          "op": "eq",
+          "expected": [
+            12
+          ],
+          "actual": [
+            12
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "缺页异常"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 1,
+            "conceptIds": [
+              12
+            ],
+            "types": [
+              "OBSERVATION"
+            ],
+            "correctness": [
+              "UNKNOWN"
+            ],
+            "observations": [
+              "那接下来呢？"
+            ],
+            "needFollowUp": [
+              true
+            ],
+            "reasoningQuality": [
+              null
+            ],
+            "specificity": [
+              null
+            ],
+            "aiConfidence": [
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "ASK_LATER",
+            "trigger": "NEW_CONCEPT",
+            "conceptId": 12,
+            "questionType": "SHORT_ANSWER",
+            "questionText": "请用自己的话解释一下「缺页异常」。",
+            "reason": "首次接触该概念，先完成讲解，稍后再验证"
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "cross-session-lookback-window",
+      "category": "cross_session",
+      "mode": "offline",
+      "status": "passed",
+      "description": "回看窗口只有最近 4 条：更早提到的概念不再影响本轮识别",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "detectedConcepts",
+          "op": "eq",
+          "expected": [],
+          "actual": [],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.action",
+          "op": "eq",
+          "expected": "SKIP",
+          "actual": "SKIP",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "cross-session-assistant-fallback",
+      "category": "cross_session",
+      "mode": "offline",
+      "status": "passed",
+      "description": "用户历史没有线索时才回看 AI 历史：虚拟内存仍能被识别",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "detectedConcepts",
+          "op": "eq",
+          "expected": [
+            "虚拟内存"
+          ],
+          "actual": [
+            "虚拟内存"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.conceptIds",
+          "op": "eq",
+          "expected": [
+            13
+          ],
+          "actual": [
+            13
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.action",
+          "op": "eq",
+          "expected": "SKIP",
+          "actual": "SKIP",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "虚拟内存"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 1,
+            "conceptIds": [
+              13
+            ],
+            "types": [
+              "OBSERVATION"
+            ],
+            "correctness": [
+              "UNKNOWN"
+            ],
+            "observations": [
+              "那它呢？"
+            ],
+            "needFollowUp": [
+              true
+            ],
+            "reasoningQuality": [
+              null
+            ],
+            "specificity": [
+              null
+            ],
+            "aiConfidence": [
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "dedup-identical-candidates",
+      "category": "evidence_dedup",
+      "mode": "offline",
+      "status": "passed",
+      "description": "同一结果里的重复候选（概念+类型+观察都相同）只保留一条",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.types",
+          "op": "eq",
+          "expected": [
+            "USER_EXPLANATION"
+          ],
+          "actual": [
+            "USER_EXPLANATION"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 1,
+            "conceptIds": [
+              10
+            ],
+            "types": [
+              "USER_EXPLANATION"
+            ],
+            "correctness": [
+              "PARTIAL"
+            ],
+            "observations": [
+              "用户认为 TLB 是页表项缓存"
+            ],
+            "needFollowUp": [
+              false
+            ],
+            "reasoningQuality": [
+              null
+            ],
+            "specificity": [
+              null
+            ],
+            "aiConfidence": [
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "dedup-same-text-different-type",
+      "category": "evidence_dedup",
+      "mode": "offline",
+      "status": "passed",
+      "description": "文本相同但证据类型不同，是两条不同的观察，不能合并",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 2,
+          "actual": 2,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.types",
+          "op": "eq",
+          "expected": [
+            "OBSERVATION",
+            "USER_EXPLANATION"
+          ],
+          "actual": [
+            "OBSERVATION",
+            "USER_EXPLANATION"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 2,
+            "conceptIds": [
+              10,
+              10
+            ],
+            "types": [
+              "OBSERVATION",
+              "USER_EXPLANATION"
+            ],
+            "correctness": [
+              "UNKNOWN",
+              "UNKNOWN"
+            ],
+            "observations": [
+              "TLB 是页表项缓存",
+              "TLB 是页表项缓存"
+            ],
+            "needFollowUp": [
+              false,
+              false
+            ],
+            "reasoningQuality": [
+              null,
+              null
+            ],
+            "specificity": [
+              null,
+              null
+            ],
+            "aiConfidence": [
+              null,
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "dedup-per-concept-cap",
+      "category": "evidence_dedup",
+      "mode": "offline",
+      "status": "passed",
+      "description": "单个概念最多保留 2 条证据，防止一次分析把状态刷屏",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 2,
+          "actual": 2,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.observations",
+          "op": "eq",
+          "expected": [
+            "观察一",
+            "观察二"
+          ],
+          "actual": [
+            "观察一",
+            "观察二"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 2,
+            "conceptIds": [
+              10,
+              10
+            ],
+            "types": [
+              "OBSERVATION",
+              "OBSERVATION"
+            ],
+            "correctness": [
+              "UNKNOWN",
+              "UNKNOWN"
+            ],
+            "observations": [
+              "观察一",
+              "观察二"
+            ],
+            "needFollowUp": [
+              false,
+              false
+            ],
+            "reasoningQuality": [
+              null,
+              null
+            ],
+            "specificity": [
+              null,
+              null
+            ],
+            "aiConfidence": [
+              null,
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "dedup-total-cap",
+      "category": "evidence_dedup",
+      "mode": "offline",
+      "status": "passed",
+      "description": "整份结果最多 6 条证据：三个概念各 3 条，最后只留下 6 条",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 6,
+          "actual": 6,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.conceptIds",
+          "op": "eq",
+          "expected": [
+            10,
+            10,
+            11,
+            11,
+            12,
+            12
+          ],
+          "actual": [
+            10,
+            10,
+            11,
+            11,
+            12,
+            12
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.observations",
+          "op": "eq",
+          "expected": [
+            "TLB-1",
+            "TLB-2",
+            "PT-1",
+            "PT-2",
+            "PF-1",
+            "PF-2"
+          ],
+          "actual": [
+            "TLB-1",
+            "TLB-2",
+            "PT-1",
+            "PT-2",
+            "PF-1",
+            "PF-2"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表",
+            "缺页异常"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 6,
+            "conceptIds": [
+              10,
+              10,
+              11,
+              11,
+              12,
+              12
+            ],
+            "types": [
+              "OBSERVATION",
+              "OBSERVATION",
+              "OBSERVATION",
+              "OBSERVATION",
+              "OBSERVATION",
+              "OBSERVATION"
+            ],
+            "correctness": [
+              "UNKNOWN",
+              "UNKNOWN",
+              "UNKNOWN",
+              "UNKNOWN",
+              "UNKNOWN",
+              "UNKNOWN"
+            ],
+            "observations": [
+              "TLB-1",
+              "TLB-2",
+              "PT-1",
+              "PT-2",
+              "PF-1",
+              "PF-2"
+            ],
+            "needFollowUp": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "reasoningQuality": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            "specificity": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            "aiConfidence": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "dedup-invalid-concept-dropped",
+      "category": "evidence_dedup",
+      "mode": "offline",
+      "status": "passed",
+      "description": "模型编造的 conceptId 一律丢弃；同一结果里合法的候选仍然保留",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.conceptIds",
+          "op": "eq",
+          "expected": [
+            10
+          ],
+          "actual": [
+            10
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.observations",
+          "op": "eq",
+          "expected": [
+            "合法的观察"
+          ],
+          "actual": [
+            "合法的观察"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 1,
+            "conceptIds": [
+              10
+            ],
+            "types": [
+              "OBSERVATION"
+            ],
+            "correctness": [
+              "UNKNOWN"
+            ],
+            "observations": [
+              "合法的观察"
+            ],
+            "needFollowUp": [
+              false
+            ],
+            "reasoningQuality": [
+              null
+            ],
+            "specificity": [
+              null
+            ],
+            "aiConfidence": [
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "dedup-blank-observation-dropped",
+      "category": "evidence_dedup",
+      "mode": "offline",
+      "status": "passed",
+      "description": "空白观察不构成证据，不能占用去重名额",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "evidence.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "evidence.observations",
+          "op": "eq",
+          "expected": [
+            "有内容的观察"
+          ],
+          "actual": [
+            "有内容的观察"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 1,
+            "conceptIds": [
+              10
+            ],
+            "types": [
+              "OBSERVATION"
+            ],
+            "correctness": [
+              "UNKNOWN"
+            ],
+            "observations": [
+              "有内容的观察"
+            ],
+            "needFollowUp": [
+              false
+            ],
+            "reasoningQuality": [
+              null
+            ],
+            "specificity": [
+              null
+            ],
+            "aiConfidence": [
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "memory-action-add-preserved",
+      "category": "memory_conflict",
+      "mode": "offline",
+      "status": "passed",
+      "description": "ADD 语义原样保留，由后端判断同身份记忆是否已存在",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.actions",
+          "op": "eq",
+          "expected": [
+            "ADD"
+          ],
+          "actual": [
+            "ADD"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.keys",
+          "op": "eq",
+          "expected": [
+            "pref/hardware-first"
+          ],
+          "actual": [
+            "pref/hardware-first"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 1,
+            "scopes": [
+              "GLOBAL"
+            ],
+            "conceptIds": [
+              null
+            ],
+            "spaceIds": [
+              null
+            ],
+            "types": [
+              "PREFERENCE"
+            ],
+            "keys": [
+              "pref/hardware-first"
+            ],
+            "contents": [
+              "用户喜欢先看硬件执行路径"
+            ],
+            "actions": [
+              "ADD"
+            ],
+            "importance": [
+              null
+            ]
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "memory-action-update-preserved",
+      "category": "memory_conflict",
+      "mode": "offline",
+      "status": "passed",
+      "description": "UPDATE 语义原样保留；后端只会更新仍是 CANDIDATE 的那条",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.actions",
+          "op": "eq",
+          "expected": [
+            "UPDATE"
+          ],
+          "actual": [
+            "UPDATE"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 1,
+            "scopes": [
+              "GLOBAL"
+            ],
+            "conceptIds": [
+              null
+            ],
+            "spaceIds": [
+              null
+            ],
+            "types": [
+              "PREFERENCE"
+            ],
+            "keys": [
+              "pref/hardware-first"
+            ],
+            "contents": [
+              "用户更强调从 MMU 视角理解"
+            ],
+            "actions": [
+              "UPDATE"
+            ],
+            "importance": [
+              null
+            ]
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "memory-action-ignore-preserved",
+      "category": "memory_conflict",
+      "mode": "offline",
+      "status": "passed",
+      "description": "IGNORE 也保留在结果里 —— 让后端日志能看出「模型想过但不写」，而不是凭空消失",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.actions",
+          "op": "eq",
+          "expected": [
+            "IGNORE"
+          ],
+          "actual": [
+            "IGNORE"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 1,
+            "scopes": [
+              "GLOBAL"
+            ],
+            "conceptIds": [
+              null
+            ],
+            "spaceIds": [
+              null
+            ],
+            "types": [
+              "LEARNING"
+            ],
+            "keys": [
+              null
+            ],
+            "contents": [
+              "用户好像有点累"
+            ],
+            "actions": [
+              "IGNORE"
+            ],
+            "importance": [
+              null
+            ]
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "memory-conflict-blank-content-dropped",
+      "category": "memory_conflict",
+      "mode": "offline",
+      "status": "passed",
+      "description": "空白内容不是一条可写的记忆，不能进入后端 Reconcile",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.contents",
+          "op": "eq",
+          "expected": [
+            "有效内容"
+          ],
+          "actual": [
+            "有效内容"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 1,
+            "scopes": [
+              "GLOBAL"
+            ],
+            "conceptIds": [
+              null
+            ],
+            "spaceIds": [
+              null
+            ],
+            "types": [
+              "LEARNING"
+            ],
+            "keys": [
+              null
+            ],
+            "contents": [
+              "有效内容"
+            ],
+            "actions": [
+              "ADD"
+            ],
+            "importance": [
+              null
+            ]
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "memory-conflict-importance-clamped",
+      "category": "memory_conflict",
+      "mode": "offline",
+      "status": "passed",
+      "description": "importance 越界被裁剪到 [0,1]，避免影响后端排序与阈值判断",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 2,
+          "actual": 2,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.importance",
+          "op": "eq",
+          "expected": [
+            1.0,
+            0.0
+          ],
+          "actual": [
+            1.0,
+            0.0
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 2,
+            "scopes": [
+              "GLOBAL",
+              "GLOBAL"
+            ],
+            "conceptIds": [
+              null,
+              null
+            ],
+            "spaceIds": [
+              null,
+              null
+            ],
+            "types": [
+              "LEARNING",
+              "LEARNING"
+            ],
+            "keys": [
+              null,
+              null
+            ],
+            "contents": [
+              "很重要的一条",
+              "不重要的一条"
+            ],
+            "actions": [
+              "ADD",
+              "ADD"
+            ],
+            "importance": [
+              1.0,
+              0.0
+            ]
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "memory-scope-global-clears-ids",
+      "category": "memory_scope",
+      "mode": "offline",
+      "status": "passed",
+      "description": "GLOBAL 记忆必须清空 spaceId / conceptId，否则 scope_key 会出现两种真相",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.scopes",
+          "op": "eq",
+          "expected": [
+            "GLOBAL"
+          ],
+          "actual": [
+            "GLOBAL"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.spaceIds",
+          "op": "eq",
+          "expected": [
+            null
+          ],
+          "actual": [
+            null
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.conceptIds",
+          "op": "eq",
+          "expected": [
+            null
+          ],
+          "actual": [
+            null
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.types",
+          "op": "eq",
+          "expected": [
+            "USER"
+          ],
+          "actual": [
+            "USER"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 1,
+            "scopes": [
+              "GLOBAL"
+            ],
+            "conceptIds": [
+              null
+            ],
+            "spaceIds": [
+              null
+            ],
+            "types": [
+              "USER"
+            ],
+            "keys": [
+              null
+            ],
+            "contents": [
+              "用户是计算机专业学生"
+            ],
+            "actions": [
+              "ADD"
+            ],
+            "importance": [
+              null
+            ]
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "memory-scope-space-uses-current-space",
+      "category": "memory_scope",
+      "mode": "offline",
+      "status": "passed",
+      "description": "SPACE 记忆的空间取自当前请求，模型给别的空间 id 会被纠正",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.scopes",
+          "op": "eq",
+          "expected": [
+            "SPACE"
+          ],
+          "actual": [
+            "SPACE"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.spaceIds",
+          "op": "eq",
+          "expected": [
+            1
+          ],
+          "actual": [
+            1
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.conceptIds",
+          "op": "eq",
+          "expected": [
+            null
+          ],
+          "actual": [
+            null
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 1,
+            "scopes": [
+              "SPACE"
+            ],
+            "conceptIds": [
+              null
+            ],
+            "spaceIds": [
+              1
+            ],
+            "types": [
+              "PREFERENCE"
+            ],
+            "keys": [
+              null
+            ],
+            "contents": [
+              "喜欢从硬件实际执行路径理解"
+            ],
+            "actions": [
+              "ADD"
+            ],
+            "importance": [
+              null
+            ]
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "memory-scope-concept-keeps-id",
+      "category": "memory_scope",
+      "mode": "offline",
+      "status": "passed",
+      "description": "CONCEPT 记忆保留本轮命中的 conceptId，且不带 spaceId（由后端按概念反查）",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.scopes",
+          "op": "eq",
+          "expected": [
+            "CONCEPT"
+          ],
+          "actual": [
+            "CONCEPT"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.conceptIds",
+          "op": "eq",
+          "expected": [
+            10
+          ],
+          "actual": [
+            10
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.spaceIds",
+          "op": "eq",
+          "expected": [
+            null
+          ],
+          "actual": [
+            null
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 1,
+            "scopes": [
+              "CONCEPT"
+            ],
+            "conceptIds": [
+              10
+            ],
+            "spaceIds": [
+              null
+            ],
+            "types": [
+              "LEARNING"
+            ],
+            "keys": [
+              null
+            ],
+            "contents": [
+              "用户已经能说出 TLB 是页表项缓存"
+            ],
+            "actions": [
+              "ADD"
+            ],
+            "importance": [
+              null
+            ]
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "memory-scope-fabricated-concept-falls-back",
+      "category": "memory_scope",
+      "mode": "offline",
+      "status": "passed",
+      "description": "模型给了一个没命中的 conceptId 时，CONCEPT 记忆回落到本轮主概念，而不是被丢弃或写错",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.conceptIds",
+          "op": "eq",
+          "expected": [
+            10
+          ],
+          "actual": [
+            10
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 1,
+            "scopes": [
+              "CONCEPT"
+            ],
+            "conceptIds": [
+              10
+            ],
+            "spaceIds": [
+              null
+            ],
+            "types": [
+              "LEARNING"
+            ],
+            "keys": [
+              null
+            ],
+            "contents": [
+              "关于 TLB 的一条学习记忆"
+            ],
+            "actions": [
+              "ADD"
+            ],
+            "importance": [
+              null
+            ]
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "memory-scope-defaults-to-concept",
+      "category": "memory_scope",
+      "mode": "offline",
+      "status": "passed",
+      "description": "未声明 scope 时默认 CONCEPT；未给 conceptId 时回落到主概念",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.scopes",
+          "op": "eq",
+          "expected": [
+            "CONCEPT"
+          ],
+          "actual": [
+            "CONCEPT"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.conceptIds",
+          "op": "eq",
+          "expected": [
+            10
+          ],
+          "actual": [
+            10
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.types",
+          "op": "eq",
+          "expected": [
+            "LEARNING"
+          ],
+          "actual": [
+            "LEARNING"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.actions",
+          "op": "eq",
+          "expected": [
+            "ADD"
+          ],
+          "actual": [
+            "ADD"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 1,
+            "scopes": [
+              "CONCEPT"
+            ],
+            "conceptIds": [
+              10
+            ],
+            "spaceIds": [
+              null
+            ],
+            "types": [
+              "LEARNING"
+            ],
+            "keys": [
+              null
+            ],
+            "contents": [
+              "用户对 TLB 的解释接近正确"
+            ],
+            "actions": [
+              "ADD"
+            ],
+            "importance": [
+              null
+            ]
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "memory-scope-duplicate-content",
+      "category": "memory_scope",
+      "mode": "offline",
+      "status": "passed",
+      "description": "同一结果里内容相同的两条记忆只提一次（跨轮去重由后端唯一约束负责）",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "memory.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "memory.scopes",
+          "op": "eq",
+          "expected": [
+            "GLOBAL"
+          ],
+          "actual": [
+            "GLOBAL"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 1,
+            "scopes": [
+              "GLOBAL"
+            ],
+            "conceptIds": [
+              null
+            ],
+            "spaceIds": [
+              null
+            ],
+            "types": [
+              "LEARNING"
+            ],
+            "keys": [
+              null
+            ],
+            "contents": [
+              "用户喜欢先看系统调用再回头看实现"
+            ],
+            "actions": [
+              "ADD"
+            ],
+            "importance": [
+              null
+            ]
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "revision-proposal-known-parts",
+      "category": "understanding_revision",
+      "mode": "offline",
+      "status": "passed",
+      "description": "理解提案是增量：known / uncertain / explanation 原样进入候选，交给后端合并",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "proposal.present",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.conceptId",
+          "op": "eq",
+          "expected": 10,
+          "actual": 10,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.knownParts",
+          "op": "eq",
+          "expected": [
+            "TLB 是页表项缓存"
+          ],
+          "actual": [
+            "TLB 是页表项缓存"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.uncertainParts",
+          "op": "eq",
+          "expected": [
+            "TLB Miss 的代价"
+          ],
+          "actual": [
+            "TLB Miss 的代价"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.latestUserExplanation",
+          "op": "eq",
+          "expected": "TLB 就是页表项的缓存",
+          "actual": "TLB 就是页表项的缓存",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": true,
+            "conceptId": 10,
+            "knownParts": [
+              "TLB 是页表项缓存"
+            ],
+            "uncertainParts": [
+              "TLB Miss 的代价"
+            ],
+            "misconceptions": [],
+            "latestUserExplanation": "TLB 就是页表项的缓存",
+            "explanationLength": 12,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "revision-empty-proposal-dropped",
+      "category": "understanding_revision",
+      "mode": "offline",
+      "status": "passed",
+      "description": "空提案（全是空列表 / 空白文本）不产生 Revision，也不能制造一次假的理解变化",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "proposal.present",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "revision-misconception-preserved",
+      "category": "understanding_revision",
+      "mode": "offline",
+      "status": "passed",
+      "description": "误区作为提案的一部分进入候选；是否新增 / 解除由后端生命周期决定",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "proposal.present",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.misconceptions",
+          "op": "eq",
+          "expected": [
+            "把 TLB Miss 当成 Page Fault"
+          ],
+          "actual": [
+            "把 TLB Miss 当成 Page Fault"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "缺页异常"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": true,
+            "conceptId": 10,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [
+              "把 TLB Miss 当成 Page Fault"
+            ],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "revision-fabricated-concept-falls-back",
+      "category": "understanding_revision",
+      "mode": "offline",
+      "status": "passed",
+      "description": "提案指向未命中的 conceptId 时回落到主概念，避免把理解写到别处",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "proposal.present",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.conceptId",
+          "op": "eq",
+          "expected": 10,
+          "actual": 10,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.knownParts",
+          "op": "eq",
+          "expected": [
+            "TLB 是页表项缓存"
+          ],
+          "actual": [
+            "TLB 是页表项缓存"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": true,
+            "conceptId": 10,
+            "knownParts": [
+              "TLB 是页表项缓存"
+            ],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "revision-explanation-truncated",
+      "category": "understanding_revision",
+      "mode": "offline",
+      "status": "passed",
+      "description": "过长的用户自述被截断到 500 字（保留省略号），防止 prompt 与数据库字段被撑爆",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "proposal.present",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.explanationLength",
+          "op": "eq",
+          "expected": 501,
+          "actual": 501,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.explanationTruncated",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": true,
+            "conceptId": 10,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": "这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长的解释。这是关于 TLB 的一段很长…",
+            "explanationLength": 501,
+            "explanationTruncated": true
+          }
+        }
+      }
+    },
+    {
+      "id": "revision-heuristic-explanation-proposal",
+      "category": "understanding_revision",
+      "mode": "offline",
+      "status": "passed",
+      "description": "离线规则路径：用户自述会产生只带 latestUserExplanation 的提案（不猜 knownParts）",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "proposal.present",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.conceptId",
+          "op": "eq",
+          "expected": 10,
+          "actual": 10,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.knownParts",
+          "op": "eq",
+          "expected": [],
+          "actual": [],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "proposal.latestUserExplanation",
+          "op": "eq",
+          "expected": "我理解 TLB 就是页表项的缓存。",
+          "actual": "我理解 TLB 就是页表项的缓存。",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 2,
+            "conceptIds": [
+              10,
+              11
+            ],
+            "types": [
+              "USER_EXPLANATION",
+              "USER_EXPLANATION"
+            ],
+            "correctness": [
+              "PARTIAL",
+              "PARTIAL"
+            ],
+            "observations": [
+              "我理解 TLB 就是页表项的缓存。",
+              "我理解 TLB 就是页表项的缓存。"
+            ],
+            "needFollowUp": [
+              false,
+              false
+            ],
+            "reasoningQuality": [
+              0.5,
+              0.5
+            ],
+            "specificity": [
+              0.5,
+              0.5
+            ],
+            "aiConfidence": [
+              0.6,
+              0.6
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": true,
+            "conceptId": 10,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": "我理解 TLB 就是页表项的缓存。",
+            "explanationLength": 17,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "verification-new-concept-ask-later",
+      "category": "verification",
+      "mode": "offline",
+      "status": "passed",
+      "description": "首次接触一个概念且用户在提问时，只记 ASK_LATER，不打断教学",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "detectedConcepts",
+          "op": "eq",
+          "expected": [
+            "缺页异常"
+          ],
+          "actual": [
+            "缺页异常"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.action",
+          "op": "eq",
+          "expected": "ASK_LATER",
+          "actual": "ASK_LATER",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.trigger",
+          "op": "eq",
+          "expected": "NEW_CONCEPT",
+          "actual": "NEW_CONCEPT",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.conceptId",
+          "op": "eq",
+          "expected": 12,
+          "actual": 12,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.questionType",
+          "op": "eq",
+          "expected": "SHORT_ANSWER",
+          "actual": "SHORT_ANSWER",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.questionText",
+          "op": "contains",
+          "expected": "缺页异常",
+          "actual": "请用自己的话解释一下「缺页异常」。",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "缺页异常"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 1,
+            "conceptIds": [
+              12
+            ],
+            "types": [
+              "OBSERVATION"
+            ],
+            "correctness": [
+              "UNKNOWN"
+            ],
+            "observations": [
+              "缺页异常是什么？"
+            ],
+            "needFollowUp": [
+              true
+            ],
+            "reasoningQuality": [
+              null
+            ],
+            "specificity": [
+              null
+            ],
+            "aiConfidence": [
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "ASK_LATER",
+            "trigger": "NEW_CONCEPT",
+            "conceptId": 12,
+            "questionType": "SHORT_ANSWER",
+            "questionText": "请用自己的话解释一下「缺页异常」。",
+            "reason": "首次接触该概念，先完成讲解，稍后再验证"
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "verification-known-concept-skip",
+      "category": "verification",
+      "mode": "offline",
+      "status": "passed",
+      "description": "已有理解快照的概念不重复触发验证（TLB 在 fixture 里是 MISCONCEPTION）",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "detectedConcepts",
+          "op": "eq",
+          "expected": [
+            "TLB（快表）"
+          ],
+          "actual": [
+            "TLB（快表）"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.action",
+          "op": "eq",
+          "expected": "SKIP",
+          "actual": "SKIP",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 1,
+            "conceptIds": [
+              10
+            ],
+            "types": [
+              "OBSERVATION"
+            ],
+            "correctness": [
+              "UNKNOWN"
+            ],
+            "observations": [
+              "TLB Miss 之后呢？"
+            ],
+            "needFollowUp": [
+              true
+            ],
+            "reasoningQuality": [
+              null
+            ],
+            "specificity": [
+              null
+            ],
+            "aiConfidence": [
+              null
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "verification-explanation-skips",
+      "category": "verification",
+      "mode": "offline",
+      "status": "passed",
+      "description": "用户在解释而不是提问时，不插入验证（这一轮的任务是把话说完）",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "verification.action",
+          "op": "eq",
+          "expected": "SKIP",
+          "actual": "SKIP",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）",
+            "页表"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 2,
+            "conceptIds": [
+              10,
+              11
+            ],
+            "types": [
+              "USER_EXPLANATION",
+              "USER_EXPLANATION"
+            ],
+            "correctness": [
+              "PARTIAL",
+              "PARTIAL"
+            ],
+            "observations": [
+              "我理解 TLB 就是页表项的缓存。",
+              "我理解 TLB 就是页表项的缓存。"
+            ],
+            "needFollowUp": [
+              false,
+              false
+            ],
+            "reasoningQuality": [
+              0.5,
+              0.5
+            ],
+            "specificity": [
+              0.5,
+              0.5
+            ],
+            "aiConfidence": [
+              0.6,
+              0.6
+            ]
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": true,
+            "conceptId": 10,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": "我理解 TLB 就是页表项的缓存。",
+            "explanationLength": 17,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "verification-recorded-ask-now-preserved",
+      "category": "verification",
+      "mode": "offline",
+      "status": "passed",
+      "description": "模型给出 ASK_NOW 时，题型 / 题干 / 正确答案 / trigger 原样保留",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "verification.action",
+          "op": "eq",
+          "expected": "ASK_NOW",
+          "actual": "ASK_NOW",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.trigger",
+          "op": "eq",
+          "expected": "REPEATED_ERROR",
+          "actual": "REPEATED_ERROR",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.conceptId",
+          "op": "eq",
+          "expected": 10,
+          "actual": 10,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.questionType",
+          "op": "eq",
+          "expected": "TRUE_FALSE",
+          "actual": "TRUE_FALSE",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.questionText",
+          "op": "eq",
+          "expected": "TLB Miss 等同于 Page Fault。",
+          "actual": "TLB Miss 等同于 Page Fault。",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.reason",
+          "op": "eq",
+          "expected": "同一误区第二次出现",
+          "actual": "同一误区第二次出现",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "ASK_NOW",
+            "trigger": "REPEATED_ERROR",
+            "conceptId": 10,
+            "questionType": "TRUE_FALSE",
+            "questionText": "TLB Miss 等同于 Page Fault。",
+            "reason": "同一误区第二次出现"
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "verification-fabricated-concept-skipped",
+      "category": "verification",
+      "mode": "offline",
+      "status": "passed",
+      "description": "验证决策引用未命中的概念时降级为 SKIP：宁可不出题，也不能给别的知识点出题",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "verification.action",
+          "op": "eq",
+          "expected": "SKIP",
+          "actual": "SKIP",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.conceptId",
+          "op": "eq",
+          "expected": null,
+          "actual": null,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "SKIP",
+            "trigger": null,
+            "conceptId": null,
+            "questionType": null,
+            "questionText": null,
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "verification-ask-now-default-question",
+      "category": "verification",
+      "mode": "offline",
+      "status": "passed",
+      "description": "ASK_NOW 没给题干时补一个可作答的默认题，而不是静默降级成 SKIP",
+      "durationMs": 1,
+      "checks": [
+        {
+          "path": "verification.action",
+          "op": "eq",
+          "expected": "ASK_NOW",
+          "actual": "ASK_NOW",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.questionType",
+          "op": "eq",
+          "expected": "SHORT_ANSWER",
+          "actual": "SHORT_ANSWER",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "verification.questionText",
+          "op": "contains",
+          "expected": "TLB",
+          "actual": "请用自己的话解释一下「TLB（快表）」。",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "actual": {
+          "detectedConcepts": [
+            "TLB（快表）"
+          ],
+          "analyzerVersion": "agent-v1",
+          "evidence": {
+            "count": 0,
+            "conceptIds": [],
+            "types": [],
+            "correctness": [],
+            "observations": [],
+            "needFollowUp": [],
+            "reasoningQuality": [],
+            "specificity": [],
+            "aiConfidence": []
+          },
+          "memory": {
+            "count": 0,
+            "scopes": [],
+            "conceptIds": [],
+            "spaceIds": [],
+            "types": [],
+            "keys": [],
+            "contents": [],
+            "actions": [],
+            "importance": []
+          },
+          "verification": {
+            "action": "ASK_NOW",
+            "trigger": "LONG_UNVERIFIED",
+            "conceptId": 10,
+            "questionType": "SHORT_ANSWER",
+            "questionText": "请用自己的话解释一下「TLB（快表）」。",
+            "reason": null
+          },
+          "proposal": {
+            "present": false,
+            "conceptId": null,
+            "knownParts": [],
+            "uncertainParts": [],
+            "misconceptions": [],
+            "latestUserExplanation": null,
+            "explanationLength": 0,
+            "explanationTruncated": false
+          }
+        }
+      }
+    },
+    {
+      "id": "live-cross-session-attaches",
+      "category": "cross_session",
+      "mode": "live",
+      "status": "passed",
+      "description": "对话 A 里写下的自述，会进入对话 B 的 Agent 上下文（跨会话理解检索）",
+      "durationMs": 1018,
+      "checks": [
+        {
+          "path": "step1/sendMessage: data.started",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step1/sendMessage: data.ended",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step1/sendMessage: data.sessionId",
+          "op": "truthy",
+          "expected": null,
+          "actual": 22,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/highlight: httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/highlight: data.markType",
+          "op": "eq",
+          "expected": "MY_UNDERSTANDING",
+          "actual": "MY_UNDERSTANDING",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/waitForUnderstanding: data.status",
+          "op": "eq",
+          "expected": "PARTIAL",
+          "actual": "PARTIAL",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/waitForUnderstanding: data.latestUserExplanation",
+          "op": "contains",
+          "expected": "我理解 TLB",
+          "actual": "我理解 TLB 就是 Page Table 的缓存",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/getRevisions: data.count",
+          "op": "gte",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/getRevisions: data.statuses",
+          "op": "contains",
+          "expected": "PARTIAL",
+          "actual": [
+            "PARTIAL"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step5/contextPreview: data.hasUnderstanding",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step5/contextPreview: data.systemInstruction",
+          "op": "contains",
+          "expected": "我理解 TLB",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "steps": [
+          {
+            "index": 1,
+            "action": "sendMessage",
+            "data": {
+              "data": {
+                "events": [
+                  "message.start",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.end"
+                ],
+                "delta": "（Mock LLM 输出）我收到的问题是：\n> 我理解 TLB 就是 Page Table 的缓存\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「TLB、Page Table」的学习\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
+                "ended": true,
+                "started": true,
+                "error": null,
+                "assistantMessageId": 64,
+                "conversationId": 33,
+                "userMessageId": 63,
+                "sessionId": 22
+              }
+            }
+          },
+          {
+            "index": 2,
+            "action": "highlight",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "id": 11,
+                "messageId": 63,
+                "markType": "MY_UNDERSTANDING",
+                "selectedText": "我理解 TLB 就是 Page Table 的缓存",
+                "startOffset": 0,
+                "endOffset": 0,
+                "note": "自己琢磨出来的",
+                "createdAt": "2026-10-21T20:51:17.3779069"
+              }
+            }
+          },
+          {
+            "index": 3,
+            "action": "waitForUnderstanding",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "id": 29,
+                "conceptId": 38,
+                "conceptName": "TLB",
+                "summary": "已理解：我理解 TLB 就是 Page Table 的缓存",
+                "knownParts": [
+                  "我理解 TLB 就是 Page Table 的缓存"
+                ],
+                "misconceptions": [],
+                "uncertainParts": [],
+                "latestUserExplanation": "我理解 TLB 就是 Page Table 的缓存",
+                "status": "PARTIAL",
+                "currentRevisionId": 41,
+                "updatedAt": "2026-10-21T20:51:17"
+              },
+              "timedOut": false
+            }
+          },
+          {
+            "index": 4,
+            "action": "getRevisions",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "count": 1,
+                "statuses": [
+                  "PARTIAL"
+                ],
+                "hasExposed": false,
+                "hasPartial": true,
+                "hasDemonstrated": false,
+                "hasMisconception": false,
+                "revisionNos": [
+                  1
+                ],
+                "items": [
+                  {
+                    "id": 41,
+                    "revisionNo": 1,
+                    "summary": "已理解：我理解 TLB 就是 Page Table 的缓存",
+                    "knownParts": [
+                      "我理解 TLB 就是 Page Table 的缓存"
+                    ],
+                    "misconceptions": [],
+                    "uncertainParts": [],
+                    "userExplanation": "我理解 TLB 就是 Page Table 的缓存",
+                    "status": "PARTIAL",
+                    "triggerEvidenceId": 58,
+                    "createdAt": "2026-10-21T20:51:17"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "index": 5,
+            "action": "contextPreview",
+            "data": {
+              "truncated": "{\"httpStatus\": 200, \"data\": {\"sections\": [\"user_input\", \"understanding:38\"], \"hasUnderstanding\": true, \"hasSession\": false, \"understandingPreview\": \"### TLB ｜ 状态：部分理解\\n- 当前理解：已理解：我理解 TLB 就是 Page Table 的缓存\\n- 已经理解：我理解 TLB 就是 Page Table 的缓存\\n- 用户自己的说法：「我理解 TLB 就是 Page Table 的缓存」\", \"systemInstruction\": \"你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\\n\\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\\n\\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\\n- 他仍然存在的误区：要针对性地纠正 —— 指出他的推理在哪一步分叉、为什么会这样想、正确的理解在那一步是什么。不要直接说「你错了」，也不要只是把正确答案摆出来。\\n- 他还不确定的部分：这是本次最该补的，优先处理。\\n- 他曾经自己给出的解释：可以引用他的话继续往下推，这比重新讲一遍有效得多。\\n\\n关于这份记录，有三条硬性规则：\\n\\n1. 不要复述它的结构，也不要说「根据我的记录」「系统显示你已经理解」之类的话。它只是你的参考，不是要念给用户听的内容。\\n2. 不要向用户输出任何内部分析信号 —— 包括正确性判断、置信度、推理质量、\\n   证据编号，以及 Evidence / Understanding / Revision 这类内部术语。这些是系统内部用的。\\n3. 用户本轮…"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "live-cross-session-session-attach",
+      "category": "cross_session",
+      "mode": "live",
+      "status": "passed",
+      "description": "同一个学习活动下的第二个对话应 ATTACH 到已有 Session，而不是新建一个",
+      "durationMs": 919,
+      "checks": [
+        {
+          "path": "step1/sendMessage: data.sessionId",
+          "op": "truthy",
+          "expected": null,
+          "actual": 23,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/sendMessage: data.sessionId",
+          "op": "eq",
+          "expected": 23,
+          "actual": 23,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "steps": [
+          {
+            "index": 1,
+            "action": "sendMessage",
+            "data": {
+              "data": {
+                "events": [
+                  "message.start",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.end"
+                ],
+                "delta": "（Mock LLM 输出）我收到的问题是：\n> 我理解 TLB 就是页表项的缓存\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「TLB」的学习\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
+                "ended": true,
+                "started": true,
+                "error": null,
+                "assistantMessageId": 66,
+                "conversationId": 35,
+                "userMessageId": 65,
+                "sessionId": 23
+              }
+            }
+          },
+          {
+            "index": 2,
+            "action": "sendMessage",
+            "data": {
+              "data": {
+                "events": [
+                  "message.start",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.end"
+                ],
+                "delta": "（Mock LLM 输出）我收到的问题是：\n> 那 TLB Miss 之后呢？\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「TLB」的学习\n- 用户自己的说法：「我理解 TLB 就是页表项的缓存」\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
+                "ended": true,
+                "started": true,
+                "error": null,
+                "assistantMessageId": 68,
+                "conversationId": 36,
+                "userMessageId": 67,
+                "sessionId": 23
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "live-memory-identity-conflict",
+      "category": "memory_conflict",
+      "mode": "live",
+      "status": "passed",
+      "description": "同作用域同身份（缺省 key = content 哈希）重复创建返回 409；显式给不同 key 才能并存",
+      "durationMs": 481,
+      "checks": [
+        {
+          "path": "step1/createMemory: code",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step1/createMemory: data.scopeType",
+          "op": "eq",
+          "expected": "GLOBAL",
+          "actual": "GLOBAL",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/createMemory: code",
+          "op": "eq",
+          "expected": 409,
+          "actual": 409,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/createMemory: data",
+          "op": "eq",
+          "expected": null,
+          "actual": null,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/createMemory: code",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/createMemory: data.memoryKey",
+          "op": "eq",
+          "expected": "eval-explicit-1",
+          "actual": "eval-explicit-1",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/createMemory: code",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/createMemory: data.memoryKey",
+          "op": "eq",
+          "expected": "eval-explicit-2",
+          "actual": "eval-explicit-2",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step5/searchMemories: data.count",
+          "op": "gte",
+          "expected": 3,
+          "actual": 3,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step5/searchMemories: data.keys",
+          "op": "contains",
+          "expected": "eval-explicit-1",
+          "actual": [
+            "auto:7ba7236cdf28c80d966c4965cb590578",
+            "eval-explicit-1",
+            "eval-explicit-2"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "steps": [
+          {
+            "index": 1,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 200,
+              "code": 0,
+              "data": {
+                "id": 50,
+                "scopeType": "GLOBAL",
+                "learningSpaceId": null,
+                "conceptId": null,
+                "memoryType": "PREFERENCE",
+                "memoryKey": "auto:7ba7236cdf28c80d966c4965cb590578",
+                "content": "用户喜欢从硬件实际执行路径理解操作系统",
+                "status": "ACTIVE",
+                "importance": null,
+                "createdAt": "2026-10-21T20:51:18.9493013",
+                "updatedAt": "2026-10-21T20:51:18.9493013"
+              },
+              "message": "已记住"
+            }
+          },
+          {
+            "index": 2,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 409,
+              "code": 409,
+              "data": null,
+              "message": "同一作用域下已存在标识为「auto:7ba7236cdf28c80d966c4965cb590578」的记忆（GLOBAL）"
+            }
+          },
+          {
+            "index": 3,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 200,
+              "code": 0,
+              "data": {
+                "id": 51,
+                "scopeType": "GLOBAL",
+                "learningSpaceId": null,
+                "conceptId": null,
+                "memoryType": "PREFERENCE",
+                "memoryKey": "eval-explicit-1",
+                "content": "用户喜欢从硬件实际执行路径理解操作系统",
+                "status": "ACTIVE",
+                "importance": null,
+                "createdAt": "2026-10-21T20:51:18.996033",
+                "updatedAt": "2026-10-21T20:51:18.996033"
+              },
+              "message": "已记住"
+            }
+          },
+          {
+            "index": 4,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 200,
+              "code": 0,
+              "data": {
+                "id": 52,
+                "scopeType": "GLOBAL",
+                "learningSpaceId": null,
+                "conceptId": null,
+                "memoryType": "PREFERENCE",
+                "memoryKey": "eval-explicit-2",
+                "content": "用户喜欢从硬件实际执行路径理解操作系统",
+                "status": "ACTIVE",
+                "importance": null,
+                "createdAt": "2026-10-21T20:51:19.0121536",
+                "updatedAt": "2026-10-21T20:51:19.0121536"
+              },
+              "message": "已记住"
+            }
+          },
+          {
+            "index": 5,
+            "action": "searchMemories",
+            "data": {
+              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 3, \"scopes\": [\"GLOBAL\", \"GLOBAL\", \"GLOBAL\"], \"hasGlobal\": true, \"hasSpace\": false, \"hasConcept\": false, \"keys\": [\"auto:7ba7236cdf28c80d966c4965cb590578\", \"eval-explicit-1\", \"eval-explicit-2\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户喜欢从硬件实际执行路径理解操作系统\", \"用户喜欢从硬件实际执行路径理解操作系统\", \"用户喜欢从硬件实际执行路径理解操作系统\"], \"items\": [{\"id\": 50, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:7ba7236cdf28c80d966c4965cb590578\", \"content\": \"用户喜欢从硬件实际执行路径理解操作系统\", \"status\": \"ACTIVE\", \"importance\": null, \"createdAt\": \"2026-10-21T20:51:19\", \"updatedAt\": \"2026-10-21T20:51:19\"}, {\"id\": 51, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"eval-…"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "live-memory-global-visible-everywhere",
+      "category": "memory_conflict",
+      "mode": "live",
+      "status": "passed",
+      "description": "GLOBAL 记忆对任意空间可见，且不会被空间的同名 scope_key 覆盖",
+      "durationMs": 490,
+      "checks": [
+        {
+          "path": "step1/createMemory: code",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step1/createMemory: data.scopeType",
+          "op": "eq",
+          "expected": "GLOBAL",
+          "actual": "GLOBAL",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/createMemory: code",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/createMemory: data.scopeType",
+          "op": "eq",
+          "expected": "SPACE",
+          "actual": "SPACE",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/searchMemories: data.count",
+          "op": "eq",
+          "expected": 2,
+          "actual": 2,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/searchMemories: data.hasGlobal",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/searchMemories: data.hasSpace",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/searchMemories: data.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/searchMemories: data.hasGlobal",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/searchMemories: data.hasSpace",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "steps": [
+          {
+            "index": 1,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 200,
+              "code": 0,
+              "data": {
+                "id": 53,
+                "scopeType": "GLOBAL",
+                "learningSpaceId": null,
+                "conceptId": null,
+                "memoryType": "USER",
+                "memoryKey": "auto:a3c98459047a59a16351f6a65aff0c01",
+                "content": "用户是计算机专业学生",
+                "status": "ACTIVE",
+                "importance": null,
+                "createdAt": "2026-10-21T20:51:19.4283681",
+                "updatedAt": "2026-10-21T20:51:19.4283681"
+              },
+              "message": "已记住"
+            }
+          },
+          {
+            "index": 2,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 200,
+              "code": 0,
+              "data": {
+                "id": 54,
+                "scopeType": "SPACE",
+                "learningSpaceId": 37,
+                "conceptId": null,
+                "memoryType": "PREFERENCE",
+                "memoryKey": "auto:224fe9f079725c87efd1738a10447c7b",
+                "content": "当前空间的偏好",
+                "status": "ACTIVE",
+                "importance": null,
+                "createdAt": "2026-10-21T20:51:19.4696226",
+                "updatedAt": "2026-10-21T20:51:19.4696226"
+              },
+              "message": "已记住"
+            }
+          },
+          {
+            "index": 3,
+            "action": "searchMemories",
+            "data": {
+              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 2, \"scopes\": [\"GLOBAL\", \"SPACE\"], \"hasGlobal\": true, \"hasSpace\": true, \"hasConcept\": false, \"keys\": [\"auto:a3c98459047a59a16351f6a65aff0c01\", \"auto:224fe9f079725c87efd1738a10447c7b\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户是计算机专业学生\", \"当前空间的偏好\"], \"items\": [{\"id\": 53, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"USER\", \"memoryKey\": \"auto:a3c98459047a59a16351f6a65aff0c01\", \"content\": \"用户是计算机专业学生\", \"status\": \"ACTIVE\", \"importance\": null, \"createdAt\": \"2026-10-21T20:51:19\", \"updatedAt\": \"2026-10-21T20:51:19\"}, {\"id\": 54, \"scopeType\": \"SPACE\", \"learningSpaceId\": 37, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:224fe9f079725c87efd1738a10447c7b\", \"content\": \"当前空间的偏好\", \"status\": \"ACTIVE\", \"imp…"
+            }
+          },
+          {
+            "index": 4,
+            "action": "searchMemories",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "count": 1,
+                "scopes": [
+                  "GLOBAL"
+                ],
+                "hasGlobal": true,
+                "hasSpace": false,
+                "hasConcept": false,
+                "keys": [
+                  "auto:a3c98459047a59a16351f6a65aff0c01"
+                ],
+                "statuses": [
+                  "ACTIVE"
+                ],
+                "contents": [
+                  "用户是计算机专业学生"
+                ],
+                "items": [
+                  {
+                    "id": 53,
+                    "scopeType": "GLOBAL",
+                    "learningSpaceId": null,
+                    "conceptId": null,
+                    "memoryType": "USER",
+                    "memoryKey": "auto:a3c98459047a59a16351f6a65aff0c01",
+                    "content": "用户是计算机专业学生",
+                    "status": "ACTIVE",
+                    "importance": null,
+                    "createdAt": "2026-10-21T20:51:19",
+                    "updatedAt": "2026-10-21T20:51:19"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "live-memory-scopes-visible",
+      "category": "memory_scope",
+      "mode": "live",
+      "status": "passed",
+      "description": "同一空间 + 概念下检索时，GLOBAL / SPACE / CONCEPT 三种作用域都应可见",
+      "durationMs": 544,
+      "checks": [
+        {
+          "path": "step1/createMemory: code",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step1/createMemory: data.scopeType",
+          "op": "eq",
+          "expected": "GLOBAL",
+          "actual": "GLOBAL",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step1/createMemory: data.learningSpaceId",
+          "op": "eq",
+          "expected": null,
+          "actual": null,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step1/createMemory: data.conceptId",
+          "op": "eq",
+          "expected": null,
+          "actual": null,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/createMemory: code",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/createMemory: data.scopeType",
+          "op": "eq",
+          "expected": "SPACE",
+          "actual": "SPACE",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/createMemory: data.learningSpaceId",
+          "op": "eq",
+          "expected": 38,
+          "actual": 38,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/createMemory: code",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/createMemory: data.scopeType",
+          "op": "eq",
+          "expected": "CONCEPT",
+          "actual": "CONCEPT",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/createMemory: data.conceptId",
+          "op": "eq",
+          "expected": 41,
+          "actual": 41,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/searchMemories: data.count",
+          "op": "gte",
+          "expected": 3,
+          "actual": 3,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/searchMemories: data.hasGlobal",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/searchMemories: data.hasSpace",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/searchMemories: data.hasConcept",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "steps": [
+          {
+            "index": 1,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 200,
+              "code": 0,
+              "data": {
+                "id": 55,
+                "scopeType": "GLOBAL",
+                "learningSpaceId": null,
+                "conceptId": null,
+                "memoryType": "PREFERENCE",
+                "memoryKey": "auto:7ba7236cdf28c80d966c4965cb590578",
+                "content": "用户喜欢从硬件实际执行路径理解操作系统",
+                "status": "ACTIVE",
+                "importance": 0.9,
+                "createdAt": "2026-10-21T20:51:20.0303605",
+                "updatedAt": "2026-10-21T20:51:20.0303605"
+              },
+              "message": "已记住"
+            }
+          },
+          {
+            "index": 2,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 200,
+              "code": 0,
+              "data": {
+                "id": 56,
+                "scopeType": "SPACE",
+                "learningSpaceId": 38,
+                "conceptId": null,
+                "memoryType": "LEARNING",
+                "memoryKey": "auto:4d8f1748fb227ff547c51fa563bd33f0",
+                "content": "这个空间里已经学过虚拟内存基础",
+                "status": "ACTIVE",
+                "importance": null,
+                "createdAt": "2026-10-21T20:51:20.0492403",
+                "updatedAt": "2026-10-21T20:51:20.0492403"
+              },
+              "message": "已记住"
+            }
+          },
+          {
+            "index": 3,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 200,
+              "code": 0,
+              "data": {
+                "id": 57,
+                "scopeType": "CONCEPT",
+                "learningSpaceId": 38,
+                "conceptId": 41,
+                "memoryType": "LEARNING",
+                "memoryKey": "auto:c19a0bb43d5ff605f9769e0d31d4cdde",
+                "content": "TLB 这条线用户已经能自己讲清楚",
+                "status": "ACTIVE",
+                "importance": null,
+                "createdAt": "2026-10-21T20:51:20.0632675",
+                "updatedAt": "2026-10-21T20:51:20.0632675"
+              },
+              "message": "已记住"
+            }
+          },
+          {
+            "index": 4,
+            "action": "searchMemories",
+            "data": {
+              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 3, \"scopes\": [\"GLOBAL\", \"CONCEPT\", \"SPACE\"], \"hasGlobal\": true, \"hasSpace\": true, \"hasConcept\": true, \"keys\": [\"auto:7ba7236cdf28c80d966c4965cb590578\", \"auto:c19a0bb43d5ff605f9769e0d31d4cdde\", \"auto:4d8f1748fb227ff547c51fa563bd33f0\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户喜欢从硬件实际执行路径理解操作系统\", \"TLB 这条线用户已经能自己讲清楚\", \"这个空间里已经学过虚拟内存基础\"], \"items\": [{\"id\": 55, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:7ba7236cdf28c80d966c4965cb590578\", \"content\": \"用户喜欢从硬件实际执行路径理解操作系统\", \"status\": \"ACTIVE\", \"importance\": 0.9, \"createdAt\": \"2026-10-21T20:51:20\", \"updatedAt\": \"2026-10-21T20:51:20\"}, {\"id\": 57, \"scopeType\": \"CONCEPT\", \"learningSpaceId\": 38, \"conceptId\": 41, \"memoryType\": \"…"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "live-memory-scope-isolation",
+      "category": "memory_scope",
+      "mode": "live",
+      "status": "passed",
+      "description": "带别的 spaceId 检索时只能看到 GLOBAL：SPACE / CONCEPT 记忆不能跨空间泄漏",
+      "durationMs": 488,
+      "checks": [
+        {
+          "path": "step1/createMemory: code",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/createMemory: code",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/createMemory: code",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/searchMemories: data.count",
+          "op": "eq",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/searchMemories: data.scopes",
+          "op": "eq",
+          "expected": [
+            "GLOBAL"
+          ],
+          "actual": [
+            "GLOBAL"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/searchMemories: data.contents",
+          "op": "eq",
+          "expected": [
+            "全局可见的用户画像"
+          ],
+          "actual": [
+            "全局可见的用户画像"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "steps": [
+          {
+            "index": 1,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 200,
+              "code": 0,
+              "data": {
+                "id": 58,
+                "scopeType": "GLOBAL",
+                "learningSpaceId": null,
+                "conceptId": null,
+                "memoryType": "USER",
+                "memoryKey": "auto:a2be18935afb796f32477d2cd946b8c2",
+                "content": "全局可见的用户画像",
+                "status": "ACTIVE",
+                "importance": null,
+                "createdAt": "2026-10-21T20:51:20.4879985",
+                "updatedAt": "2026-10-21T20:51:20.4879985"
+              },
+              "message": "已记住"
+            }
+          },
+          {
+            "index": 2,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 200,
+              "code": 0,
+              "data": {
+                "id": 59,
+                "scopeType": "SPACE",
+                "learningSpaceId": 39,
+                "conceptId": null,
+                "memoryType": "PREFERENCE",
+                "memoryKey": "auto:7fba75c724920107b9316e34b734b54b",
+                "content": "只属于当前空间的偏好",
+                "status": "ACTIVE",
+                "importance": null,
+                "createdAt": "2026-10-21T20:51:20.5139878",
+                "updatedAt": "2026-10-21T20:51:20.5139878"
+              },
+              "message": "已记住"
+            }
+          },
+          {
+            "index": 3,
+            "action": "createMemory",
+            "data": {
+              "httpStatus": 200,
+              "code": 0,
+              "data": {
+                "id": 60,
+                "scopeType": "CONCEPT",
+                "learningSpaceId": 39,
+                "conceptId": 42,
+                "memoryType": "LEARNING",
+                "memoryKey": "auto:077e43752dbb7390fd86b17cff0ba0af",
+                "content": "只属于当前知识点的一条记忆",
+                "status": "ACTIVE",
+                "importance": null,
+                "createdAt": "2026-10-21T20:51:20.5268862",
+                "updatedAt": "2026-10-21T20:51:20.5268862"
+              },
+              "message": "已记住"
+            }
+          },
+          {
+            "index": 4,
+            "action": "searchMemories",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "count": 1,
+                "scopes": [
+                  "GLOBAL"
+                ],
+                "hasGlobal": true,
+                "hasSpace": false,
+                "hasConcept": false,
+                "keys": [
+                  "auto:a2be18935afb796f32477d2cd946b8c2"
+                ],
+                "statuses": [
+                  "ACTIVE"
+                ],
+                "contents": [
+                  "全局可见的用户画像"
+                ],
+                "items": [
+                  {
+                    "id": 58,
+                    "scopeType": "GLOBAL",
+                    "learningSpaceId": null,
+                    "conceptId": null,
+                    "memoryType": "USER",
+                    "memoryKey": "auto:a2be18935afb796f32477d2cd946b8c2",
+                    "content": "全局可见的用户画像",
+                    "status": "ACTIVE",
+                    "importance": null,
+                    "createdAt": "2026-10-21T20:51:20",
+                    "updatedAt": "2026-10-21T20:51:20"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "live-revision-question-exposes-concept",
+      "category": "understanding_revision",
+      "mode": "live",
+      "status": "passed",
+      "description": "Bad Case BC-001 回归：用户只是提问、Agent 没有形成判断时，状态也必须从 UNKNOWN 推进到 EXPOSED",
+      "durationMs": 899,
+      "checks": [
+        {
+          "path": "step1/sendMessage: data.ended",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/waitForUnderstanding: data.status",
+          "op": "eq",
+          "expected": "EXPOSED",
+          "actual": "EXPOSED",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/waitForUnderstanding: timedOut",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/getRevisions: data.count",
+          "op": "gte",
+          "expected": 1,
+          "actual": 1,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/getRevisions: data.statuses",
+          "op": "contains",
+          "expected": "EXPOSED",
+          "actual": [
+            "EXPOSED"
+          ],
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "steps": [
+          {
+            "index": 1,
+            "action": "sendMessage",
+            "data": {
+              "data": {
+                "events": [
+                  "message.start",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.end"
+                ],
+                "delta": "（Mock LLM 输出）我收到的问题是：\n> 缺页异常是什么？\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「缺页异常」的学习\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
+                "ended": true,
+                "started": true,
+                "error": null,
+                "assistantMessageId": 70,
+                "conversationId": 37,
+                "userMessageId": 69,
+                "sessionId": 24
+              }
+            }
+          },
+          {
+            "index": 2,
+            "action": "waitForUnderstanding",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "id": 32,
+                "conceptId": 43,
+                "conceptName": "缺页异常",
+                "summary": null,
+                "knownParts": [],
+                "misconceptions": [],
+                "uncertainParts": [],
+                "latestUserExplanation": null,
+                "status": "EXPOSED",
+                "currentRevisionId": 44,
+                "updatedAt": "2026-10-21T20:51:21"
+              },
+              "timedOut": false
+            }
+          },
+          {
+            "index": 3,
+            "action": "getRevisions",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "count": 1,
+                "statuses": [
+                  "EXPOSED"
+                ],
+                "hasExposed": true,
+                "hasPartial": false,
+                "hasDemonstrated": false,
+                "hasMisconception": false,
+                "revisionNos": [
+                  1
+                ],
+                "items": [
+                  {
+                    "id": 44,
+                    "revisionNo": 1,
+                    "summary": null,
+                    "knownParts": [],
+                    "misconceptions": [],
+                    "uncertainParts": [],
+                    "userExplanation": null,
+                    "status": "EXPOSED",
+                    "triggerEvidenceId": 64,
+                    "createdAt": "2026-10-21T20:51:21"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "live-revision-correction-appends",
+      "category": "understanding_revision",
+      "mode": "live",
+      "status": "passed",
+      "description": "用户先自述（CORRECT）再自我纠正（INCORRECT）时，Revision 只追加不覆盖，状态推进到 MISCONCEPTION",
+      "durationMs": 945,
+      "checks": [
+        {
+          "path": "step1/sendMessage: data.ended",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/highlight: httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/waitForUnderstanding: data.status",
+          "op": "eq",
+          "expected": "PARTIAL",
+          "actual": "PARTIAL",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step4/highlight: httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step5/waitForUnderstanding: data.status",
+          "op": "eq",
+          "expected": "MISCONCEPTION",
+          "actual": "MISCONCEPTION",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step6/getRevisions: data.count",
+          "op": "gte",
+          "expected": 2,
+          "actual": 2,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step6/getRevisions: data.hasPartial",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step6/getRevisions: data.hasMisconception",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "steps": [
+          {
+            "index": 1,
+            "action": "sendMessage",
+            "data": {
+              "data": {
+                "events": [
+                  "message.start",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.end"
+                ],
+                "delta": "（Mock LLM 输出）我收到的问题是：\n> 我理解 TLB 就是页表项的缓存\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「TLB」的学习\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
+                "ended": true,
+                "started": true,
+                "error": null,
+                "assistantMessageId": 72,
+                "conversationId": 38,
+                "userMessageId": 71,
+                "sessionId": 25
+              }
+            }
+          },
+          {
+            "index": 2,
+            "action": "highlight",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "id": 12,
+                "messageId": 71,
+                "markType": "MY_UNDERSTANDING",
+                "selectedText": "我理解 TLB 就是页表项的缓存",
+                "startOffset": 0,
+                "endOffset": 0,
+                "note": null,
+                "createdAt": "2026-10-21T20:51:22.2401834"
+              }
+            }
+          },
+          {
+            "index": 3,
+            "action": "waitForUnderstanding",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "id": 33,
+                "conceptId": 44,
+                "conceptName": "TLB",
+                "summary": "已理解：我理解 TLB 就是页表项的缓存",
+                "knownParts": [
+                  "我理解 TLB 就是页表项的缓存"
+                ],
+                "misconceptions": [],
+                "uncertainParts": [],
+                "latestUserExplanation": "我理解 TLB 就是页表项的缓存",
+                "status": "PARTIAL",
+                "currentRevisionId": 45,
+                "updatedAt": "2026-10-21T20:51:22"
+              },
+              "timedOut": false
+            }
+          },
+          {
+            "index": 4,
+            "action": "highlight",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "id": 13,
+                "messageId": 71,
+                "markType": "MISCONCEPTION_CANDIDATE",
+                "selectedText": "我把 TLB Miss 当成了缺页",
+                "startOffset": 0,
+                "endOffset": 0,
+                "note": "我总觉得 TLB Miss 就是缺页",
+                "createdAt": "2026-10-21T20:51:22.3494947"
+              }
+            }
+          },
+          {
+            "index": 5,
+            "action": "waitForUnderstanding",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "id": 33,
+                "conceptId": 44,
+                "conceptName": "TLB",
+                "summary": "已理解：我理解 TLB 就是页表项的缓存 存在误区：我总觉得 TLB Miss 就是缺页",
+                "knownParts": [
+                  "我理解 TLB 就是页表项的缓存"
+                ],
+                "misconceptions": [
+                  {
+                    "text": "我总觉得 TLB Miss 就是缺页",
+                    "status": "ACTIVE",
+                    "firstDetectedAt": "2026-10-21T20:51:22.3560654",
+                    "lastEvidenceAt": "2026-10-21T20:51:22.3560654",
+                    "reversalEvidenceIds": []
+                  }
+                ],
+                "uncertainParts": [],
+                "latestUserExplanation": "我理解 TLB 就是页表项的缓存",
+                "status": "MISCONCEPTION",
+                "currentRevisionId": 46,
+                "updatedAt": "2026-10-21T20:51:22"
+              },
+              "timedOut": false
+            }
+          },
+          {
+            "index": 6,
+            "action": "getRevisions",
+            "data": {
+              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 2, \"statuses\": [\"PARTIAL\", \"MISCONCEPTION\"], \"hasExposed\": false, \"hasPartial\": true, \"hasDemonstrated\": false, \"hasMisconception\": true, \"revisionNos\": [1, 2], \"items\": [{\"id\": 45, \"revisionNo\": 1, \"summary\": \"已理解：我理解 TLB 就是页表项的缓存\", \"knownParts\": [\"我理解 TLB 就是页表项的缓存\"], \"misconceptions\": [], \"uncertainParts\": [], \"userExplanation\": \"我理解 TLB 就是页表项的缓存\", \"status\": \"PARTIAL\", \"triggerEvidenceId\": 65, \"createdAt\": \"2026-10-21T20:51:22\"}, {\"id\": 46, \"revisionNo\": 2, \"summary\": \"已理解：我理解 TLB 就是页表项的缓存 存在误区：我总觉得 TLB Miss 就是缺页\", \"knownParts\": [\"我理解 TLB 就是页表项的缓存\"], \"misconceptions\": [{\"text\": \"我总觉得 TLB Miss 就是缺页\", \"status\": \"ACTIVE\", \"firstDetectedAt\": \"2026-10-21T20:51:22.3560654\", \"lastEvidenceAt\": \"2026-10-21T20:51:22.3560654\", \"reversalEvidenceIds\": []}], \"unce…"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "live-verification-no-interrupt-on-first-question",
+      "category": "verification",
+      "mode": "live",
+      "status": "passed",
+      "description": "首次接触概念且用户在提问时，Agent 只记 ASK_LATER，不创建 TestTask（不打断教学）",
+      "durationMs": 907,
+      "checks": [
+        {
+          "path": "step1/sendMessage: data.ended",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/waitForUnderstanding: data.status",
+          "op": "eq",
+          "expected": "EXPOSED",
+          "actual": "EXPOSED",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step2/waitForUnderstanding: timedOut",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "step3/pendingTests: data.count",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {
+        "steps": [
+          {
+            "index": 1,
+            "action": "sendMessage",
+            "data": {
+              "data": {
+                "events": [
+                  "message.start",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.delta",
+                  "message.end"
+                ],
+                "delta": "（Mock LLM 输出）我收到的问题是：\n> 缺页异常是什么？\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「缺页异常」的学习\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
+                "ended": true,
+                "started": true,
+                "error": null,
+                "assistantMessageId": 74,
+                "conversationId": 39,
+                "userMessageId": 73,
+                "sessionId": 26
+              }
+            }
+          },
+          {
+            "index": 2,
+            "action": "waitForUnderstanding",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "id": 34,
+                "conceptId": 46,
+                "conceptName": "缺页异常",
+                "summary": null,
+                "knownParts": [],
+                "misconceptions": [],
+                "uncertainParts": [],
+                "latestUserExplanation": null,
+                "status": "EXPOSED",
+                "currentRevisionId": 47,
+                "updatedAt": "2026-10-21T20:51:23"
+              },
+              "timedOut": false
+            }
+          },
+          {
+            "index": 3,
+            "action": "pendingTests",
+            "data": {
+              "httpStatus": 200,
+              "data": {
+                "count": 0,
+                "items": []
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

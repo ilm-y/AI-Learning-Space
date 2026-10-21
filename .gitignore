@@ -1,3 +1,9 @@
 plan.md
 .postman
 .vscode
+
+# evaluation/ 是仓库根目录下的 Python 包（agent/ 有自己的 .gitignore）
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
