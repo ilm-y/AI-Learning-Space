@@ -5,14 +5,17 @@ Jackson 序列化结果（camelCase），取值跟随 `entity/enums` 里的枚�
 
 Backend 侧的对应物：
 - `ChatRequest`      ←→ `dto/agent/ChatAgentRequest` + `ChatHistoryMessage`
+- `AnalyzeRequest`   ←→ `dto/agent/AnalyzeAgentRequest`
+- `AnalyzeResult`    ←→ `dto/agent/AnalyzeAgentResult`（及四个嵌套 record）
 - `Concept`          ←→ `dto/concept/ConceptResponse`
 - `Understanding`    ←→ `dto/understanding/UnderstandingResponse`
 - `MemoryItem`       ←→ `dto/memory/MemoryResponse`
 - `EvidenceItem`     ←→ `dto/understanding/EvidenceResponse`
 - `ApiResponse[T]`   ←→ `common/ApiResponse`
 
-Agent **不重复实现**后端的写入语义。这里全是只读模型：本轮 Agent 只负责
-「检索 → 组装 → 教学」，Evidence / Understanding 的写入仍由后端完成。
+Agent **不重复实现**后端的写入语义：Chat 链路只读，Analyze 链路只生产候选。
+Evidence 去重、Understanding 合并、Memory 作用域与生命周期都由后端决定，
+Agent 的输出必须能在不依赖任何写入顺序的前提下被校验。
 """
 
 from __future__ import annotations
@@ -89,6 +92,51 @@ class EvidenceCorrectness(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class EvidenceType(str, Enum):
+    """证据的「来源形态」，与 correctness（判断是什么）正交。
+
+    取值必须与后端 `enums/EvidenceType.java` 一致：它参与 dedupe_key 的计算，
+    改一个字母等于让历史证据全部换一个身份。
+    """
+
+    USER_EXPLANATION = "USER_EXPLANATION"
+    OBSERVATION = "OBSERVATION"
+    TEST_RESULT = "TEST_RESULT"
+    USER_CORRECTION = "USER_CORRECTION"
+    HIGHLIGHT_SIGNAL = "HIGHLIGHT_SIGNAL"
+
+
+class QuestionType(str, Enum):
+    SINGLE_CHOICE = "SINGLE_CHOICE"
+    TRUE_FALSE = "TRUE_FALSE"
+    SHORT_ANSWER = "SHORT_ANSWER"
+
+
+class VerificationAction(str, Enum):
+    """主动验证策略。只有 ASK_NOW 会在对话里插入 Test Card。"""
+
+    SKIP = "SKIP"
+    ASK_NOW = "ASK_NOW"
+    ASK_LATER = "ASK_LATER"
+
+
+class VerificationTrigger(str, Enum):
+    NEW_CONCEPT = "NEW_CONCEPT"
+    CONCEPT_CONFLICT = "CONCEPT_CONFLICT"
+    REPEATED_ERROR = "REPEATED_ERROR"
+    CONTRADICTORY_EVIDENCE = "CONTRADICTORY_EVIDENCE"
+    OVERCONFIDENCE = "OVERCONFIDENCE"
+    LONG_UNVERIFIED = "LONG_UNVERIFIED"
+
+
+class MemoryReconcileAction(str, Enum):
+    """Memory Reconciler 的三档决策（PRD §13）。"""
+
+    ADD = "ADD"
+    UPDATE = "UPDATE"
+    IGNORE = "IGNORE"
+
+
 # ===================== 请求 =====================
 
 
@@ -135,6 +183,117 @@ class ChatRequest(CamelModel):
     # 还没有归属。这是正常状态，不是数据缺失。
     session: SessionContext | None = None
     auth_token: str | None = None
+
+
+class AnalyzeRequest(CamelModel):
+    """Backend → Agent 的一次学习分析请求（`POST /agent/analyze`）。
+
+    与 ChatRequest 的区别：分析发生在回答**之后**，所以多带一条
+    `assistant_message`（用于判断这轮对话是否真的产生了学习信号），
+    同时带上本轮消息的 `message_id` —— 后端会把 Evidence 的来源指回这条消息。
+
+    Agent 只提出候选（evidence / understanding / memory / verification），
+    真正的写入由后端在事务里完成：Agent 不连数据库，也不拥有写入语义。
+    """
+
+    run_id: int
+    trace_id: str | None = None
+    user_id: int
+    conversation_id: int
+    learning_space_id: int
+    # 本轮用户消息的数据库 id。取不到（例如离线调用）时为 None，此时后端不会落 Evidence。
+    message_id: int | None = None
+    user_message: str
+    assistant_message: str | None = None
+    history: list[HistoryMessage] = Field(default_factory=list)
+    session: SessionContext | None = None
+    auth_token: str | None = None
+
+
+# ===================== 分析结果（Agent → Backend）=====================
+
+
+class EvidenceCandidate(CamelModel):
+    """一条候选证据。后端负责 dedupe（`dedupe_key` UNIQUE）与 append-only 写入。
+
+    `concept_id` 必须来自本轮检索到的 Concept；后端会再校验一次，
+    防止模型凭空编一个 id 把证据写到别的知识点上。
+    """
+
+    concept_id: int
+    evidence_type: EvidenceType = EvidenceType.OBSERVATION
+    observation: str
+    correctness: EvidenceCorrectness = EvidenceCorrectness.UNKNOWN
+    # 三个质量分都在 [0, 1]。模型偶尔会给出 1.2 或 -0.1，解析后统一裁剪而不是整份结果作废。
+    reasoning_quality: float | None = None
+    specificity: float | None = None
+    ai_confidence: float | None = None
+    need_follow_up: bool = False
+    # 只有 USER_EXPLANATION / USER_CORRECTION 才有意义：用户自己的原话。
+    user_explanation: str | None = None
+
+
+class UnderstandingProposal(CamelModel):
+    """对「当前理解」的增量提案。
+
+    这是**增量**，不是整份快照：Agent 只说自己新观察到了什么，
+    合并规则（去重、误区生命周期、状态派生）仍由后端
+    `UnderstandingService` 负责 —— 那里是唯一真相。
+    """
+
+    concept_id: int | None = None
+    known_parts: list[str] = Field(default_factory=list)
+    uncertain_parts: list[str] = Field(default_factory=list)
+    misconceptions: list[str] = Field(default_factory=list)
+    latest_user_explanation: str | None = None
+
+
+class MemoryCandidate(CamelModel):
+    """一条 Memory 候选。Agent 只能提出 CANDIDATE，不能直接 ACTIVE。
+
+    `action` 是 Reconciler 的建议，后端仍要按 scope + memory_key 查一次：
+    - ADD：没有同身份记忆时新增；已存在则忽略（不覆盖用户确认过的内容）
+    - UPDATE：只更新仍是 CANDIDATE 的那条；用户已确认的 ACTIVE 不碰
+    - IGNORE：不写
+    """
+
+    scope_type: MemoryScopeType = MemoryScopeType.CONCEPT
+    learning_space_id: int | None = None
+    concept_id: int | None = None
+    memory_type: MemoryType = MemoryType.LEARNING
+    memory_key: str | None = None
+    content: str
+    importance: float | None = None
+    action: MemoryReconcileAction = MemoryReconcileAction.ADD
+
+
+class VerificationDecision(CamelModel):
+    """要不要插入一次验证，以及插什么。
+
+    `action = SKIP` 时其余字段都可以为空；`ASK_NOW` 必须给出可作答的
+    `question_text`（后端在建 TestTask 前会再检查一次）。
+    """
+
+    action: VerificationAction = VerificationAction.SKIP
+    trigger: VerificationTrigger | None = None
+    concept_id: int | None = None
+    reason: str | None = None
+    question_type: QuestionType | None = None
+    question_text: str | None = None
+    correct_answer: str | None = None
+
+
+class AnalyzeResult(CamelModel):
+    """一次学习分析的完整结果。字段名与后端 `AnalyzeAgentResult` 对齐。"""
+
+    evidence_candidates: list[EvidenceCandidate] = Field(default_factory=list)
+    understanding_proposal: UnderstandingProposal | None = None
+    memory_candidates: list[MemoryCandidate] = Field(default_factory=list)
+    verification_decision: VerificationDecision = Field(default_factory=VerificationDecision)
+    # 分析器版本：进 Evidence.analyzer_version，用于回答「这条证据是哪版逻辑抽出来的」。
+    analyzer_version: str = "agent-v1"
+    # 命中的概念名称，与 chat 的 detectedConcepts 同义，只用于日志与排查。
+    detected_concepts: list[str] = Field(default_factory=list)
 
 
 # ===================== 领域只读模型 =====================
