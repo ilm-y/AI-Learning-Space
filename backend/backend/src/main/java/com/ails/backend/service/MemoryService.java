@@ -17,6 +17,7 @@ import com.ails.backend.mapper.MemorySourceMapper;
 import com.ails.backend.utils.Hashing;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,6 +58,7 @@ import java.util.Set;
  * （GLOBAL 对任意 Space 可见）。把 list 也改成可见性语义会让管理视图没法回答
  * 「这个空间到底挂了多少条记忆」。
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MemoryService {
@@ -186,7 +188,13 @@ public class MemoryService {
         existing.setContent(draft.content());
         existing.setImportance(draft.importance());
         // memoryKey / 作用域不跟着改：身份一变就是另一条记忆，而 identity 是检索可见性的依据。
-        requireUpdated(memoryMapper.updateById(existing), "记忆已被其他请求修改，请刷新后重试");
+        if (memoryMapper.updateById(existing) == 0) {
+            // 乐观锁版本号对不上：另一个请求（用户确认/归档，或并发的另一轮分析）先改完了。
+            // 这里必须「放弃」而不是抛异常 —— 本方法运行在分析事务里，抛出去会让整份
+            // 分析（证据、理解、验证）一起回滚，而丢失一条候选记忆远没有那么严重。
+            log.warn("跳过记忆更新：目标已被并发修改, memoryId={}", existing.getId());
+            return ReconcileOutcome.SKIPPED;
+        }
         attachSource(existing.getId(), sourceType, sourceId);
         return ReconcileOutcome.UPDATED;
     }

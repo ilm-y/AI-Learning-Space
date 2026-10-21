@@ -99,6 +99,20 @@ _PREFERENCE_MARKERS = (
     "不要用",
 )
 
+# AnalyzeResult 的每个字段都有默认值，所以「任意一个 JSON 对象」都能通过 pydantic
+# 校验并变成一份空分析。这在后端看来是「成功但无信号」，不会触发 rules-v1 回退，
+# 等于把一次格式漂移静默吞掉。模型输出必须至少命中一个顶层字段才算有效。
+_ANALYSIS_KEYS = (
+    "evidenceCandidates",
+    "evidence_candidates",
+    "understandingProposal",
+    "understanding_proposal",
+    "memoryCandidates",
+    "memory_candidates",
+    "verificationDecision",
+    "verification_decision",
+)
+
 
 class AnalysisError(RuntimeError):
     """分析失败（模型输出不可解析 / 不符合契约）。
@@ -125,7 +139,11 @@ class LearningAnalyzer:
             trace.record(TraceEventType.RUN_END, status="COMPLETED", reason="empty_message")
             return self._empty_result()
 
-        retriever = build_retriever(self._settings, request.auth_token)
+        # allow_degradation=False：分析结果会写进长期认知，不能拿 fixture 顶替真实检索。
+        # 后端不可用时这里抛 RetrievalError → HTTP 503，后端回退 rules-v1。
+        retriever = build_retriever(
+            self._settings, request.auth_token, allow_degradation=False
+        )
         try:
             concepts = await retriever.list_concepts(request.learning_space_id)
             detected = detect_concepts(request.user_message, request.history, concepts)
@@ -206,6 +224,13 @@ class LearningAnalyzer:
         ]
         text = await self._llm.complete(messages, temperature=0.1, max_tokens=self._settings.llm_max_tokens)
         data = _extract_json_object(text)
+        if not any(key in data for key in _ANALYSIS_KEYS):
+            # 外层多包一层（{"result": {...}}）或字段名拼错都会落到这里。
+            # 不能让它变成「空分析成功」—— 那在后端就是 COMPLETED + 零证据。
+            raise AnalysisError(
+                "模型输出没有任何分析字段（期望 evidenceCandidates / "
+                "understandingProposal / memoryCandidates / verificationDecision）"
+            )
         try:
             return AnalyzeResult.model_validate(data)
         except ValidationError as exc:

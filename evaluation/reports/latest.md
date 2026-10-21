@@ -1,7 +1,7 @@
 # Agent 回归评测报告
 
-- 生成时间：2026-10-21T21:01:21+08:00
-- 代码版本：`cdab3b6`
+- 生成时间：2026-10-21T21:17:23+08:00
+- 代码版本：`34b59b5`
 - 运行模式：`all`
 - 后端：`http://127.0.0.1:8080`
 - Agent：`http://127.0.0.1:8000`
@@ -10,10 +10,10 @@
 
 | 指标 | 值 |
 | --- | --- |
-| 用例 | 48 |
-| 通过 / 失败 / 跳过 | 48 / 0 / 0 |
+| 用例 | 49 |
+| 通过 / 失败 / 跳过 | 49 / 0 / 0 |
 | 用例通过率 | 100.0% |
-| 断言 | 193 / 193 通过（100.0%） |
+| 断言 | 194 / 194 通过（100.0%） |
 
 ## 分类
 
@@ -25,7 +25,7 @@
 | 理解演进 (`understanding_revision`) | 8 | 8 | 0 | 0 | 100.0% | 100.0% |
 | 记忆冲突收敛 (`memory_conflict`) | 7 | 7 | 0 | 0 | 100.0% | 100.0% |
 | 验证策略 (`verification`) | 7 | 7 | 0 | 0 | 100.0% | 100.0% |
-| 分析输出契约 (`analysis_contract`) | 6 | 6 | 0 | 0 | 100.0% | 100.0% |
+| 分析输出契约 (`analysis_contract`) | 7 | 7 | 0 | 0 | 100.0% | 100.0% |
 
 ## 失败用例
 
@@ -35,6 +35,7 @@
 - `contract-fenced-json` — 模型把 JSON 包在 ```json 围栏里时，仍能取出对象并解析
 - `contract-malformed-json` — 模型输出里没有 JSON 对象时，抛 AnalysisError，而不是静默返回空结果
 - `contract-invalid-enum` — 未知的 evidenceType 属于契约违约：整份结果作废，不能把半份写进库
+- `contract-nested-result` — 模型把结果多包一层（{"result": {...}}）时必须报错：AnalyzeResult 全字段有默认值，放行就变成「成功但零候选」
 - `contract-empty-input` — 空白消息直接返回空结果，不检索、不调用模型
 - `contract-no-concept` — 闲聊不命中任何 Concept 时返回空结果（没有可挂证据的对象）
 - `contract-unknown-field-and-clamp` — 未知字段被忽略；越界质量分被裁剪到 [0,1]；analyzerVersion 由分析器决定而不是模型决定

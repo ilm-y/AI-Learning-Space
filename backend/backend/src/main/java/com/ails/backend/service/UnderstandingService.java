@@ -58,6 +58,25 @@ public class UnderstandingService {
     }
 
     /**
+     * 变更前的快照字段。集中在一个地方，是为了让「这次到底有没有变」只有一个判断 ——
+     * 每个写入方法各抄一遍、各漏一个字段，就会出现内容完全相同却多出来的 Revision。
+     */
+    private record SnapshotView(String summary, String knownParts, String misconceptions,
+                                String uncertainParts, String latestUserExplanation,
+                                UnderstandingStatus status) {
+
+        static SnapshotView of(LearningUnderstanding understanding) {
+            return new SnapshotView(
+                    understanding.getSummary(),
+                    understanding.getKnownParts(),
+                    understanding.getMisconceptions(),
+                    understanding.getUncertainParts(),
+                    understanding.getLatestUserExplanation(),
+                    understanding.getStatus());
+        }
+    }
+
+    /**
      * 取用户对某概念的理解快照，不存在则建一条 UNKNOWN 的空快照。
      * <p>
      * 必须在写入 Evidence 之前调用 —— Evidence 要挂 understandingId。
@@ -134,12 +153,7 @@ public class UnderstandingService {
         LearningUnderstanding understanding = loadOrCreateLocked(userId, conceptId);
 
         // 变更前快照，用于判断是否真的发生了变化
-        String beforeSummary = understanding.getSummary();
-        String beforeKnown = understanding.getKnownParts();
-        String beforeMisconceptions = understanding.getMisconceptions();
-        String beforeUncertain = understanding.getUncertainParts();
-        String beforeExplanation = understanding.getLatestUserExplanation();
-        UnderstandingStatus beforeStatus = understanding.getStatus();
+        SnapshotView before = SnapshotView.of(understanding);
 
         List<String> known = new ArrayList<>(JsonUtil.toStringList(understanding.getKnownParts()));
         List<String> uncertain = new ArrayList<>(JsonUtil.toStringList(understanding.getUncertainParts()));
@@ -171,37 +185,9 @@ public class UnderstandingService {
         if (StringUtils.hasText(userExplanation)) {
             understanding.setLatestUserExplanation(userExplanation.trim());
         }
-        understanding.setStatus(resolveStatus(understanding, beforeStatus));
+        understanding.setStatus(resolveStatus(understanding, before.status()));
 
-        boolean changed = !Objects.equals(beforeSummary, understanding.getSummary())
-                || !Objects.equals(beforeKnown, understanding.getKnownParts())
-                || !Objects.equals(beforeMisconceptions, understanding.getMisconceptions())
-                || !Objects.equals(beforeUncertain, understanding.getUncertainParts())
-                || !Objects.equals(beforeExplanation, understanding.getLatestUserExplanation())
-                || beforeStatus != understanding.getStatus();
-
-        if (!changed) {
-            return new ApplyResult(understanding, null);
-        }
-
-        understandingMapper.updateById(understanding);
-
-        UnderstandingRevision revision = new UnderstandingRevision();
-        revision.setUnderstandingId(understanding.getId());
-        revision.setRevisionNo(nextRevisionNo(understanding.getId()));
-        revision.setSummary(understanding.getSummary());
-        revision.setKnownParts(understanding.getKnownParts());
-        revision.setMisconceptions(understanding.getMisconceptions());
-        revision.setUncertainParts(understanding.getUncertainParts());
-        revision.setUserExplanation(understanding.getLatestUserExplanation());
-        revision.setStatus(understanding.getStatus());
-        revision.setTriggerEvidenceId(evidence.getId());
-        revisionMapper.insert(revision);
-
-        understanding.setCurrentRevisionId(revision.getId());
-        understandingMapper.updateById(understanding);
-
-        return new ApplyResult(understanding, revision);
+        return persistIfChanged(understanding, before, evidence.getId());
     }
 
     /**
@@ -212,42 +198,44 @@ public class UnderstandingService {
      *   <li>{@code apply} 处理<b>一条证据</b>：把正确/错误观察映射成 known / misconception，
      *       误区走 {@link MisconceptionLifecycle} 的完整迁移；</li>
      *   <li>{@code applyProposal} 处理<b>Agent 的合并建议</b>：known / uncertain 直接去重合并，
-     *       新增误区按「一次错误证据」处理（ACTIVE），但不负责解除 —— 解除仍必须由足够的
-     *       反向正确证据驱动。</li>
+     *       新增误区按「一次错误证据」处理（ACTIVE）；<b>解除</b>仍必须由足够的反向正确证据驱动，
+     *       所以它同时接收本轮新增的证据，在其中推进误区生命周期。</li>
      * </ul>
      * 两条路径都遵守同一条铁律：<b>只有内容真的变化才写 Revision</b>。
      * 否则 Agent 重放同一份提案会不断产生内容相同的版本，Revision 历史就失去意义。
      *
-     * @param triggerEvidenceId 触发本次变化的 Evidence，可为 null（纯提案变化）
+     * @param evidences          本轮真正新建的证据（可为空）。用于推进误区：INCORRECT 新建
+     *                           ACTIVE、高质量 CORRECT 累加反向确认；与提案合并只产生
+     *                           <b>一条</b> Revision，避免同一次分析把状态写两遍
+     * @param triggerEvidenceId  触发本次变化的 Evidence，可为 null（纯提案变化）
      * @return 更新后的快照与本次 Revision；内容无变化时 revision 为 null；
      *         proposal 为空时返回 null（连快照都不创建）
      */
     @Transactional
-    public ApplyResult applyProposal(Long userId, Long conceptId,
-                                     UnderstandingProposalDraft proposal, Long triggerEvidenceId) {
+    public ApplyResult applyProposal(Long userId, Long conceptId, UnderstandingProposalDraft proposal,
+                                     List<LearningEvidence> evidences, Long triggerEvidenceId) {
         if (proposal == null || proposal.isEmpty()) {
             return null;
         }
         LearningUnderstanding understanding = loadOrCreateLocked(userId, conceptId);
 
-        String beforeSummary = understanding.getSummary();
-        String beforeKnown = understanding.getKnownParts();
-        String beforeMisconceptions = understanding.getMisconceptions();
-        String beforeUncertain = understanding.getUncertainParts();
-        String beforeExplanation = understanding.getLatestUserExplanation();
-        UnderstandingStatus beforeStatus = understanding.getStatus();
+        SnapshotView before = SnapshotView.of(understanding);
 
         List<String> known = new ArrayList<>(JsonUtil.toStringList(understanding.getKnownParts()));
         List<String> uncertain = new ArrayList<>(JsonUtil.toStringList(understanding.getUncertainParts()));
         proposal.knownParts().forEach(item -> addDistinct(known, item));
         proposal.uncertainParts().forEach(item -> addDistinct(uncertain, item));
 
-        // 误区不是只增不减的列表：这里只负责「新增 / 重新激活」，
-        // 解除必须由 apply() 里足够数量的反向证据完成。
         List<Misconception> misconceptions =
                 new ArrayList<>(MisconceptionLifecycle.parse(understanding.getMisconceptions()));
+        // 先让本轮证据推进已有误区（含解除），再把提案里的新误区并进来。
+        for (LearningEvidence evidence : evidences) {
+            misconceptions = MisconceptionLifecycle.evolve(misconceptions, evidence);
+        }
         LocalDateTime at = LocalDateTime.now();
-        proposal.misconceptions().forEach(text -> applyProposedMisconception(misconceptions, text, at));
+        for (String text : proposal.misconceptions()) {
+            applyProposedMisconception(misconceptions, text, at);
+        }
 
         understanding.setKnownParts(JsonUtil.fromStringList(known));
         understanding.setUncertainParts(JsonUtil.fromStringList(uncertain));
@@ -256,14 +244,58 @@ public class UnderstandingService {
         if (StringUtils.hasText(proposal.latestUserExplanation())) {
             understanding.setLatestUserExplanation(proposal.latestUserExplanation());
         }
-        understanding.setStatus(resolveStatus(understanding, beforeStatus));
+        understanding.setStatus(resolveStatus(understanding, before.status()));
 
-        boolean changed = !Objects.equals(beforeSummary, understanding.getSummary())
-                || !Objects.equals(beforeKnown, understanding.getKnownParts())
-                || !Objects.equals(beforeMisconceptions, understanding.getMisconceptions())
-                || !Objects.equals(beforeUncertain, understanding.getUncertainParts())
-                || !Objects.equals(beforeExplanation, understanding.getLatestUserExplanation())
-                || beforeStatus != understanding.getStatus();
+        return persistIfChanged(understanding, before, triggerEvidenceId);
+    }
+
+    /**
+     * 没有可合并的提案时，只让本轮证据推进误区生命周期 —— <b>不改动 knownParts</b>。
+     * <p>
+     * 存在的理由：Agent 路径不调用 {@link #apply}（理解如何演进由 proposal 决定），
+     * 但误区不能因此失去生命周期。若少了这一步，一条 INCORRECT 证据只会让状态停在
+     * EXPOSED，已有的 ACTIVE 误区也永远不会被后续正确证据解除。
+     *
+     * @param evidences 只传本次真正新建的证据；命中 dedupe_key 的旧证据第一次写入时已经推进过
+     */
+    @Transactional
+    public ApplyResult evolveMisconceptions(Long userId, Long conceptId,
+                                            List<LearningEvidence> evidences, Long triggerEvidenceId) {
+        if (evidences == null || evidences.isEmpty()) {
+            return null;
+        }
+        LearningUnderstanding understanding = loadOrCreateLocked(userId, conceptId);
+        SnapshotView before = SnapshotView.of(understanding);
+
+        List<Misconception> misconceptions =
+                MisconceptionLifecycle.parse(understanding.getMisconceptions());
+        for (LearningEvidence evidence : evidences) {
+            misconceptions = MisconceptionLifecycle.evolve(misconceptions, evidence);
+        }
+        understanding.setMisconceptions(MisconceptionLifecycle.serialize(misconceptions));
+        understanding.setSummary(buildSummary(
+                JsonUtil.toStringList(understanding.getKnownParts()), misconceptions,
+                JsonUtil.toStringList(understanding.getUncertainParts())));
+        understanding.setStatus(resolveStatus(understanding, before.status()));
+
+        return persistIfChanged(understanding, before, triggerEvidenceId);
+    }
+
+    /**
+     * 快照有实际变化才落库并写 Revision，否则原样返回。
+     * <p>
+     * 三条写入路径（证据映射 / 提案合并 / 误区演进）共用这一处判断：
+     * 同内容重放不产生新版本，是 Revision 历史可读的前提。
+     */
+    private ApplyResult persistIfChanged(LearningUnderstanding understanding,
+                                         SnapshotView before, Long triggerEvidenceId) {
+        boolean changed = !Objects.equals(before.summary(), understanding.getSummary())
+                || !Objects.equals(before.knownParts(), understanding.getKnownParts())
+                || !Objects.equals(before.misconceptions(), understanding.getMisconceptions())
+                || !Objects.equals(before.uncertainParts(), understanding.getUncertainParts())
+                || !Objects.equals(before.latestUserExplanation(),
+                        understanding.getLatestUserExplanation())
+                || before.status() != understanding.getStatus();
         if (!changed) {
             return new ApplyResult(understanding, null);
         }

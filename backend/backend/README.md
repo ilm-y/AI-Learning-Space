@@ -721,7 +721,7 @@ Agent 日志不在默认的 `/tmp/agent.log` 时，用 `AGENT_LOG=/path/to/agent
 ### 测试
 
 ```bash
-./mvnw test                                    # 54 条执行 + 1 条跳过，不需要 MySQL
+./mvnw test                                    # 58 条执行 + 1 条跳过，不需要 MySQL
 ./mvnw test -Dtest=MisconceptionLifecycleTest  # 单跑某个纯函数测试类
 ```
 
@@ -735,6 +735,7 @@ Agent 日志不在默认的 `/tmp/agent.log` 时，用 `AGENT_LOG=/path/to/agent
 | `HttpPythonAgentGatewayTest`           | Chat SSE 事件翻译与失败映射，用 JDK 自带的 `HttpServer` 起假 Agent   |
 | `HttpPythonAgentAnalysisGatewayTest`   | Analyze 请求/响应契约、超时与错误映射                                |
 | `TurnAnalysisServiceTest`              | Agent 失败时退回 `rules-v1`、`agent_run` 终态收敛                    |
+| `AgentAnalysisWriteServiceTest`        | 无提案时保留 `userExplanation`、有提案时不再重复演进误区、纯证据也推进误区 |
 | `JwtAuthenticationFilterTest`          | ASYNC 分发仍解析 JWT（防 SSE 流被安全链硬断，见 `evaluation/BC-003`） |
 
 `BackendApplicationTests` 是脚手架自带的 `@SpringBootTest` 上下文加载冒烟测试，
@@ -755,7 +756,7 @@ Revision 历史、状态投影与推荐，以及 `Postman → 后端 → Python 
 - **分析链路**：SSE 关闭后 `TurnAnalysisService` → `/agent/analyze` →
   `AgentAnalysisWriteService`（事务），失败回退 `rules-v1`；
 - **验收**：`scripts/regress-closed-loop.sh`（20 项断言）与 `evaluation/`
-  （39 offline + 9 live，覆盖六类回归与 3 条 Bad Case）。
+  （40 offline + 9 live，覆盖六类回归与 3 条 Bad Case）。
 
 ### 待接入
 
@@ -775,6 +776,8 @@ Revision 历史、状态投影与推荐，以及 `Postman → 后端 → Python 
 - **`learning_state` 的复习间隔与优先级是硬编码的状态映射**，不是调度算法。
 - **误区的解除规则是「两条独立正确证据」，而且不区分反驳的是哪一条误区**。规则版分析器只能给出整条证据的 `correctness`，无法指出它针对的是哪个误区，所以对该 Concept 下所有未解除的误区一视同仁地计一次确认。接入 Agent 后由 Agent 指明目标误区，并把「两次确认」升级成更细的规则 —— 改 `MisconceptionLifecycle` 一个类即可，数据模型与已有历史都不用动。
 - **`misconceptions` 的 JSON 结构在本次修改中变了**（字符串数组 → 对象数组）。旧库里的行无法被新代码解析，需要按第九节重建；这是开发期的一次性动作，不涉及线上数据。
+- **Agent 返回的 `conceptId` 按「当前学习空间」校验，而不是「本轮检测到的概念」**。Agent 侧已经收敛到检测结果，但那是另一个进程的保证；后端只校验自己必须守住的边界（不能写到别的空间）。再猜一次概念识别结果反而会把两层的判断绑死 —— 换概念识别实现时后端不用跟着改。
+- **分析与 chat 共用线程池**。analyze 在 SSE 关闭后提交到 `chat-stream-*` 池里同步执行；突发分析会挤占回答线程。异步化（见上表）会把两者拆开，`agent_run` 状态机不受影响。
 
 这些都写在对应类的 Javadoc 里，不会让人误以为它们已经是最终实现。
 

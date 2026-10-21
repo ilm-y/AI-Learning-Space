@@ -220,6 +220,30 @@ async def test_prose_instead_of_json_fails_loudly(settings):
         await runtime.analyze(make_analyze_request("TLB 是什么？"))
 
 
+async def test_json_without_analysis_fields_fails_loudly(settings):
+    """任意 JSON 对象都能通过 pydantic 默认值校验，所以必须显式检查字段。
+
+    外层多包一层（`{"result": {...}}`）是模型最常见的漂移方式；如果这里放行，
+    后端收到的是「成功但零候选」，不会退回 rules-v1，问题就被静默吞掉了。
+    """
+    payload = {"result": {"evidenceCandidates": [{"conceptId": 10}]}}
+    runtime = AgentRuntime(settings, _JsonLLM(payload))
+
+    with pytest.raises(AnalysisError, match="没有任何分析字段"):
+        await runtime.analyze(make_analyze_request("TLB 是什么？"))
+
+
+async def test_analyze_never_falls_back_to_fixture(settings):
+    """分析结果会写进长期认知，auto 模式没有 token 时必须报错，不能用样例数据顶替。"""
+    from app.retriever.base import RetrievalError
+
+    auto = settings.model_copy(update={"retriever_mode": "auto"})
+    runtime = mock_runtime(auto)
+
+    with pytest.raises(RetrievalError, match="authToken"):
+        await runtime.analyze(make_analyze_request("TLB 是什么？"))
+
+
 async def test_no_concept_skips_the_model_entirely(settings):
     llm = _JsonLLM("should not be called")
     runtime = AgentRuntime(settings, llm)

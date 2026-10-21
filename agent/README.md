@@ -195,7 +195,7 @@ curl -s -X POST http://127.0.0.1:8000/agent/context/preview \
 ### 测试
 
 ```bash
-python -m pytest -q          # 42 个用例，0.6 秒，不需要数据库与网络
+python -m pytest -q          # 44 个用例，0.6 秒，不需要数据库与网络
 ```
 
 ---
@@ -240,7 +240,7 @@ agent/
 │   └── tutor/tutor.py                ★ Tutor：守住教学契约与流式链路
 │
 ├── fixtures/demo_space.json          样例认知数据（README 里那个 TLB 场景）
-├── tests/                            42 个用例：概念识别 / 上下文组装 / 分析器 / 端到端
+├── tests/                            44 个用例：概念识别 / 上下文组装 / 分析器 / 端到端
 ├── docs/pipeline.md                  各层职责与数据契约
 ├── docs/progress.md                  进度、边界与下一步
 ├── requirements.txt / requirements-dev.txt
@@ -421,13 +421,19 @@ error   { runId, code, message }     code: 500 内部错误 / 502 模型上游�
 - **`conceptId` 必须来自本轮检索到的 Concept。** 模型给出不存在的 id 时，分析器会
   丢弃该条候选或回退到主概念 —— 宁可少写，也不把证据挂到别的知识点上；
 - **`correctness = UNKNOWN` 不等于「没有学习信号」**：只要消息提到了已注册的
-  Concept，就会产生一条 `OBSERVATION`，后端的 `markExposed` 据此把状态从
-  `UNKNOWN` 推进到 `EXPOSED`（见 `evaluation/bad_cases/BC-001-*.md`）；
+  Concept，就会产生一条 `OBSERVATION`，后端据此把状态从 `UNKNOWN` 推进到
+  `EXPOSED`（见 `evaluation/bad_cases/BC-001-*.md`）；
 - **`verificationDecision.action`** 三选一：`ASK_NOW` 必须带 `questionText`；
   `ASK_LATER` 只记录、不打断；`SKIP` 表示这一轮不需要验证；
 - 越界分数会被裁剪到 `[0, 1]`，未知字段被忽略（`extra="ignore"`）；但**枚举值不认识、
   结构不符合契约**时整份结果作废：抛 `AnalysisError` → HTTP 502，后端回退 `rules-v1`。
   刻意不把坏输出当成「这一轮没有学习信号」—— 那会变成一次没有任何记录的静默降级；
+- **JSON 里至少要有一个分析字段。** `AnalyzeResult` 每个字段都有默认值，任意 JSON
+  对象都能通过校验；所以模型多包一层（`{"result": {...}}`）或字段名拼错时，
+  分析器会显式报错，而不是返回一份「成功但零候选」；
+- **analyze 不降级检索。** 它调用 `build_retriever(..., allow_degradation=False)`：
+  `auto` 模式缺 token 或后端不可用时直接抛 `RetrievalError`。分析结果会写进真实用户的
+  长期认知，拿 Fixture 顶替比失败更糟 —— 失败还有 `rules-v1` 兜底，假数据没有；
 - `llm_provider=mock` 走**启发式分析**（不调用模型），用于离线测试与本地联调；
   其他 provider 走结构化 JSON 输出，解析失败时同样有明确的错误码。
 
@@ -476,7 +482,7 @@ error   { runId, code, message }     code: 500 内部错误 / 502 模型上游�
   （含 Session 区块）、Tutor，经 `POST /agent/chat` 被后端真实调用；
 - **分析**：LearningAnalyzer 经 `POST /agent/analyze` 产出 Evidence / Proposal /
   Memory / Verification 候选，后端 `AgentAnalysisWriteService` 在事务里落库；
-- 42 个不依赖数据库与网络的测试；端到端验收见 `scripts/regress-closed-loop.sh`
+- 44 个不依赖数据库与网络的测试；端到端验收见 `scripts/regress-closed-loop.sh`
   与 `evaluation/`。
 
 **明确没做**：

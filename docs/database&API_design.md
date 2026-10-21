@@ -1489,7 +1489,9 @@ Learning State
 > `AnalyzeResult`、后端对应 `AnalyzeAgentResult`
 > （`evidenceCandidates / understandingProposal / memoryCandidates /
 > verificationDecision / analyzerVersion`）；后端在 `AgentAnalysisWriteService`
-> 里完成去重与写入，失败时退回 `rules-v1`。
+> 里完成去重与写入，失败时退回 `rules-v1`。Analyze 的检索**不允许降级到 Fixture**
+> （`allow_degradation=False`），顶层没有任何分析字段的 JSON 也会被判为失败 ——
+> 两者都是为了不让样例数据或空结果静默写进用户的理解。
 
 ## Agent API 1：Chat
 

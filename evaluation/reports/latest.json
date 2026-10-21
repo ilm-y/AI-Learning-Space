@@ -1,19 +1,19 @@
 {
-  "generatedAt": "2026-10-21T21:01:21+08:00",
-  "commit": "cdab3b6",
+  "generatedAt": "2026-10-21T21:17:23+08:00",
+  "commit": "34b59b5",
   "mode": "all",
   "environment": {
     "backend": "http://127.0.0.1:8080",
     "agent": "http://127.0.0.1:8000"
   },
   "summary": {
-    "total": 48,
-    "passed": 48,
+    "total": 49,
+    "passed": 49,
     "failed": 0,
     "skipped": 0,
     "passRate": 1.0,
-    "assertionCount": 193,
-    "assertionPassed": 193,
+    "assertionCount": 194,
+    "assertionPassed": 194,
     "assertionPassRate": 1.0,
     "byCategory": {
       "cross_session": {
@@ -72,8 +72,8 @@
       },
       "analysis_contract": {
         "label": "分析输出契约",
-        "total": 6,
-        "passed": 6,
+        "total": 7,
+        "passed": 7,
         "failed": 0,
         "skipped": 0,
         "passRate": 1.0,
@@ -82,8 +82,8 @@
     },
     "byMode": {
       "offline": {
-        "total": 39,
-        "passed": 39,
+        "total": 40,
+        "passed": 40,
         "failed": 0,
         "skipped": 0,
         "passRate": 1.0
@@ -104,7 +104,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型把 JSON 包在 ```json 围栏里时，仍能取出对象并解析",
-      "durationMs": 4,
+      "durationMs": 6,
       "checks": [
         {
           "path": "evidence.count",
@@ -251,13 +251,33 @@
       "mode": "offline",
       "status": "passed",
       "description": "未知的 evidenceType 属于契约违约：整份结果作废，不能把半份写进库",
-      "durationMs": 2,
+      "durationMs": 3,
       "checks": [
         {
           "path": "error",
           "op": "raises",
           "expected": "AnalysisError(不符合契约)",
           "actual": "AnalysisError: 分析结果不符合契约：1 validation error for AnalyzeResult evidenceCandidates.0.evidenceType   Input should be 'USER_EXPLANATION', 'OBSERVATION', 'TEST_RESUL…",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "error": null,
+      "detail": {}
+    },
+    {
+      "id": "contract-nested-result",
+      "category": "analysis_contract",
+      "mode": "offline",
+      "status": "passed",
+      "description": "模型把结果多包一层（{\"result\": {...}}）时必须报错：AnalyzeResult 全字段有默认值，放行就变成「成功但零候选」",
+      "durationMs": 2,
+      "checks": [
+        {
+          "path": "error",
+          "op": "raises",
+          "expected": "AnalysisError(没有任何分析字段)",
+          "actual": "AnalysisError: 模型输出没有任何分析字段（期望 evidenceCandidates / understandingProposal / memoryCandidates / verificationDecision）",
           "passed": true,
           "message": ""
         }
@@ -920,7 +940,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "用户历史没有线索时才回看 AI 历史：虚拟内存仍能被识别",
-      "durationMs": 2,
+      "durationMs": 1,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -1035,7 +1055,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "同一结果里的重复候选（概念+类型+观察都相同）只保留一条",
-      "durationMs": 2,
+      "durationMs": 1,
       "checks": [
         {
           "path": "evidence.count",
@@ -1131,7 +1151,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "文本相同但证据类型不同，是两条不同的观察，不能合并",
-      "durationMs": 2,
+      "durationMs": 1,
       "checks": [
         {
           "path": "evidence.count",
@@ -1343,7 +1363,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "整份结果最多 6 条证据：三个概念各 3 条，最后只留下 6 条",
-      "durationMs": 1,
+      "durationMs": 2,
       "checks": [
         {
           "path": "evidence.count",
@@ -1716,7 +1736,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "ADD 语义原样保留，由后端判断同身份记忆是否已存在",
-      "durationMs": 2,
+      "durationMs": 1,
       "checks": [
         {
           "path": "memory.count",
@@ -1824,7 +1844,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "UPDATE 语义原样保留；后端只会更新仍是 CANDIDATE 的那条",
-      "durationMs": 2,
+      "durationMs": 1,
       "checks": [
         {
           "path": "memory.count",
@@ -2112,7 +2132,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "importance 越界被裁剪到 [0,1]，避免影响后端排序与阈值判断",
-      "durationMs": 1,
+      "durationMs": 2,
       "checks": [
         {
           "path": "memory.count",
@@ -2218,7 +2238,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "GLOBAL 记忆必须清空 spaceId / conceptId，否则 scope_key 会出现两种真相",
-      "durationMs": 1,
+      "durationMs": 2,
       "checks": [
         {
           "path": "memory.count",
@@ -2686,7 +2706,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "未声明 scope 时默认 CONCEPT；未给 conceptId 时回落到主概念",
-      "durationMs": 2,
+      "durationMs": 1,
       "checks": [
         {
           "path": "memory.count",
@@ -2914,7 +2934,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "理解提案是增量：known / uncertain / explanation 原样进入候选，交给后端合并",
-      "durationMs": 2,
+      "durationMs": 1,
       "checks": [
         {
           "path": "proposal.present",
@@ -3026,7 +3046,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "空提案（全是空列表 / 空白文本）不产生 Revision，也不能制造一次假的理解变化",
-      "durationMs": 1,
+      "durationMs": 2,
       "checks": [
         {
           "path": "proposal.present",
@@ -3094,7 +3114,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "误区作为提案的一部分进入候选；是否新增 / 解除由后端生命周期决定",
-      "durationMs": 1,
+      "durationMs": 2,
       "checks": [
         {
           "path": "proposal.present",
@@ -4045,7 +4065,7 @@
       "mode": "live",
       "status": "passed",
       "description": "对话 A 里写下的自述，会进入对话 B 的 Agent 上下文（跨会话理解检索）",
-      "durationMs": 1060,
+      "durationMs": 2170,
       "checks": [
         {
           "path": "step1/sendMessage: data.started",
@@ -4067,7 +4087,7 @@
           "path": "step1/sendMessage: data.sessionId",
           "op": "truthy",
           "expected": null,
-          "actual": 29,
+          "actual": 34,
           "passed": true,
           "message": ""
         },
@@ -4166,10 +4186,10 @@
                 "ended": true,
                 "started": true,
                 "error": null,
-                "assistantMessageId": 88,
-                "conversationId": 46,
-                "userMessageId": 87,
-                "sessionId": 29
+                "assistantMessageId": 100,
+                "conversationId": 53,
+                "userMessageId": 99,
+                "sessionId": 34
               }
             }
           },
@@ -4179,14 +4199,14 @@
             "data": {
               "httpStatus": 200,
               "data": {
-                "id": 16,
-                "messageId": 87,
+                "id": 19,
+                "messageId": 99,
                 "markType": "MY_UNDERSTANDING",
                 "selectedText": "我理解 TLB 就是 Page Table 的缓存",
                 "startOffset": 0,
                 "endOffset": 0,
                 "note": "自己琢磨出来的",
-                "createdAt": "2026-10-21T21:01:22.6656925"
+                "createdAt": "2026-10-21T21:17:25.6370033"
               }
             }
           },
@@ -4196,8 +4216,8 @@
             "data": {
               "httpStatus": 200,
               "data": {
-                "id": 39,
-                "conceptId": 51,
+                "id": 45,
+                "conceptId": 60,
                 "conceptName": "TLB",
                 "summary": "已理解：我理解 TLB 就是 Page Table 的缓存",
                 "knownParts": [
@@ -4207,8 +4227,8 @@
                 "uncertainParts": [],
                 "latestUserExplanation": "我理解 TLB 就是 Page Table 的缓存",
                 "status": "PARTIAL",
-                "currentRevisionId": 56,
-                "updatedAt": "2026-10-21T21:01:23"
+                "currentRevisionId": 64,
+                "updatedAt": "2026-10-21T21:17:26"
               },
               "timedOut": false
             }
@@ -4232,7 +4252,7 @@
                 ],
                 "items": [
                   {
-                    "id": 56,
+                    "id": 64,
                     "revisionNo": 1,
                     "summary": "已理解：我理解 TLB 就是 Page Table 的缓存",
                     "knownParts": [
@@ -4242,8 +4262,8 @@
                     "uncertainParts": [],
                     "userExplanation": "我理解 TLB 就是 Page Table 的缓存",
                     "status": "PARTIAL",
-                    "triggerEvidenceId": 83,
-                    "createdAt": "2026-10-21T21:01:23"
+                    "triggerEvidenceId": 94,
+                    "createdAt": "2026-10-21T21:17:26"
                   }
                 ]
               }
@@ -4253,7 +4273,7 @@
             "index": 5,
             "action": "contextPreview",
             "data": {
-              "truncated": "{\"httpStatus\": 200, \"data\": {\"sections\": [\"user_input\", \"understanding:51\"], \"hasUnderstanding\": true, \"hasSession\": false, \"understandingPreview\": \"### TLB ｜ 状态：部分理解\\n- 当前理解：已理解：我理解 TLB 就是 Page Table 的缓存\\n- 已经理解：我理解 TLB 就是 Page Table 的缓存\\n- 用户自己的说法：「我理解 TLB 就是 Page Table 的缓存」\", \"systemInstruction\": \"你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\\n\\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\\n\\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\\n- 他仍然存在的误区：要针对性地纠正 —— 指出他的推理在哪一步分叉、为什么会这样想、正确的理解在那一步是什么。不要直接说「你错了」，也不要只是把正确答案摆出来。\\n- 他还不确定的部分：这是本次最该补的，优先处理。\\n- 他曾经自己给出的解释：可以引用他的话继续往下推，这比重新讲一遍有效得多。\\n\\n关于这份记录，有三条硬性规则：\\n\\n1. 不要复述它的结构，也不要说「根据我的记录」「系统显示你已经理解」之类的话。它只是你的参考，不是要念给用户听的内容。\\n2. 不要向用户输出任何内部分析信号 —— 包括正确性判断、置信度、推理质量、\\n   证据编号，以及 Evidence / Understanding / Revision 这类内部术语。这些是系统内部用的。\\n3. 用户本轮…"
+              "truncated": "{\"httpStatus\": 200, \"data\": {\"sections\": [\"user_input\", \"understanding:60\"], \"hasUnderstanding\": true, \"hasSession\": false, \"understandingPreview\": \"### TLB ｜ 状态：部分理解\\n- 当前理解：已理解：我理解 TLB 就是 Page Table 的缓存\\n- 已经理解：我理解 TLB 就是 Page Table 的缓存\\n- 用户自己的说法：「我理解 TLB 就是 Page Table 的缓存」\", \"systemInstruction\": \"你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\\n\\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\\n\\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\\n- 他仍然存在的误区：要针对性地纠正 —— 指出他的推理在哪一步分叉、为什么会这样想、正确的理解在那一步是什么。不要直接说「你错了」，也不要只是把正确答案摆出来。\\n- 他还不确定的部分：这是本次最该补的，优先处理。\\n- 他曾经自己给出的解释：可以引用他的话继续往下推，这比重新讲一遍有效得多。\\n\\n关于这份记录，有三条硬性规则：\\n\\n1. 不要复述它的结构，也不要说「根据我的记录」「系统显示你已经理解」之类的话。它只是你的参考，不是要念给用户听的内容。\\n2. 不要向用户输出任何内部分析信号 —— 包括正确性判断、置信度、推理质量、\\n   证据编号，以及 Evidence / Understanding / Revision 这类内部术语。这些是系统内部用的。\\n3. 用户本轮…"
             }
           }
         ]
@@ -4265,21 +4285,21 @@
       "mode": "live",
       "status": "passed",
       "description": "同一个学习活动下的第二个对话应 ATTACH 到已有 Session，而不是新建一个",
-      "durationMs": 962,
+      "durationMs": 909,
       "checks": [
         {
           "path": "step1/sendMessage: data.sessionId",
           "op": "truthy",
           "expected": null,
-          "actual": 30,
+          "actual": 35,
           "passed": true,
           "message": ""
         },
         {
           "path": "step2/sendMessage: data.sessionId",
           "op": "eq",
-          "expected": 30,
-          "actual": 30,
+          "expected": 35,
+          "actual": 35,
           "passed": true,
           "message": ""
         }
@@ -4311,10 +4331,10 @@
                 "ended": true,
                 "started": true,
                 "error": null,
-                "assistantMessageId": 90,
-                "conversationId": 48,
-                "userMessageId": 89,
-                "sessionId": 30
+                "assistantMessageId": 102,
+                "conversationId": 55,
+                "userMessageId": 101,
+                "sessionId": 35
               }
             }
           },
@@ -4344,10 +4364,10 @@
                 "ended": true,
                 "started": true,
                 "error": null,
-                "assistantMessageId": 92,
-                "conversationId": 49,
-                "userMessageId": 91,
-                "sessionId": 30
+                "assistantMessageId": 104,
+                "conversationId": 56,
+                "userMessageId": 103,
+                "sessionId": 35
               }
             }
           }
@@ -4360,7 +4380,7 @@
       "mode": "live",
       "status": "passed",
       "description": "同作用域同身份（缺省 key = content 哈希）重复创建返回 409；显式给不同 key 才能并存",
-      "durationMs": 494,
+      "durationMs": 479,
       "checks": [
         {
           "path": "step1/createMemory: code",
@@ -4457,7 +4477,7 @@
               "httpStatus": 200,
               "code": 0,
               "data": {
-                "id": 69,
+                "id": 80,
                 "scopeType": "GLOBAL",
                 "learningSpaceId": null,
                 "conceptId": null,
@@ -4466,8 +4486,8 @@
                 "content": "用户喜欢从硬件实际执行路径理解操作系统",
                 "status": "ACTIVE",
                 "importance": null,
-                "createdAt": "2026-10-21T21:01:24.2671288",
-                "updatedAt": "2026-10-21T21:01:24.2671288"
+                "createdAt": "2026-10-21T21:17:27.2213308",
+                "updatedAt": "2026-10-21T21:17:27.2213308"
               },
               "message": "已记住"
             }
@@ -4489,7 +4509,7 @@
               "httpStatus": 200,
               "code": 0,
               "data": {
-                "id": 70,
+                "id": 81,
                 "scopeType": "GLOBAL",
                 "learningSpaceId": null,
                 "conceptId": null,
@@ -4498,8 +4518,8 @@
                 "content": "用户喜欢从硬件实际执行路径理解操作系统",
                 "status": "ACTIVE",
                 "importance": null,
-                "createdAt": "2026-10-21T21:01:24.299866",
-                "updatedAt": "2026-10-21T21:01:24.299866"
+                "createdAt": "2026-10-21T21:17:27.2765517",
+                "updatedAt": "2026-10-21T21:17:27.2765517"
               },
               "message": "已记住"
             }
@@ -4511,7 +4531,7 @@
               "httpStatus": 200,
               "code": 0,
               "data": {
-                "id": 71,
+                "id": 82,
                 "scopeType": "GLOBAL",
                 "learningSpaceId": null,
                 "conceptId": null,
@@ -4520,8 +4540,8 @@
                 "content": "用户喜欢从硬件实际执行路径理解操作系统",
                 "status": "ACTIVE",
                 "importance": null,
-                "createdAt": "2026-10-21T21:01:24.3473123",
-                "updatedAt": "2026-10-21T21:01:24.3473123"
+                "createdAt": "2026-10-21T21:17:27.3195842",
+                "updatedAt": "2026-10-21T21:17:27.3195842"
               },
               "message": "已记住"
             }
@@ -4530,7 +4550,7 @@
             "index": 5,
             "action": "searchMemories",
             "data": {
-              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 3, \"scopes\": [\"GLOBAL\", \"GLOBAL\", \"GLOBAL\"], \"hasGlobal\": true, \"hasSpace\": false, \"hasConcept\": false, \"keys\": [\"auto:7ba7236cdf28c80d966c4965cb590578\", \"eval-explicit-1\", \"eval-explicit-2\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户喜欢从硬件实际执行路径理解操作系统\", \"用户喜欢从硬件实际执行路径理解操作系统\", \"用户喜欢从硬件实际执行路径理解操作系统\"], \"items\": [{\"id\": 69, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:7ba7236cdf28c80d966c4965cb590578\", \"content\": \"用户喜欢从硬件实际执行路径理解操作系统\", \"status\": \"ACTIVE\", \"importance\": null, \"createdAt\": \"2026-10-21T21:01:24\", \"updatedAt\": \"2026-10-21T21:01:24\"}, {\"id\": 70, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"eval-…"
+              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 3, \"scopes\": [\"GLOBAL\", \"GLOBAL\", \"GLOBAL\"], \"hasGlobal\": true, \"hasSpace\": false, \"hasConcept\": false, \"keys\": [\"auto:7ba7236cdf28c80d966c4965cb590578\", \"eval-explicit-1\", \"eval-explicit-2\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户喜欢从硬件实际执行路径理解操作系统\", \"用户喜欢从硬件实际执行路径理解操作系统\", \"用户喜欢从硬件实际执行路径理解操作系统\"], \"items\": [{\"id\": 80, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:7ba7236cdf28c80d966c4965cb590578\", \"content\": \"用户喜欢从硬件实际执行路径理解操作系统\", \"status\": \"ACTIVE\", \"importance\": null, \"createdAt\": \"2026-10-21T21:17:27\", \"updatedAt\": \"2026-10-21T21:17:27\"}, {\"id\": 81, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"eval-…"
             }
           }
         ]
@@ -4542,7 +4562,7 @@
       "mode": "live",
       "status": "passed",
       "description": "GLOBAL 记忆对任意空间可见，且不会被空间的同名 scope_key 覆盖",
-      "durationMs": 443,
+      "durationMs": 438,
       "checks": [
         {
           "path": "step1/createMemory: code",
@@ -4635,7 +4655,7 @@
               "httpStatus": 200,
               "code": 0,
               "data": {
-                "id": 72,
+                "id": 83,
                 "scopeType": "GLOBAL",
                 "learningSpaceId": null,
                 "conceptId": null,
@@ -4644,8 +4664,8 @@
                 "content": "用户是计算机专业学生",
                 "status": "ACTIVE",
                 "importance": null,
-                "createdAt": "2026-10-21T21:01:24.7123529",
-                "updatedAt": "2026-10-21T21:01:24.7123529"
+                "createdAt": "2026-10-21T21:17:27.6854105",
+                "updatedAt": "2026-10-21T21:17:27.6854105"
               },
               "message": "已记住"
             }
@@ -4657,17 +4677,17 @@
               "httpStatus": 200,
               "code": 0,
               "data": {
-                "id": 73,
+                "id": 84,
                 "scopeType": "SPACE",
-                "learningSpaceId": 48,
+                "learningSpaceId": 57,
                 "conceptId": null,
                 "memoryType": "PREFERENCE",
                 "memoryKey": "auto:224fe9f079725c87efd1738a10447c7b",
                 "content": "当前空间的偏好",
                 "status": "ACTIVE",
                 "importance": null,
-                "createdAt": "2026-10-21T21:01:24.7567712",
-                "updatedAt": "2026-10-21T21:01:24.7567712"
+                "createdAt": "2026-10-21T21:17:27.7254333",
+                "updatedAt": "2026-10-21T21:17:27.7254333"
               },
               "message": "已记住"
             }
@@ -4676,7 +4696,7 @@
             "index": 3,
             "action": "searchMemories",
             "data": {
-              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 2, \"scopes\": [\"GLOBAL\", \"SPACE\"], \"hasGlobal\": true, \"hasSpace\": true, \"hasConcept\": false, \"keys\": [\"auto:a3c98459047a59a16351f6a65aff0c01\", \"auto:224fe9f079725c87efd1738a10447c7b\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户是计算机专业学生\", \"当前空间的偏好\"], \"items\": [{\"id\": 72, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"USER\", \"memoryKey\": \"auto:a3c98459047a59a16351f6a65aff0c01\", \"content\": \"用户是计算机专业学生\", \"status\": \"ACTIVE\", \"importance\": null, \"createdAt\": \"2026-10-21T21:01:25\", \"updatedAt\": \"2026-10-21T21:01:25\"}, {\"id\": 73, \"scopeType\": \"SPACE\", \"learningSpaceId\": 48, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:224fe9f079725c87efd1738a10447c7b\", \"content\": \"当前空间的偏好\", \"status\": \"ACTIVE\", \"imp…"
+              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 2, \"scopes\": [\"GLOBAL\", \"SPACE\"], \"hasGlobal\": true, \"hasSpace\": true, \"hasConcept\": false, \"keys\": [\"auto:a3c98459047a59a16351f6a65aff0c01\", \"auto:224fe9f079725c87efd1738a10447c7b\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户是计算机专业学生\", \"当前空间的偏好\"], \"items\": [{\"id\": 83, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"USER\", \"memoryKey\": \"auto:a3c98459047a59a16351f6a65aff0c01\", \"content\": \"用户是计算机专业学生\", \"status\": \"ACTIVE\", \"importance\": null, \"createdAt\": \"2026-10-21T21:17:28\", \"updatedAt\": \"2026-10-21T21:17:28\"}, {\"id\": 84, \"scopeType\": \"SPACE\", \"learningSpaceId\": 57, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:224fe9f079725c87efd1738a10447c7b\", \"content\": \"当前空间的偏好\", \"status\": \"ACTIVE\", \"imp…"
             }
           },
           {
@@ -4703,7 +4723,7 @@
                 ],
                 "items": [
                   {
-                    "id": 72,
+                    "id": 83,
                     "scopeType": "GLOBAL",
                     "learningSpaceId": null,
                     "conceptId": null,
@@ -4712,8 +4732,8 @@
                     "content": "用户是计算机专业学生",
                     "status": "ACTIVE",
                     "importance": null,
-                    "createdAt": "2026-10-21T21:01:25",
-                    "updatedAt": "2026-10-21T21:01:25"
+                    "createdAt": "2026-10-21T21:17:28",
+                    "updatedAt": "2026-10-21T21:17:28"
                   }
                 ]
               }
@@ -4728,7 +4748,7 @@
       "mode": "live",
       "status": "passed",
       "description": "同一空间 + 概念下检索时，GLOBAL / SPACE / CONCEPT 三种作用域都应可见",
-      "durationMs": 412,
+      "durationMs": 454,
       "checks": [
         {
           "path": "step1/createMemory: code",
@@ -4781,8 +4801,8 @@
         {
           "path": "step2/createMemory: data.learningSpaceId",
           "op": "eq",
-          "expected": 49,
-          "actual": 49,
+          "expected": 58,
+          "actual": 58,
           "passed": true,
           "message": ""
         },
@@ -4805,8 +4825,8 @@
         {
           "path": "step3/createMemory: data.conceptId",
           "op": "eq",
-          "expected": 54,
-          "actual": 54,
+          "expected": 63,
+          "actual": 63,
           "passed": true,
           "message": ""
         },
@@ -4853,7 +4873,7 @@
               "httpStatus": 200,
               "code": 0,
               "data": {
-                "id": 74,
+                "id": 85,
                 "scopeType": "GLOBAL",
                 "learningSpaceId": null,
                 "conceptId": null,
@@ -4862,8 +4882,8 @@
                 "content": "用户喜欢从硬件实际执行路径理解操作系统",
                 "status": "ACTIVE",
                 "importance": 0.9,
-                "createdAt": "2026-10-21T21:01:25.1627975",
-                "updatedAt": "2026-10-21T21:01:25.1627975"
+                "createdAt": "2026-10-21T21:17:28.1139137",
+                "updatedAt": "2026-10-21T21:17:28.1139137"
               },
               "message": "已记住"
             }
@@ -4875,17 +4895,17 @@
               "httpStatus": 200,
               "code": 0,
               "data": {
-                "id": 75,
+                "id": 86,
                 "scopeType": "SPACE",
-                "learningSpaceId": 49,
+                "learningSpaceId": 58,
                 "conceptId": null,
                 "memoryType": "LEARNING",
                 "memoryKey": "auto:4d8f1748fb227ff547c51fa563bd33f0",
                 "content": "这个空间里已经学过虚拟内存基础",
                 "status": "ACTIVE",
                 "importance": null,
-                "createdAt": "2026-10-21T21:01:25.1867174",
-                "updatedAt": "2026-10-21T21:01:25.1867174"
+                "createdAt": "2026-10-21T21:17:28.1352797",
+                "updatedAt": "2026-10-21T21:17:28.1352797"
               },
               "message": "已记住"
             }
@@ -4897,17 +4917,17 @@
               "httpStatus": 200,
               "code": 0,
               "data": {
-                "id": 76,
+                "id": 87,
                 "scopeType": "CONCEPT",
-                "learningSpaceId": 49,
-                "conceptId": 54,
+                "learningSpaceId": 58,
+                "conceptId": 63,
                 "memoryType": "LEARNING",
                 "memoryKey": "auto:c19a0bb43d5ff605f9769e0d31d4cdde",
                 "content": "TLB 这条线用户已经能自己讲清楚",
                 "status": "ACTIVE",
                 "importance": null,
-                "createdAt": "2026-10-21T21:01:25.2057794",
-                "updatedAt": "2026-10-21T21:01:25.2057794"
+                "createdAt": "2026-10-21T21:17:28.1780535",
+                "updatedAt": "2026-10-21T21:17:28.1780535"
               },
               "message": "已记住"
             }
@@ -4916,7 +4936,7 @@
             "index": 4,
             "action": "searchMemories",
             "data": {
-              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 3, \"scopes\": [\"GLOBAL\", \"CONCEPT\", \"SPACE\"], \"hasGlobal\": true, \"hasSpace\": true, \"hasConcept\": true, \"keys\": [\"auto:7ba7236cdf28c80d966c4965cb590578\", \"auto:c19a0bb43d5ff605f9769e0d31d4cdde\", \"auto:4d8f1748fb227ff547c51fa563bd33f0\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户喜欢从硬件实际执行路径理解操作系统\", \"TLB 这条线用户已经能自己讲清楚\", \"这个空间里已经学过虚拟内存基础\"], \"items\": [{\"id\": 74, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:7ba7236cdf28c80d966c4965cb590578\", \"content\": \"用户喜欢从硬件实际执行路径理解操作系统\", \"status\": \"ACTIVE\", \"importance\": 0.9, \"createdAt\": \"2026-10-21T21:01:25\", \"updatedAt\": \"2026-10-21T21:01:25\"}, {\"id\": 76, \"scopeType\": \"CONCEPT\", \"learningSpaceId\": 49, \"conceptId\": 54, \"memoryType\": \"…"
+              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 3, \"scopes\": [\"GLOBAL\", \"CONCEPT\", \"SPACE\"], \"hasGlobal\": true, \"hasSpace\": true, \"hasConcept\": true, \"keys\": [\"auto:7ba7236cdf28c80d966c4965cb590578\", \"auto:c19a0bb43d5ff605f9769e0d31d4cdde\", \"auto:4d8f1748fb227ff547c51fa563bd33f0\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户喜欢从硬件实际执行路径理解操作系统\", \"TLB 这条线用户已经能自己讲清楚\", \"这个空间里已经学过虚拟内存基础\"], \"items\": [{\"id\": 85, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:7ba7236cdf28c80d966c4965cb590578\", \"content\": \"用户喜欢从硬件实际执行路径理解操作系统\", \"status\": \"ACTIVE\", \"importance\": 0.9, \"createdAt\": \"2026-10-21T21:17:28\", \"updatedAt\": \"2026-10-21T21:17:28\"}, {\"id\": 87, \"scopeType\": \"CONCEPT\", \"learningSpaceId\": 58, \"conceptId\": 63, \"memoryType\": \"…"
             }
           }
         ]
@@ -4928,7 +4948,7 @@
       "mode": "live",
       "status": "passed",
       "description": "带别的 spaceId 检索时只能看到 GLOBAL：SPACE / CONCEPT 记忆不能跨空间泄漏",
-      "durationMs": 416,
+      "durationMs": 477,
       "checks": [
         {
           "path": "step1/createMemory: code",
@@ -4997,7 +5017,7 @@
               "httpStatus": 200,
               "code": 0,
               "data": {
-                "id": 77,
+                "id": 88,
                 "scopeType": "GLOBAL",
                 "learningSpaceId": null,
                 "conceptId": null,
@@ -5006,8 +5026,8 @@
                 "content": "全局可见的用户画像",
                 "status": "ACTIVE",
                 "importance": null,
-                "createdAt": "2026-10-21T21:01:25.5795809",
-                "updatedAt": "2026-10-21T21:01:25.5795809"
+                "createdAt": "2026-10-21T21:17:28.6122134",
+                "updatedAt": "2026-10-21T21:17:28.6122134"
               },
               "message": "已记住"
             }
@@ -5019,17 +5039,17 @@
               "httpStatus": 200,
               "code": 0,
               "data": {
-                "id": 78,
+                "id": 89,
                 "scopeType": "SPACE",
-                "learningSpaceId": 50,
+                "learningSpaceId": 59,
                 "conceptId": null,
                 "memoryType": "PREFERENCE",
                 "memoryKey": "auto:7fba75c724920107b9316e34b734b54b",
                 "content": "只属于当前空间的偏好",
                 "status": "ACTIVE",
                 "importance": null,
-                "createdAt": "2026-10-21T21:01:25.604156",
-                "updatedAt": "2026-10-21T21:01:25.604156"
+                "createdAt": "2026-10-21T21:17:28.6440008",
+                "updatedAt": "2026-10-21T21:17:28.6440008"
               },
               "message": "已记住"
             }
@@ -5041,17 +5061,17 @@
               "httpStatus": 200,
               "code": 0,
               "data": {
-                "id": 79,
+                "id": 90,
                 "scopeType": "CONCEPT",
-                "learningSpaceId": 50,
-                "conceptId": 55,
+                "learningSpaceId": 59,
+                "conceptId": 64,
                 "memoryType": "LEARNING",
                 "memoryKey": "auto:077e43752dbb7390fd86b17cff0ba0af",
                 "content": "只属于当前知识点的一条记忆",
                 "status": "ACTIVE",
                 "importance": null,
-                "createdAt": "2026-10-21T21:01:25.6259628",
-                "updatedAt": "2026-10-21T21:01:25.6259628"
+                "createdAt": "2026-10-21T21:17:28.6772508",
+                "updatedAt": "2026-10-21T21:17:28.6772508"
               },
               "message": "已记住"
             }
@@ -5080,7 +5100,7 @@
                 ],
                 "items": [
                   {
-                    "id": 77,
+                    "id": 88,
                     "scopeType": "GLOBAL",
                     "learningSpaceId": null,
                     "conceptId": null,
@@ -5089,8 +5109,8 @@
                     "content": "全局可见的用户画像",
                     "status": "ACTIVE",
                     "importance": null,
-                    "createdAt": "2026-10-21T21:01:26",
-                    "updatedAt": "2026-10-21T21:01:26"
+                    "createdAt": "2026-10-21T21:17:29",
+                    "updatedAt": "2026-10-21T21:17:29"
                   }
                 ]
               }
@@ -5105,7 +5125,7 @@
       "mode": "live",
       "status": "passed",
       "description": "Bad Case BC-001 回归：用户只是提问、Agent 没有形成判断时，状态也必须从 UNKNOWN 推进到 EXPOSED",
-      "durationMs": 976,
+      "durationMs": 829,
       "checks": [
         {
           "path": "step1/sendMessage: data.ended",
@@ -5177,10 +5197,10 @@
                 "ended": true,
                 "started": true,
                 "error": null,
-                "assistantMessageId": 94,
-                "conversationId": 50,
-                "userMessageId": 93,
-                "sessionId": 31
+                "assistantMessageId": 106,
+                "conversationId": 57,
+                "userMessageId": 105,
+                "sessionId": 36
               }
             }
           },
@@ -5190,8 +5210,8 @@
             "data": {
               "httpStatus": 200,
               "data": {
-                "id": 42,
-                "conceptId": 56,
+                "id": 48,
+                "conceptId": 65,
                 "conceptName": "缺页异常",
                 "summary": null,
                 "knownParts": [],
@@ -5199,8 +5219,8 @@
                 "uncertainParts": [],
                 "latestUserExplanation": null,
                 "status": "EXPOSED",
-                "currentRevisionId": 59,
-                "updatedAt": "2026-10-21T21:01:26"
+                "currentRevisionId": 67,
+                "updatedAt": "2026-10-21T21:17:29"
               },
               "timedOut": false
             }
@@ -5224,7 +5244,7 @@
                 ],
                 "items": [
                   {
-                    "id": 59,
+                    "id": 67,
                     "revisionNo": 1,
                     "summary": null,
                     "knownParts": [],
@@ -5232,8 +5252,8 @@
                     "uncertainParts": [],
                     "userExplanation": null,
                     "status": "EXPOSED",
-                    "triggerEvidenceId": 89,
-                    "createdAt": "2026-10-21T21:01:26"
+                    "triggerEvidenceId": 100,
+                    "createdAt": "2026-10-21T21:17:29"
                   }
                 ]
               }
@@ -5248,7 +5268,7 @@
       "mode": "live",
       "status": "passed",
       "description": "用户先自述（CORRECT）再自我纠正（INCORRECT）时，Revision 只追加不覆盖，状态推进到 MISCONCEPTION",
-      "durationMs": 771,
+      "durationMs": 818,
       "checks": [
         {
           "path": "step1/sendMessage: data.ended",
@@ -5342,10 +5362,10 @@
                 "ended": true,
                 "started": true,
                 "error": null,
-                "assistantMessageId": 96,
-                "conversationId": 51,
-                "userMessageId": 95,
-                "sessionId": 32
+                "assistantMessageId": 108,
+                "conversationId": 58,
+                "userMessageId": 107,
+                "sessionId": 37
               }
             }
           },
@@ -5355,14 +5375,14 @@
             "data": {
               "httpStatus": 200,
               "data": {
-                "id": 17,
-                "messageId": 95,
+                "id": 20,
+                "messageId": 107,
                 "markType": "MY_UNDERSTANDING",
                 "selectedText": "我理解 TLB 就是页表项的缓存",
                 "startOffset": 0,
                 "endOffset": 0,
                 "note": null,
-                "createdAt": "2026-10-21T21:01:27.2628877"
+                "createdAt": "2026-10-21T21:17:30.1575161"
               }
             }
           },
@@ -5372,8 +5392,8 @@
             "data": {
               "httpStatus": 200,
               "data": {
-                "id": 43,
-                "conceptId": 57,
+                "id": 49,
+                "conceptId": 66,
                 "conceptName": "TLB",
                 "summary": "已理解：我理解 TLB 就是页表项的缓存",
                 "knownParts": [
@@ -5383,8 +5403,8 @@
                 "uncertainParts": [],
                 "latestUserExplanation": "我理解 TLB 就是页表项的缓存",
                 "status": "PARTIAL",
-                "currentRevisionId": 60,
-                "updatedAt": "2026-10-21T21:01:27"
+                "currentRevisionId": 68,
+                "updatedAt": "2026-10-21T21:17:30"
               },
               "timedOut": false
             }
@@ -5395,14 +5415,14 @@
             "data": {
               "httpStatus": 200,
               "data": {
-                "id": 18,
-                "messageId": 95,
+                "id": 21,
+                "messageId": 107,
                 "markType": "MISCONCEPTION_CANDIDATE",
                 "selectedText": "我把 TLB Miss 当成了缺页",
                 "startOffset": 0,
                 "endOffset": 0,
                 "note": "我总觉得 TLB Miss 就是缺页",
-                "createdAt": "2026-10-21T21:01:27.3150171"
+                "createdAt": "2026-10-21T21:17:30.2551837"
               }
             }
           },
@@ -5412,8 +5432,8 @@
             "data": {
               "httpStatus": 200,
               "data": {
-                "id": 43,
-                "conceptId": 57,
+                "id": 49,
+                "conceptId": 66,
                 "conceptName": "TLB",
                 "summary": "已理解：我理解 TLB 就是页表项的缓存 存在误区：我总觉得 TLB Miss 就是缺页",
                 "knownParts": [
@@ -5423,16 +5443,16 @@
                   {
                     "text": "我总觉得 TLB Miss 就是缺页",
                     "status": "ACTIVE",
-                    "firstDetectedAt": "2026-10-21T21:01:27.3220882",
-                    "lastEvidenceAt": "2026-10-21T21:01:27.3220882",
+                    "firstDetectedAt": "2026-10-21T21:17:30.2637089",
+                    "lastEvidenceAt": "2026-10-21T21:17:30.2637089",
                     "reversalEvidenceIds": []
                   }
                 ],
                 "uncertainParts": [],
                 "latestUserExplanation": "我理解 TLB 就是页表项的缓存",
                 "status": "MISCONCEPTION",
-                "currentRevisionId": 61,
-                "updatedAt": "2026-10-21T21:01:27"
+                "currentRevisionId": 69,
+                "updatedAt": "2026-10-21T21:17:30"
               },
               "timedOut": false
             }
@@ -5441,7 +5461,7 @@
             "index": 6,
             "action": "getRevisions",
             "data": {
-              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 2, \"statuses\": [\"PARTIAL\", \"MISCONCEPTION\"], \"hasExposed\": false, \"hasPartial\": true, \"hasDemonstrated\": false, \"hasMisconception\": true, \"revisionNos\": [1, 2], \"items\": [{\"id\": 60, \"revisionNo\": 1, \"summary\": \"已理解：我理解 TLB 就是页表项的缓存\", \"knownParts\": [\"我理解 TLB 就是页表项的缓存\"], \"misconceptions\": [], \"uncertainParts\": [], \"userExplanation\": \"我理解 TLB 就是页表项的缓存\", \"status\": \"PARTIAL\", \"triggerEvidenceId\": 90, \"createdAt\": \"2026-10-21T21:01:27\"}, {\"id\": 61, \"revisionNo\": 2, \"summary\": \"已理解：我理解 TLB 就是页表项的缓存 存在误区：我总觉得 TLB Miss 就是缺页\", \"knownParts\": [\"我理解 TLB 就是页表项的缓存\"], \"misconceptions\": [{\"text\": \"我总觉得 TLB Miss 就是缺页\", \"status\": \"ACTIVE\", \"firstDetectedAt\": \"2026-10-21T21:01:27.3220882\", \"lastEvidenceAt\": \"2026-10-21T21:01:27.3220882\", \"reversalEvidenceIds\": []}], \"unce…"
+              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 2, \"statuses\": [\"PARTIAL\", \"MISCONCEPTION\"], \"hasExposed\": false, \"hasPartial\": true, \"hasDemonstrated\": false, \"hasMisconception\": true, \"revisionNos\": [1, 2], \"items\": [{\"id\": 68, \"revisionNo\": 1, \"summary\": \"已理解：我理解 TLB 就是页表项的缓存\", \"knownParts\": [\"我理解 TLB 就是页表项的缓存\"], \"misconceptions\": [], \"uncertainParts\": [], \"userExplanation\": \"我理解 TLB 就是页表项的缓存\", \"status\": \"PARTIAL\", \"triggerEvidenceId\": 101, \"createdAt\": \"2026-10-21T21:17:30\"}, {\"id\": 69, \"revisionNo\": 2, \"summary\": \"已理解：我理解 TLB 就是页表项的缓存 存在误区：我总觉得 TLB Miss 就是缺页\", \"knownParts\": [\"我理解 TLB 就是页表项的缓存\"], \"misconceptions\": [{\"text\": \"我总觉得 TLB Miss 就是缺页\", \"status\": \"ACTIVE\", \"firstDetectedAt\": \"2026-10-21T21:17:30.2637089\", \"lastEvidenceAt\": \"2026-10-21T21:17:30.2637089\", \"reversalEvidenceIds\": []}], \"unc…"
             }
           }
         ]
@@ -5453,7 +5473,7 @@
       "mode": "live",
       "status": "passed",
       "description": "首次接触概念且用户在提问时，Agent 只记 ASK_LATER，不创建 TestTask（不打断教学）",
-      "durationMs": 883,
+      "durationMs": 830,
       "checks": [
         {
           "path": "step1/sendMessage: data.ended",
@@ -5515,10 +5535,10 @@
                 "ended": true,
                 "started": true,
                 "error": null,
-                "assistantMessageId": 98,
-                "conversationId": 52,
-                "userMessageId": 97,
-                "sessionId": 33
+                "assistantMessageId": 110,
+                "conversationId": 59,
+                "userMessageId": 109,
+                "sessionId": 38
               }
             }
           },
@@ -5528,8 +5548,8 @@
             "data": {
               "httpStatus": 200,
               "data": {
-                "id": 44,
-                "conceptId": 59,
+                "id": 50,
+                "conceptId": 68,
                 "conceptName": "缺页异常",
                 "summary": null,
                 "knownParts": [],
@@ -5537,8 +5557,8 @@
                 "uncertainParts": [],
                 "latestUserExplanation": null,
                 "status": "EXPOSED",
-                "currentRevisionId": 63,
-                "updatedAt": "2026-10-21T21:01:28"
+                "currentRevisionId": 70,
+                "updatedAt": "2026-10-21T21:17:31"
               },
               "timedOut": false
             }

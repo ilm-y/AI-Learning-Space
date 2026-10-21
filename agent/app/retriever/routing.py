@@ -31,8 +31,15 @@ MODE_HTTP = "http"
 MODE_FIXTURE = "fixture"
 
 
-def build_retriever(settings: Settings, auth_token: str | None) -> Retriever:
-    """按配置与本次请求组装检索源。每次运行一个实例，用完即关。"""
+def build_retriever(
+    settings: Settings, auth_token: str | None, *, allow_degradation: bool = True
+) -> Retriever:
+    """按配置与本次请求组装检索源。每次运行一个实例，用完即关。
+
+    :param allow_degradation: 允许 ``auto`` 模式在无 token / 后端不可用时退回 Fixture。
+        Chat 链路保持默认（演示优先）；**Analyze 链路必须传 False** ——
+        分析结果会被写进真实用户的长期认知，拿样例数据顶替会直接污染它。
+    """
     mode = settings.retriever_mode.strip().lower()
     fixture = _build_fixture(settings)
 
@@ -40,6 +47,11 @@ def build_retriever(settings: Settings, auth_token: str | None) -> Retriever:
         return fixture
 
     if not auth_token:
+        if not allow_degradation:
+            raise RetrievalError(
+                "分析链路需要 authToken 才能走 HTTP 检索；不会退回 Fixture，"
+                "否则样例概念会被写进真实用户的长期认知。"
+            )
         if mode == MODE_HTTP:
             raise RetrievalError(
                 "AILS_RETRIEVER_MODE=http 但请求里没有 authToken。"
@@ -60,6 +72,11 @@ def build_retriever(settings: Settings, auth_token: str | None) -> Retriever:
 
     if mode != MODE_AUTO:
         raise ValueError(f"未知的 AILS_RETRIEVER_MODE：{settings.retriever_mode}（可选：auto / http / fixture）")
+
+    if not allow_degradation:
+        # 分析链路：auto 也只认真实后端。检索失败会作为 RetrievalError 上抛，
+        # 由后端记录后回退 rules-v1 —— 这比拿 Fixture 默默生成一份假分析安全得多。
+        return http
 
     return FallbackRetriever(http, fixture)
 

@@ -180,9 +180,15 @@ auto 模式降级时会打 WARNING 日志、并在 trace 里体现。降级本�
 （后端没起来不该让 Agent 完全不能演示），但**静默降级会让人把「召回不生效」
 误判成 Agent 的 bug**，所以不能无声发生。
 
+**analyze 链路例外**：它调用 `build_retriever(..., allow_degradation=False)`。
+`auto` 模式下缺 token 或后端不可用时直接抛 `RetrievalError`，绝不退回 Fixture ——
+分析结果会写进真实用户的长期认知，样例概念混进去就是污染。失败由后端按有记录的方式
+回落 `rules-v1`，比「看起来成功」安全。
+
 失败策略的区分也很重要：
 
-- 连不上后端 / JWT 失效 → `RetrievalError`，向上抛，最终变成 SSE 的 `error` 事件；
+- 连不上后端 / JWT 失效 → `RetrievalError`，向上抛：chat 链路变成 SSE 的 `error` 事件，
+  analyze 链路变成 HTTP 503 并触发后端回退；
 - 某个 Concept 没有快照 → **正常返回空**，不是错误（用户还没学过这个知识点）。
 
 ---

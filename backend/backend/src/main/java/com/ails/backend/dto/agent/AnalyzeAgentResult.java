@@ -16,7 +16,8 @@ import java.util.List;
  * Agent 返回的一次学习分析结果。
  * <p>
  * <b>它只是候选集合，不是已完成的写入。</b> 后端仍要逐项校验：
- * conceptId 是否属于本轮概念、Evidence 是否已存在（dedupe_key）、
+ * conceptId 是否属于当前学习空间（Agent 侧已按「本轮检测到的概念」过滤，但那是
+ * 另一层进程的保证，后端不能直接采信）、Evidence 是否已存在（dedupe_key）、
  * Memory 的作用域与生命周期、Test 是否值得插入。
  * <p>
  * 所有值类型都允许为 null：Agent 侧可能省略字段，而「省略」应当被当成
