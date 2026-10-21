@@ -324,6 +324,8 @@ public class LearningAnalysisService {
         run.setRunType(runType);
         run.setStatus(AgentRunStatus.RUNNING);
         run.setInputSummary(truncate(inputSummary, 255));
+        // trace_id 故意留空：这条是 rules-v1 进程内分析，没有跨进程的另一半可对。
+        // 只有真正调过 Agent 的 run（ChatService / TurnAnalysisService）才生成 trace_id。
         agentRunMapper.insert(run);
 
         List<LearningEvidence> written = new ArrayList<>();

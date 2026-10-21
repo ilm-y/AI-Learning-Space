@@ -1,7 +1,8 @@
 # Agent 流水线：各层职责与数据契约
 
 > 本文说明 `agent/app/` 里每一层负责什么、不负责什么、为什么这样切。
-> 与 `agent-architecture.md` 对应的是它第四十一节那条链路的**同步路径**那一半。
+> 与 `agent-architecture.md` 对应的是它第四十一节那条链路的**同步路径**：
+> Chat（回答）与 Analyze（学习分析）两条入口。
 
 ---
 
@@ -44,13 +45,40 @@
 编排者是 `runtime.py` 的 `AgentRuntime`。它本身**无状态**：只持有配置与 LLM 适配器，
 每次请求自己开一个 Retriever、构造一个 AgentState、结束就丢。
 
+分析入口复用前两步，但**不走 Context Builder 与 Tutor** —— 它要回答的是「这一轮
+暴露了什么」，不是「下一轮该怎么讲」：
+
+```text
+              POST /agent/analyze                 （main.py）
+                     │
+                     ▼
+        1. 概念识别                              （与 Chat 同一套规则）
+                     │
+                     ▼
+        2. Retriever                             （同一套只读接口）
+                     │
+                     ▼
+        3. Learning Analyzer                     结构化输出 → 校验 / 收敛   analysis/analyzer.py
+                     │
+                     ▼
+        4. LLM Adapter.complete()                非流式
+                     │
+                     ▼
+              AnalyzeResult                      候选，不写库
+```
+
+`llm_provider=mock` 时跳过第 4 步，走 `_heuristic_analysis()`：它不是「假装有智能」，
+而是让整条写入链路在没有 API Key 时仍然可测。真实 provider 走结构化 JSON，
+解析失败抛 `AnalysisError`，后端据此回退 `rules-v1`。
+
 ---
 
 ## 二、入口层
 
 | 入口 | 用途 |
 | --- | --- |
-| `POST /agent/chat` | 唯一的正式接口，SSE 流式返回 |
+| `POST /agent/chat` | 回答链路，SSE 流式返回 |
+| `POST /agent/analyze` | 学习分析链路，返回候选结果（不流式、不写库） |
 | `POST /agent/context/preview` | 只检索与组装，**不调用模型** |
 | `GET /health` | 当前生效的适配器与预算 |
 | `python -m app.cli` | 不起服务跑一次流水线（含 `--preview`） |
@@ -77,9 +105,10 @@ chat 与 preview 共用 `runtime.prepare()`，所以「给人看的上下文」�
 **它是运行时状态，不是数据库实体。** 不落库、不跨请求复用。
 跨对话的连续性全部来自后端数据 —— 否则同一个用户的两个对话会各自看到不同的世界。
 
-`pending_tasks` 是刻意保留的诚实标记：本轮 Agent 不做 Evidence 抽取与状态更新，
-所以每次运行都明确写着 `["evidence_extraction", "understanding_update", "memory_consolidation"]`，
-而不是让人误以为闭环已经成立。
+`pending_tasks` 默认是空列表：Evidence 抽取、Understanding 更新、Memory 收敛已经由
+独立的 `POST /agent/analyze` 承担，**不属于**一次 chat run。早先版本把它固定写成三项待办，
+结果是每次 chat 的 summary 都显示「未完成」—— 那等于把另一条链路的状态错误地记到了这一条上。
+字段本身保留，留给将来确实存在、且属于当前 run 的异步收尾动作。
 
 ---
 
@@ -276,8 +305,8 @@ class LLMAdapter(Protocol):
 适配器**只认 messages 与 token 参数**，不认识 Understanding、Memory、Tutor。
 这是 `LLM ≠ Agent` 的直接落地：换厂商不改业务，换业务不改适配器。
 
-`complete` 目前**没有调用方**。留着是因为下一个确定要做的动作（Evidence 抽取、
-简答判分）需要一次性结构化输出，先占住协议，避免到时候改协议牵动所有实现。
+`stream_chat` 服务回答链路，`complete` 服务分析链路（`LearningAnalyzer` 需要一次性拿到
+完整的 JSON 才能解析）。两者共用同一份适配器协议，所以换厂商时两条链路一起生效。
 
 ---
 

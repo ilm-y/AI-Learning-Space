@@ -518,6 +518,38 @@ SPACE Memory 只能在对应 Space 中检索。
 
 ---
 
-## 14. 最重要的一句话
+## 14. 当前实现与验证
+
+仓库里的代码已经跑通上面这条闭环（文档是设计基线，落地差异以各模块 README 为准）：
+
+```text
+backend/    Spring Boot REST / SSE / 事务写入 / Session / Memory 作用域
+agent/      Python Chat（检索 + 上下文 + Tutor）与 Analyze（学习分析候选）
+evaluation/ 离线 + 在线回归评测、Bad Case 数据集、报告
+flutter/    客户端
+scripts/    闭环回归脚本
+docs/       PRD、架构分析、数据库/API 设计、Session 设计
+```
+
+```bash
+# Agent 单测（无需数据库 / 网络 / API Key）
+cd agent && python -m pytest -q
+
+# 后端单测（无需 MySQL）
+cd backend/backend && ./mvnw test
+
+# Agent 回归评测：offline 不需要外部服务；all 需要 MySQL + 两个服务
+python -m evaluation
+python -m evaluation --mode all
+
+# 真 MySQL 端到端闭环
+bash scripts/regress-closed-loop.sh
+```
+
+当前结果：Agent 42 个单测、后端 54 个执行用例、评测 39 offline + 9 live 全绿。
+
+---
+
+## 15. 最重要的一句话
 
 > **当前回答依赖 Conversation，个性化依赖 Understanding，长期连续性依赖 Memory，所有学习判断依赖 Evidence。**

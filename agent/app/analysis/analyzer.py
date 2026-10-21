@@ -120,6 +120,9 @@ class LearningAnalyzer:
 
     async def analyze(self, request: AnalyzeRequest, trace: RunTrace) -> AnalyzeResult:
         if not (request.user_message or "").strip():
+            # 空消息也要留下终态，否则 trace 只有 RUN_START、没有 RUN_END，
+            # 排查时无法区分「没跑」与「跑了但立刻结束」。
+            trace.record(TraceEventType.RUN_END, status="COMPLETED", reason="empty_message")
             return self._empty_result()
 
         retriever = build_retriever(self._settings, request.auth_token)
