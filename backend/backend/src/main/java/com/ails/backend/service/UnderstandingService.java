@@ -434,18 +434,17 @@ public class UnderstandingService {
     /**
      * 下一个 revision_no。
      * <p>
-     * {@code COUNT(*)+1} 本身是「读-算-写」裸奔的写法，之所以安全，是因为它只在
-     * {@link #apply} 里被调用，而 apply 全程持有该快照行的写锁
-     * （见 {@code loadOrCreateLocked}）—— 同一 (user, concept) 的 apply 被强制串行，
-     * 不会有两个事务算出同一个号去撞 {@code uk_revision_no}。
+     * 必须走<b>当前读</b>（{@code MAX(...) FOR UPDATE}），不能走普通 COUNT：
+     * 写入方虽然都持有理解快照的行锁，但分析事务在拿到这把锁之前往往已经执行过普通
+     * SELECT（读证据、读概念），一致性读视图就此固定。那个视图可能早于对方提交的
+     * Revision，普通 COUNT 会少算一条，两个事务便会算出同一个号去撞
+     * {@code uk_revision_no}。加锁读不受视图影响，永远看最新已提交数据。
      * <p>
-     * Revision 没有软删、也没有删除入口，所以用 COUNT 等价于用 MAX，不需要额外处理空洞。
-     * <b>如果将来 apply 丢掉了那把锁，这里必须改成 MAX(revision_no)+1 或加重试。</b>
+     * Revision 没有软删、也没有删除入口，所以 MAX 与 COUNT 等价，不需要处理空洞。
      */
     private Integer nextRevisionNo(Long understandingId) {
-        Long count = revisionMapper.selectCount(new LambdaQueryWrapper<UnderstandingRevision>()
-                .eq(UnderstandingRevision::getUnderstandingId, understandingId));
-        return (count == null ? 0 : count.intValue()) + 1;
+        Integer max = revisionMapper.selectMaxRevisionNoForUpdate(understandingId);
+        return (max == null ? 0 : max) + 1;
     }
 
     private String buildSummary(List<String> known, List<Misconception> misconceptions, List<String> uncertain) {
