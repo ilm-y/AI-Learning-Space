@@ -27,6 +27,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
 
+    /**
+     * ASYNC 分发也要重新认证。
+     * <p>
+     * {@link OncePerRequestFilter} 默认跳过 ASYNC 分发，但 SSE 流结束（{@code SseEmitter#complete()}）
+     * 时容器会对同一个请求再做一次 ASYNC 分发，重新走一遍过滤器链。跳过本过滤器意味着那一次
+     * 分发里 SecurityContext 为空，{@code anyRequest().authenticated()} 直接抛
+     * {@code AccessDeniedException}；此时响应早已提交（Content-Type 已是 text/event-stream），
+     * Spring Security 的异常处理写不进去，只能把连接硬关 —— 客户端看到的就是
+     * 「chunked 响应缺少终止块」（httpx: RemoteProtocolError，curl: exit 18），
+     * 即使它已经收到了完整的 message.end。
+     * <p>
+     * 重新解析 {@code Authorization} 头即可：请求头在同一个请求的所有分发之间是保留的。
+     */
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
