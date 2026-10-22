@@ -294,7 +294,9 @@ class AnalysisMqIntegrationTest {
 
         Channel channel = connectionFactory.createConnection().createChannel(false);
         try {
-            GetResponse request = channel.basicGet(props.requestQueue(), false);
+            // convertAndSend 不等 broker 路由完成；在较慢的 CI 上立刻 basicGet 可能先返回空。
+            // 这里只做有界等待，不断言「消息同步可见」这种 broker 并不保证的行为。
+            GetResponse request = basicGetWithin(channel, props.requestQueue(), 5_000);
             assertThat(request).isNotNull();
             // requeue=false → 请求队列 DLX → retry 队列（TTL）→ 回到请求队列
             channel.basicNack(request.getEnvelope().getDeliveryTag(), false, false);
@@ -417,6 +419,23 @@ class AnalysisMqIntegrationTest {
                 admin.declareBinding(binding);
             }
         }
+    }
+
+    /**
+     * 有界轮询 {@code basicGet}：发布端不等待路由完成，消息可能晚几毫秒才可见。
+     * 返回 null 表示超时，由调用方断言失败。
+     */
+    private static GetResponse basicGetWithin(Channel channel, String queue, long timeoutMs)
+            throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        while (System.nanoTime() < deadline) {
+            GetResponse response = channel.basicGet(queue, false);
+            if (response != null) {
+                return response;
+            }
+            Thread.sleep(50);
+        }
+        return null;
     }
 
     private static void awaitMessageCount(String queue, int expected) throws InterruptedException {
