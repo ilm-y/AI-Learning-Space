@@ -35,6 +35,12 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
+        <!-- RabbitMQ：学习分析任务的异步投递与结果回传 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
         <!-- MyBatis-Plus (Spring Boot 3) -->
         <dependency>
             <groupId>com.baomidou</groupId>
@@ -83,6 +89,20 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- 真实 RabbitMQ Broker 集成测试。版本由 Spring Boot BOM 管理。
+             没有 Docker 时默认跳过；`mvn test -Pmq-integration` 会把
+             ails.it.require-docker 设为 true，此时缺少 Docker 会让构建失败。 -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>rabbitmq</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -101,4 +121,28 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+          CI 专用：真实 RabbitMQ 集成测试必须真的跑起来。
+          没有这个 profile 时，Docker 不可用只会 Assumptions.abort（跳过）；
+          打开后 Docker 缺失会直接失败，避免「跳过」被当成「通过」。
+        -->
+        <profile>
+            <id>mq-integration</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <systemPropertyVariables>
+                                <ails.it.require-docker>true</ails.it.require-docker>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

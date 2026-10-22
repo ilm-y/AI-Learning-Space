@@ -32,11 +32,19 @@ MODE_FIXTURE = "fixture"
 
 
 def build_retriever(
-    settings: Settings, auth_token: str | None, *, allow_degradation: bool = True
+    settings: Settings,
+    auth_token: str | None,
+    *,
+    allow_degradation: bool = True,
+    user_id: int | None = None,
 ) -> Retriever:
     """按配置与本次请求组装检索源。每次运行一个实例，用完即关。
 
-    :param allow_degradation: 允许 ``auto`` 模式在无 token / 后端不可用时退回 Fixture。
+    凭据二选一：
+    - ``auth_token``：同步 Chain 透传的用户 JWT；
+    - ``settings.internal_token`` + ``user_id``：异步 Worker 的服务端凭据。
+
+    :param allow_degradation: 允许 ``auto`` 模式在无凭据 / 后端不可用时退回 Fixture。
         Chat 链路保持默认（演示优先）；**Analyze 链路必须传 False** ——
         分析结果会被写进真实用户的长期认知，拿样例数据顶替会直接污染它。
     """
@@ -46,27 +54,21 @@ def build_retriever(
     if mode == MODE_FIXTURE:
         return fixture
 
-    if not auth_token:
+    http = _build_http(settings, auth_token, user_id)
+    if http is None:
         if not allow_degradation:
             raise RetrievalError(
-                "分析链路需要 authToken 才能走 HTTP 检索；不会退回 Fixture，"
-                "否则样例概念会被写进真实用户的长期认知。"
+                "分析链路需要 authToken（或 AILS_INTERNAL_TOKEN）才能走 HTTP 检索；"
+                "不会退回 Fixture，否则样例概念会被写进真实用户的长期认知。"
             )
         if mode == MODE_HTTP:
             raise RetrievalError(
-                "AILS_RETRIEVER_MODE=http 但请求里没有 authToken。"
-                "HTTP 检索要带用户自己的 JWT，因为后端读接口按登录用户鉴权。"
+                "AILS_RETRIEVER_MODE=http 但既没有 authToken，也没有 AILS_INTERNAL_TOKEN + userId。"
+                "后端读接口按登录用户鉴权，必须带其中一种凭据。"
             )
-        log.info("未传 authToken，使用 Fixture 检索源")
+        log.info("未提供检索凭据，使用 Fixture 检索源")
         return fixture
 
-    http = HttpBackendRetriever(
-        settings.backend_base_url,
-        auth_token,
-        timeout_seconds=settings.backend_timeout_seconds,
-        memory_top_k=settings.memory_top_k,
-        knowledge_top_k=settings.knowledge_top_k,
-    )
     if mode == MODE_HTTP:
         return http
 
@@ -137,6 +139,30 @@ class FallbackRetriever:
             log.warning("后端检索不可用，本次运行降级到 Fixture：%s", exc)
             self.degraded = True
             return await getattr(self._fallback, method)(**kwargs)
+
+
+def _build_http(
+    settings: Settings, auth_token: str | None, user_id: int | None
+) -> HttpBackendRetriever | None:
+    """有凭据才建 HTTP 检索源。用户 JWT 优先于服务端凭据。"""
+    if auth_token:
+        return HttpBackendRetriever(
+            settings.backend_base_url,
+            auth_token,
+            timeout_seconds=settings.backend_timeout_seconds,
+            memory_top_k=settings.memory_top_k,
+            knowledge_top_k=settings.knowledge_top_k,
+        )
+    if settings.internal_token and user_id is not None:
+        return HttpBackendRetriever(
+            settings.backend_base_url,
+            internal_token=settings.internal_token,
+            user_id=user_id,
+            timeout_seconds=settings.backend_timeout_seconds,
+            memory_top_k=settings.memory_top_k,
+            knowledge_top_k=settings.knowledge_top_k,
+        )
+    return None
 
 
 def _build_fixture(settings: Settings) -> FixtureRetriever:

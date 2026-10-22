@@ -30,6 +30,31 @@ class Settings(BaseSettings):
     # ---------- 后端（Spring Boot）----------
     backend_base_url: str = "http://localhost:8080"
     backend_timeout_seconds: float = 10.0
+    # 异步分析 Worker 不回传用户 JWT。它用这个共享密钥 + 目标 userId 调用后端的
+    # 只读检索接口（请求头 X-Internal-Token / X-Internal-User-Id）。
+    # 必须与后端 ails.internal.token 一致；为空时异步分析的检索会被后端拒绝。
+    internal_token: str = ""
+
+    # ---------- RabbitMQ ----------
+    # 只有 `python -m app.worker` 会使用这些配置；HTTP 服务不依赖 RabbitMQ。
+    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
+    rabbitmq_prefetch: int = 1
+    # 拓扑名称必须与后端 ails.analysis.mq.* 一致（两边都会幂等声明）。
+    analysis_exchange: str = "learning.analysis.exchange"
+    analysis_dlx: str = "learning.analysis.dlx"
+    analysis_request_queue: str = "learning.analysis.request"
+    analysis_request_routing_key: str = "analysis.request"
+    analysis_result_queue: str = "learning.analysis.result"
+    analysis_result_routing_key: str = "analysis.result"
+    analysis_retry_queue: str = "learning.analysis.retry"
+    analysis_retry_routing_key: str = "analysis.retry"
+    analysis_dead_queue: str = "learning.analysis.dlq"
+    analysis_dead_routing_key: str = "analysis.dead"
+    analysis_retry_ttl_ms: int = 15000
+    analysis_max_retries: int = 3
+    # 当连「重试副本 / 死信副本」都发不出去时，先退避再 nack(requeue=True)。
+    # 目的是避免 broker 半可用状态下形成无上限的快速重投；此时绝不 ACK。
+    analysis_publish_failure_backoff_seconds: float = 15.0
 
     # ---------- LLM ----------
     llm_provider: str = "mock"  # mock | openai
@@ -64,5 +89,19 @@ class Settings(BaseSettings):
             "llm_configured": bool(self.llm_api_key) or self.llm_provider == "mock",
             "retriever_mode": self.retriever_mode,
             "backend_base_url": self.backend_base_url,
+            "internal_auth_configured": bool(self.internal_token),
+            "rabbitmq_url": _mask_url(self.rabbitmq_url),
             "max_context_tokens": self.max_context_tokens,
         }
+
+
+def _mask_url(url: str) -> str:
+    """健康检查里不要回显 RabbitMQ 密码。"""
+    if "://" not in url:
+        return url
+    scheme, _, rest = url.partition("://")
+    if "@" not in rest:
+        return url
+    credentials, _, host = rest.rpartition("@")
+    user = credentials.split(":", 1)[0]
+    return f"{scheme}://{user}:***@{host}"

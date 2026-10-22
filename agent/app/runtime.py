@@ -241,7 +241,7 @@ class AgentRuntime:
             messageChars=len(request.user_message or ""),
         )
 
-        retriever = build_retriever(self._settings, request.auth_token)
+        retriever = build_retriever(self._settings, request.auth_token, user_id=request.user_id)
         try:
             await self._retrieve(state, retriever)
             state.context = self._builder.build(state)

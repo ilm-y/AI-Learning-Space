@@ -89,8 +89,11 @@ public class ChatService {
     private final AgentGateway agentGateway;
     private final AgentRunMapper agentRunMapper;
     private final LearningAnalysisService learningAnalysisService;
-    /** 回复落库之后的学习分析（Agent 优先，失败退回 rules-v1）；见 {@link TurnAnalysisService}。 */
-    private final TurnAnalysisService turnAnalysisService;
+    /**
+     * 回复落库之后的学习分析。由 {@link AnalysisDispatchService} 决定是投递 MQ 还是同步执行；
+     * 同步路径的细节见 {@link TurnAnalysisService}。
+     */
+    private final AnalysisDispatchService analysisDispatchService;
     /** 见 {@link com.ails.backend.config.AsyncConfig}：自定义 TaskExecutor 会让 Spring Boot
      *  的 applicationTaskExecutor 自动退让，因此这里不会有第二个同类型 Bean 造成歧义 */
     private final TaskExecutor chatStreamExecutor;
@@ -327,7 +330,7 @@ public class ChatService {
                                 String assistantContent, Long assistantMessageId,
                                 String authToken, LearningAnalysisService.TurnOpening opening) {
         try {
-            turnAnalysisService.analyzeTurn(conversation, userMessage, assistantContent,
+            analysisDispatchService.dispatch(conversation, userMessage, assistantContent,
                     assistantMessageId, authToken, opening);
         } catch (Exception e) {
             log.error("analyze message failed, messageId={}", userMessage.getId(), e);

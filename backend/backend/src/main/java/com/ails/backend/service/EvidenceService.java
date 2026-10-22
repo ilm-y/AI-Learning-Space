@@ -211,19 +211,34 @@ public class EvidenceService {
     /** 补挂来源。evidence_source 上有 UNIQUE(evidence_id, source_type, source_id)，先查后插避免撞约束。 */
     private void attachSources(Long evidenceId, List<SourceRef> sources) {
         for (SourceRef ref : sources) {
-            Long already = evidenceSourceMapper.selectCount(new LambdaQueryWrapper<EvidenceSource>()
-                    .eq(EvidenceSource::getEvidenceId, evidenceId)
-                    .eq(EvidenceSource::getSourceType, ref.sourceType())
-                    .eq(EvidenceSource::getSourceId, ref.sourceId()));
-            if (already != null && already > 0) {
+            if (sourceExists(evidenceId, ref)) {
                 continue;
             }
             EvidenceSource source = new EvidenceSource();
             source.setEvidenceId(evidenceId);
             source.setSourceType(ref.sourceType());
             source.setSourceId(ref.sourceId());
-            evidenceSourceMapper.insert(source);
+            try {
+                evidenceSourceMapper.insert(source);
+            } catch (DuplicateKeyException e) {
+                // 只有「这行来源确实已经被并发事务插入」才允许吞掉。
+                // 不能把所有 DuplicateKeyException 都当成幂等：如果冲突来自别的约束
+                // （或行随后又消失），继续执行会掩盖真实的数据问题。
+                if (!sourceExists(evidenceId, ref)) {
+                    throw e;
+                }
+                log.debug("Evidence 来源并发命中唯一键, evidenceId={}, sourceType={}, sourceId={}",
+                        evidenceId, ref.sourceType(), ref.sourceId());
+            }
         }
+    }
+
+    private boolean sourceExists(Long evidenceId, SourceRef ref) {
+        Long already = evidenceSourceMapper.selectCount(new LambdaQueryWrapper<EvidenceSource>()
+                .eq(EvidenceSource::getEvidenceId, evidenceId)
+                .eq(EvidenceSource::getSourceType, ref.sourceType())
+                .eq(EvidenceSource::getSourceId, ref.sourceId()));
+        return already != null && already > 0;
     }
 
     private LearningEvidence findByDedupeKey(String dedupeKey) {
