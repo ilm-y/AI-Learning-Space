@@ -417,18 +417,17 @@ Memory
 Cross-session Retrieval
 ```
 
-先不要把：
+第一版默认闭环不依赖 RabbitMQ：`AILS_ANALYSIS_MODE=inline` 时，分析仍在回复结束后同步执行。
+异步分析已作为可选模式落地（`AILS_ANALYSIS_MODE=mq`，见
+[docs/analysis-mq.md](docs/analysis-mq.md)），但下面这些仍不放进第一条闭环：
 
 ```text
-RabbitMQ
 复杂知识图谱
 复杂学习计划
 完整 Import
 完整 Export
 多 Agent
 ```
-
-放进第一条闭环。
 
 ---
 
@@ -514,7 +513,7 @@ SPACE Memory 只能在对应 Space 中检索。
 | Agent Runtime | LangGraph / 自研 Harness | Agent execution |
 | Vector DB | pgvector / Qdrant | Memory / Document retrieval |
 | LLM | OpenAI-compatible API | Tutor / Analysis |
-| MQ | RabbitMQ | 第二阶段异步化 |
+| MQ | RabbitMQ | 学习分析异步化（可选，默认 inline） |
 
 ---
 
@@ -528,7 +527,23 @@ agent/      Python Chat（检索 + 上下文 + Tutor）与 Analyze（学习分�
 evaluation/ 离线 + 在线回归评测、Bad Case 数据集、报告
 flutter/    客户端
 scripts/    闭环回归脚本
-docs/       PRD、架构分析、数据库/API 设计、Session 设计
+docs/       PRD、架构分析、数据库/API 设计、Session 设计、分析队列设计
+```
+
+学习分析的异步链路（可选）：
+
+```text
+ChatService ──→ learning.analysis.request ──→ Python Worker
+                                              │
+        Evidence / Understanding / Revision ←─┘
+                    ↑ learning.analysis.result
+```
+
+队列拓扑、消息契约、失败分类与本地运行方式见
+[docs/analysis-mq.md](docs/analysis-mq.md)。本地 RabbitMQ：
+
+```bash
+cd docker && docker compose up -d
 ```
 
 ```bash
@@ -546,7 +561,8 @@ python -m evaluation --mode all
 bash scripts/regress-closed-loop.sh
 ```
 
-当前结果：Agent 44 个单测、后端 58 个执行用例、评测 40 offline + 9 live 全绿。
+当前结果：Agent 67 个用例（其中 2 个需真实 RabbitMQ）、后端 111 个用例
+（1 个因 MySQL 前置条件跳过）、评测 40 offline + 9 live 全绿。
 
 ---
 

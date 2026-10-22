@@ -23,6 +23,29 @@ spring:
       encoding: UTF-8
       continue-on-error: false
 
+  # 学习分析任务队列。只有 ails.analysis.mode=mq 时才会真正建立连接；
+  # inline 模式下这些配置不会被使用，没有 RabbitMQ 也能正常启动。
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    # 生产者确认：Java 必须知道 broker 真的收下了任务消息
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        # 结果消费者手动 ACK：先完成校验与落库，再确认消息
+        acknowledge-mode: manual
+        prefetch: 1
+        # 反序列化失败等「本地无法处理」的消息直接拒绝，交给结果队列的 DLX；
+        # 不能让它们无限 requeue 打满日志。
+        default-requeue-rejected: false
+        # 重试由队列的 TTL + DLX 完成，不用 Spring 的内存重试
+        retry:
+          enabled: false
+
 server:
   port: 8080
 
@@ -60,6 +83,50 @@ ails:
     # chatStreamExecutor 的一条线程，所以不能沿用对话的 240 秒。
     # 超时后后端退回 rules-v1，用户无感知；痕迹留在 agent_run.error_message。
     analyze-timeout-ms: ${AILS_AGENT_ANALYZE_TIMEOUT_MS:90000}
+
+  # ===================== 学习分析异步化 =====================
+  analysis:
+    # inline —— 回复结束后在 chatStreamExecutor 里同步调 Agent（原行为，默认值）。
+    # mq     —— 回复结束后只投递一条任务消息，由 Python Agent Worker 消费；
+    #           结果经 learning.analysis.result 回到 Result Consumer 再落库。
+    # 默认 inline 与 ails.agent.gateway=stub 的理由一致：新克隆的仓库不装 RabbitMQ 也能启动。
+    mode: ${AILS_ANALYSIS_MODE:inline}
+    # 兜底扫描：把超过阈值仍未完成的分析任务置为 FAILED。
+    # 只在 mode=mq 时装配。阈值必须大于「排队 + 分析 + 结果重试」的最坏耗时，
+    # 否则仍在队列里的任务会被提前判死；默认 60 分钟。
+    compensation:
+      enabled: ${AILS_ANALYSIS_COMPENSATION_ENABLED:true}
+      stale-after-ms: ${AILS_ANALYSIS_COMPENSATION_STALE_AFTER_MS:3600000}
+      interval-ms: ${AILS_ANALYSIS_COMPENSATION_INTERVAL_MS:600000}
+      batch-size: ${AILS_ANALYSIS_COMPENSATION_BATCH_SIZE:100}
+    mq:
+      exchange: ${AILS_ANALYSIS_EXCHANGE:learning.analysis.exchange}
+      # 请求消息被拒绝后先进入 retry 队列（TTL），到期再回到请求队列；
+      # 超过最大次数后由 Worker 投到死信队列，并回一条 FAILED 结果。
+      dlx: ${AILS_ANALYSIS_DLX:learning.analysis.dlx}
+      request-queue: ${AILS_ANALYSIS_REQUEST_QUEUE:learning.analysis.request}
+      request-routing-key: ${AILS_ANALYSIS_REQUEST_ROUTING_KEY:analysis.request}
+      result-queue: ${AILS_ANALYSIS_RESULT_QUEUE:learning.analysis.result}
+      result-routing-key: ${AILS_ANALYSIS_RESULT_ROUTING_KEY:analysis.result}
+      # 结果消费者遇到数据库闪断等暂时性失败时，先进入这个队列等待 TTL，
+      # 再回到结果队列重试；超过 max-retries 次后才进入死信。
+      result-retry-queue: ${AILS_ANALYSIS_RESULT_RETRY_QUEUE:learning.analysis.result.retry}
+      result-retry-routing-key: ${AILS_ANALYSIS_RESULT_RETRY_ROUTING_KEY:analysis.result.retry}
+      retry-queue: ${AILS_ANALYSIS_RETRY_QUEUE:learning.analysis.retry}
+      retry-routing-key: ${AILS_ANALYSIS_RETRY_ROUTING_KEY:analysis.retry}
+      dead-queue: ${AILS_ANALYSIS_DEAD_QUEUE:learning.analysis.dlq}
+      dead-routing-key: ${AILS_ANALYSIS_DEAD_ROUTING_KEY:analysis.dead}
+      retry-ttl-ms: ${AILS_ANALYSIS_RETRY_TTL_MS:15000}
+      max-retries: ${AILS_ANALYSIS_MAX_RETRIES:3}
+      # 等待 broker 确认的时间；超时按投递失败处理，退回同步分析
+      confirm-timeout-ms: ${AILS_ANALYSIS_CONFIRM_TIMEOUT_MS:5000}
+
+  # ===================== Agent 内部服务凭据 =====================
+  internal:
+    # Python Worker 不回传用户 JWT。它用这个共享密钥 + 目标 userId 调后端的只读接口，
+    # 由 InternalServiceAuthenticationFilter 建立「服务代用户」的身份。
+    # 为空表示禁用该入口（默认值）：此时 Worker 必须自己带用户 token，异步分析会失败。
+    token: ${AILS_INTERNAL_TOKEN:}
 
 logging:
   level:

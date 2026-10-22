@@ -174,8 +174,14 @@ public class MemoryService {
         try {
             memoryMapper.insert(memory);
         } catch (DuplicateKeyException e) {
-            // 并发分析同时提出了同一条记忆。唯一索引已经保证了「只有一条」，
-            // 这里安静地当成「已经存在」即可 —— 不是错误，也不需要把分析事务打回。
+            // 只有并发事务确实插入了同一个 (user_id, scope_key, memory_key) 才能当成
+            // 「已经存在」。如果查不到这条身份对应的行，说明冲突来自其他完整性约束，
+            // 继续吞掉会掩盖数据问题。
+            if (findByScopeAndKey(userId, scope.scopeKey(), memoryKey) == null) {
+                throw e;
+            }
+            log.debug("Memory 并发命中唯一键，按已存在处理, userId={}, scope={}, key={}",
+                    userId, scope.scopeKey(), memoryKey);
             return ReconcileOutcome.SKIPPED;
         }
         attachSource(memory.getId(), sourceType, sourceId);
@@ -229,18 +235,33 @@ public class MemoryService {
         if (sourceType == null || sourceId == null) {
             return;
         }
-        Long already = memorySourceMapper.selectCount(new LambdaQueryWrapper<MemorySource>()
-                .eq(MemorySource::getMemoryId, memoryId)
-                .eq(MemorySource::getSourceType, sourceType)
-                .eq(MemorySource::getSourceId, sourceId));
-        if (already != null && already > 0) {
+        if (sourceExists(memoryId, sourceType, sourceId)) {
             return;
         }
         MemorySource source = new MemorySource();
         source.setMemoryId(memoryId);
         source.setSourceType(sourceType);
         source.setSourceId(sourceId);
-        memorySourceMapper.insert(source);
+        try {
+            memorySourceMapper.insert(source);
+        } catch (DuplicateKeyException e) {
+            // 只有「这行来源确实已经被并发事务插入」才允许吞掉：抛出去会让整份分析事务回滚，
+            // 把已经写好的 Evidence / Understanding 一起丢掉。冲突来自其他完整性约束时
+            // 必须照常往上抛，否则会掩盖真实的数据问题。
+            if (!sourceExists(memoryId, sourceType, sourceId)) {
+                throw e;
+            }
+            log.debug("Memory 来源并发命中唯一键, memoryId={}, sourceType={}, sourceId={}",
+                    memoryId, sourceType, sourceId);
+        }
+    }
+
+    private boolean sourceExists(Long memoryId, MemorySourceType sourceType, Long sourceId) {
+        Long already = memorySourceMapper.selectCount(new LambdaQueryWrapper<MemorySource>()
+                .eq(MemorySource::getMemoryId, memoryId)
+                .eq(MemorySource::getSourceType, sourceType)
+                .eq(MemorySource::getSourceId, sourceId));
+        return already != null && already > 0;
     }
 
     @Transactional(readOnly = true)

@@ -142,7 +142,11 @@ class LearningAnalyzer:
         # allow_degradation=False：分析结果会写进长期认知，不能拿 fixture 顶替真实检索。
         # 后端不可用时这里抛 RetrievalError → HTTP 503，后端回退 rules-v1。
         retriever = build_retriever(
-            self._settings, request.auth_token, allow_degradation=False
+            self._settings,
+            request.auth_token,
+            allow_degradation=False,
+            # 异步 Worker 没有用户 JWT，用它自己的服务端凭据
+            user_id=request.user_id,
         )
         try:
             concepts = await retriever.list_concepts(request.learning_space_id)

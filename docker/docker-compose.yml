@@ -1,0 +1,33 @@
+# 本地开发用的 RabbitMQ（带管理界面）。
+#
+#   cd docker && docker compose up -d
+#   管理界面：http://127.0.0.1:15672 （guest / guest）
+#
+# 端口只绑定 127.0.0.1：队列里会有用户原话，不应该暴露到局域网。
+#
+# 默认账号沿用后端 application.yml 的 guest/guest。RabbitMQ 的 guest 默认只允许
+# 回环地址登录，而容器端口映射后连接来源是 docker 网关，因此这里显式放开
+# loopback 限制 —— 前提正是上面的端口绑定，不要改成 0.0.0.0。
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: ails-rabbitmq
+    hostname: ails-rabbitmq
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: '-rabbit loopback_users "[]"'
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+volumes:
+  rabbitmq-data:
