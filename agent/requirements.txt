@@ -4,3 +4,5 @@ uvicorn[standard]>=0.29,<1.0
 httpx>=0.27,<1.0
 pydantic>=2.7,<3.0
 pydantic-settings>=2.3,<3.0
+# 异步分析 Worker：消费 learning.analysis.request，发布 learning.analysis.result
+aio-pika>=9.4,<10.0

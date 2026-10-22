@@ -195,7 +195,7 @@ curl -s -X POST http://127.0.0.1:8000/agent/context/preview \
 ### 测试
 
 ```bash
-python -m pytest -q          # 44 个用例，0.6 秒，不需要数据库与网络
+python -m pytest -q          # 65 passed, 2 skipped（真实 Broker 用例需设置 URL）
 ```
 
 ---
@@ -237,10 +237,15 @@ agent/
 │   │   ├── analyzer.py               结构化输出 → 候选收敛（校验 / 去重 / 裁剪 / 验证策略）
 │   │   └── prompts.py                分析契约（只提出候选，不做判断以外的写入）
 │   │
-│   └── tutor/tutor.py                ★ Tutor：守住教学契约与流式链路
+│   ├── tutor/tutor.py                ★ Tutor：守住教学契约与流式链路
+│   │
+│   └── messaging/                    MQ 消息契约与 Analysis Worker
+│       ├── task.py                   Spring Boot ↔ Worker 的消息模型
+│       └── worker.py                 `python -m app.worker` 的实现
 │
+├── app/worker.py                     Worker 入口（进程独立于 HTTP 服务）
 ├── fixtures/demo_space.json          样例认知数据（README 里那个 TLB 场景）
-├── tests/                            44 个用例：概念识别 / 上下文组装 / 分析器 / 端到端
+├── tests/                            67 个用例：概念识别 / 上下文组装 / 分析器 / 消息契约 / 端到端
 ├── docs/pipeline.md                  各层职责与数据契约
 ├── docs/progress.md                  进度、边界与下一步
 ├── requirements.txt / requirements-dev.txt
@@ -482,7 +487,11 @@ error   { runId, code, message }     code: 500 内部错误 / 502 模型上游�
   （含 Session 区块）、Tutor，经 `POST /agent/chat` 被后端真实调用；
 - **分析**：LearningAnalyzer 经 `POST /agent/analyze` 产出 Evidence / Proposal /
   Memory / Verification 候选，后端 `AgentAnalysisWriteService` 在事务里落库；
-- 44 个不依赖数据库与网络的测试；端到端验收见 `scripts/regress-closed-loop.sh`
+- **异步分析（可选）**：`python -m app.worker` 消费 `learning.analysis.request`，
+  使用服务端凭据回访后端检索，结果经 `learning.analysis.result` 回到 Spring Boot。
+  拓扑、契约与失败处理见 [../docs/analysis-mq.md](../docs/analysis-mq.md)；
+- 65 个不依赖数据库与网络的测试，另有 2 个真实 Broker 用例在设置
+  `AILS_TEST_RABBITMQ_URL` 后执行；端到端验收见 `scripts/regress-closed-loop.sh`
   与 `evaluation/`。
 
 **明确没做**：

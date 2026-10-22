@@ -1,5 +1,6 @@
 package com.ails.backend.config;
 
+import com.ails.backend.security.InternalServiceAuthenticationFilter;
 import com.ails.backend.security.JwtAuthenticationFilter;
 import com.ails.backend.security.RestAccessDeniedHandler;
 import com.ails.backend.security.RestAuthenticationEntryPoint;
@@ -31,6 +32,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final InternalServiceAuthenticationFilter internalServiceAuthenticationFilter;
     private final RestAuthenticationEntryPoint unauthorizedHandler;
     private final RestAccessDeniedHandler accessDeniedHandler;
 
@@ -51,6 +53,9 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(unauthorizedHandler)
                         .accessDeniedHandler(accessDeniedHandler))
+                // 顺序：内部服务凭据先建立「代用户」身份，再由 JWT 过滤器处理普通用户请求。
+                // 两个过滤器都只在 SecurityContext 为空时写入，先成功的一方生效。
+                .addFilterBefore(internalServiceAuthenticationFilter, JwtAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

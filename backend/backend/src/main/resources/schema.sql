@@ -447,7 +447,7 @@ CREATE TABLE IF NOT EXISTS `agent_run` (
     `conversation_id` BIGINT            DEFAULT NULL,
     `session_id`      BIGINT            DEFAULT NULL,
     `run_type`        ENUM ('CHAT', 'ANALYSIS', 'TEST', 'MEMORY') NOT NULL,
-    `status`          ENUM ('RUNNING', 'COMPLETED', 'FAILED') NOT NULL DEFAULT 'RUNNING',
+    `status`          ENUM ('PENDING', 'STALE', 'RUNNING', 'COMPLETED', 'SUCCEEDED', 'FAILED') NOT NULL DEFAULT 'RUNNING',
     -- 两跳链路（Postman → 后端 → Agent）里唯一能跨进程把两半日志对上的键
     `trace_id`        CHAR(32)           DEFAULT NULL COMMENT '由后端生成并透传给 Agent',
     `input_summary`   TEXT,
@@ -465,3 +465,12 @@ CREATE TABLE IF NOT EXISTS `agent_run` (
     CONSTRAINT `fk_agent_conv` FOREIGN KEY (`conversation_id`) REFERENCES `conversation` (`id`),
     CONSTRAINT `fk_agent_session` FOREIGN KEY (`session_id`) REFERENCES `learning_session` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 异步分析任务状态：老库的 status ENUM 只有 RUNNING/COMPLETED/FAILED。
+-- CREATE TABLE IF NOT EXISTS 不会修改已存在的表，所以这里补一条幂等的 ALTER。
+-- 必须放在上面的 CREATE 之后：新库先建表，老库表已存在，两种情况下都成立。
+-- STALE 表示「可能遗留」，不是终态：结果消费者仍允许把 STALE 抢占为 RUNNING。
+ALTER TABLE `agent_run`
+    MODIFY COLUMN `status`
+        ENUM ('PENDING', 'STALE', 'RUNNING', 'COMPLETED', 'SUCCEEDED', 'FAILED')
+        NOT NULL DEFAULT 'RUNNING';

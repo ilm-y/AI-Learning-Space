@@ -15,8 +15,12 @@
 读也走同一扇门，这样权限、软删除、状态过滤（比如 Memory 只认 ACTIVE）这些规则
 永远只有一份实现，不会在 Agent 里长出第二套。
 
-**鉴权**：这些接口按登录用户鉴权，所以必须把用户自己的 JWT 透传进来。
-后端接入时把 token 放进 `ChatAgentRequest.authToken` 即可，Agent 侧不需要改代码。
+**鉴权**：这些接口按登录用户鉴权，有两种调用方式：
+
+1. 同步 Chat / HTTP Analyze 链路：透传用户自己的 JWT（`Authorization: Bearer ...`）；
+2. 异步 MQ Worker：不带用户 JWT（它可能已经过期），改用服务端共享凭据
+   `X-Internal-Token` + `X-Internal-User-Id`。后端过滤器校验后以该用户身份鉴权，
+   业务侧的归属与空间校验仍照常执行。
 
 **失败策略**：连不上后端是「环境问题」，抛 `RetrievalError` 让上层决定降级；
 单个 Concept 查不到是「正常情况」（用户还没学过这个知识点），记日志后跳过。
@@ -43,12 +47,19 @@ from app.schemas import (
 log = logging.getLogger(__name__)
 
 
+# 内部服务凭据的请求头。与后端 InternalServiceAuthenticationFilter 的常量保持一致。
+INTERNAL_TOKEN_HEADER = "X-Internal-Token"
+INTERNAL_USER_HEADER = "X-Internal-User-Id"
+
+
 class HttpBackendRetriever:
     def __init__(
         self,
         base_url: str,
-        auth_token: str,
+        auth_token: str | None = None,
         *,
+        internal_token: str | None = None,
+        user_id: int | None = None,
         timeout_seconds: float = 10.0,
         memory_top_k: int = 5,
         knowledge_top_k: int = 5,
@@ -56,10 +67,18 @@ class HttpBackendRetriever:
         self._base_url = base_url.rstrip("/")
         self._memory_top_k = memory_top_k
         self._knowledge_top_k = knowledge_top_k
-        self._client = httpx.AsyncClient(
-            timeout=timeout_seconds,
-            headers={"Authorization": f"Bearer {auth_token}"},
-        )
+        # 二选一：用户 JWT（同步链路）或服务端凭据（异步 Worker）。
+        # 两者都没有时直接失败，而不是发一个注定 401 的请求。
+        if auth_token:
+            headers = {"Authorization": f"Bearer {auth_token}"}
+        elif internal_token and user_id is not None:
+            headers = {
+                INTERNAL_TOKEN_HEADER: internal_token,
+                INTERNAL_USER_HEADER: str(user_id),
+            }
+        else:
+            raise ValueError("HttpBackendRetriever 需要 auth_token 或 internal_token + user_id")
+        self._client = httpx.AsyncClient(timeout=timeout_seconds, headers=headers)
 
     @property
     def name(self) -> str:
@@ -160,7 +179,9 @@ class HttpBackendRetriever:
             return None
 
         if response.status_code == 401:
-            raise RetrievalError("后端返回 401：透传的用户 JWT 无效或已过期")
+            raise RetrievalError(
+                "后端返回 401：凭据无效（用户 JWT 过期，或 AILS_INTERNAL_TOKEN 与后端不一致）"
+            )
         if response.status_code >= 400:
             if fatal:
                 raise RetrievalError(f"后端返回 {response.status_code}：{path}")
