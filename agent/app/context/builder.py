@@ -26,11 +26,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.citations import format_source_label
 from app.context.tokens import estimate_tokens, truncate_to_tokens
 from app.llm.base import ChatMessage
 from app.prompts import BASE_SYSTEM_INSTRUCTION
 from app.schemas import (
     EvidenceCorrectness,
+    KnowledgeChunk,
     MemoryItem,
     MemoryScopeType,
     MemoryType,
@@ -50,12 +52,53 @@ PRIORITY_HISTORY = 90
 PRIORITY_SESSION = 85
 PRIORITY_UNDERSTANDING = 70
 PRIORITY_MEMORY = 50
+# 知识检索状态比知识片段本身略高：即使片段全部被预算丢掉，模型也必须知道
+# 「这次是没有可用文档 / 阈值过滤 / 检索降级」，而不是把空知识区当成「资料里没有」。
+PRIORITY_KNOWLEDGE_STATUS = 45
 PRIORITY_KNOWLEDGE = 40
 PRIORITY_EVIDENCE = 20
 
 # 渲染进 System Instruction 时的区块顺序（与优先级无关：优先级决定谁被丢，
 # 顺序决定人读起来顺不顺）。session 放最前：它是后面一切内容的框架。
-RENDER_ORDER = ("session", "understanding", "memory", "knowledge", "evidence")
+RENDER_ORDER = (
+    "session",
+    "understanding",
+    "memory",
+    "knowledge_status",
+    "knowledge",
+    "evidence",
+)
+
+# 只有检索结果不是 SUCCESS 时才需要向模型解释「为什么没有知识片段」。
+# 每一种状态的措辞都必须区分「没有可用文档」「没有检索到支持」「检索失败无法确认」，
+# 不能让模型把「这次没检索到」说成「资料或世界上不存在」。
+_KNOWLEDGE_STATUS_NOTES = {
+    "NO_VALID_DOCUMENTS": (
+        "本轮没有可用且已就绪的上传文档（空间为空或文档尚未索引完成）。"
+        "你无法判断文档里是否有答案；不要声称「资料中不存在该信息」，也不要编造资料引用。"
+        "如果回答，先说明没有可用资料，再明确区分通用知识。"
+    ),
+    "NO_MATCH": (
+        "本轮知识检索没有找到可用的文档片段（没有命中）。"
+        "这不等同于该信息在资料或世界上不存在。回答文档相关问题时，"
+        "先说明上传资料中没有检索到直接依据；不要编造引用。通用知识必须标明为通用知识。"
+        "即使这个问题可以用通用知识回答，也必须先在回答里明确说明"
+        "「本轮上传资料中没有检索到可确认的依据」，再区分通用知识。"
+    ),
+    "THRESHOLD_FILTERED": (
+        "本轮知识检索的候选片段全部低于相关度阈值，未作为可靠证据使用。"
+        "低分候选不能当作依据；请说明没有检索到可确认的资料依据，"
+        "不要编造引用，也不要把「未检索到」说成「资料中不存在」。"
+        "即使这个问题可以用通用知识回答，也必须先在回答里明确说明"
+        "「本轮上传资料中没有检索到可确认的依据」，再区分通用知识。"
+    ),
+    "DEGRADED": (
+        "本轮知识检索不可用（Embedding / 向量检索失败），"
+        "系统无法判断上传文档是否包含答案。"
+        "不要声称资料中没有答案，也不要编造引用；回答时说明本次无法检索文档，"
+        "通用知识必须明确区分。"
+    ),
+}
 
 # 一段被裁到小于这个 Token 数就没有意义了，不如整段丢掉
 MIN_USEFUL_SECTION_TOKENS = 40
@@ -248,6 +291,21 @@ class ContextBuilder:
                 )
             )
 
+        status_note = _render_knowledge_status(
+            state.knowledge_status, state.knowledge_warning
+        )
+        if status_note:
+            sections.append(
+                ContextSection(
+                    name="knowledge_status",
+                    title="知识检索状态",
+                    content=status_note,
+                    priority=PRIORITY_KNOWLEDGE_STATUS,
+                    source_ids=[f"knowledge-status:{state.knowledge_status}"],
+                    dedupe_key="knowledge_status",
+                )
+            )
+
         for chunk in state.knowledge:
             sections.append(
                 ContextSection(
@@ -347,7 +405,13 @@ class ContextBuilder:
             body = "\n".join(section.content for section in group)
             blocks.append(f"## {heading}\n{note}\n\n{body}")
 
-        if not any(_kind(section) in RENDER_ORDER and not section.dropped for section in sections):
+        # 这句话只描述「历史认知记录」。知识状态 / 知识片段 / 判定依据都不属于
+        # 学习者认知记录，不能让它们把「没有历史认知」这句话顶掉。
+        cognitive_kinds = {"session", "understanding", "memory"}
+        if not any(
+            _kind(section) in cognitive_kinds and not section.dropped
+            for section in sections
+        ):
             blocks.append("## 学习者背景\n（本次没有检索到任何历史认知记录，按新知识正常教学。）")
         return "\n\n".join(blocks)
 
@@ -374,6 +438,10 @@ class ContextBuilder:
         # 所以这里看的是可用的快照，而不是列表是否为空。
         if not any(understanding.has_content for understanding in state.understandings):
             warnings.append("没有检索到任何 Understanding：这次回答无法接着用户已有认知讲。")
+        # 知识检索的正常空结果 / 阈值过滤 / 依赖失败由检索层给出明确原因。
+        # 这里只负责把它带进 context preview 与 meta，不把失败伪装成「没有资料」。
+        if state.knowledge_warning:
+            warnings.append(state.knowledge_warning)
         pending = [section.name for section in sections if section.dropped]
         if pending:
             warnings.append(f"以下片段因超出 Token 预算被丢弃：{', '.join(pending)}")
@@ -398,9 +466,15 @@ _BLOCK_HEADINGS = {
         "这个用户的长期背景与偏好",
         "> 用来调整讲解方式。当前用户本轮明确表达的意思，永远优先于这里的历史偏好。",
     ),
+    "knowledge_status": (
+        "本轮知识检索状态",
+        "> 这决定了本轮能不能把上传资料当作依据。按状态说明回答，不要自行补成「资料不存在」。",
+    ),
     "knowledge": (
-        "参考资料",
-        "> 回答时可以参考的知识片段；与学习者认知冲突时，先确认是不是误区，再决定怎么讲。",
+        "参考资料（来自用户上传的文档）",
+        "> 这些是检索到的文档片段，不是绝对真理。只能引用这里实际出现的来源标注，"
+        "不要编造文件名或片段序号；资料不足时明确说明。与学习者认知冲突时，"
+        "先确认是不是误区，再决定怎么讲。",
     ),
     "evidence": (
         "判定依据",
@@ -449,9 +523,34 @@ def _render_memory(memory: MemoryItem) -> str:
     return f"- [{label}，作用域：{scope}] {memory.content}"
 
 
-def _render_knowledge(chunk) -> str:
-    page = f" 第 {chunk.page_number} 页" if chunk.page_number else ""
-    return f"- [片段 #{chunk.id}{page}] {chunk.content}"
+def _render_knowledge_status(status: str, warning: str | None) -> str:
+    note = _KNOWLEDGE_STATUS_NOTES.get(str(status or ""))
+    if not note:
+        return ""
+    lines = [f"- 状态：{status}", f"- 说明：{note}"]
+    if warning:
+        lines.append(f"- 检索层记录：{warning}")
+    return "\n".join(lines)
+
+
+def _render_knowledge(chunk: KnowledgeChunk) -> str:
+    """可核对的来源标注：优先文档名 + 片段序号，退化时才用内部片段 ID。
+
+    模型只能引用这里实际出现过的标注；不要渲染数据库 chunk_id 当作来源名，
+    那既不可读，也会让模型误以为任意数字都可以被引用。
+    """
+    label = format_source_label(chunk)
+
+    # 章节/页码必须放在方括号**外面**：方括号内是要被模型原样复制的引用标注，
+    # 只能是 `[资料《文件名》#序号]`。把章节塞进去会让模型复制出
+    # `[资料《文件》#0 ｜ 章节：…]`，校验器按精确格式解析时判为 malformed。
+    suffix = ""
+    heading = " > ".join(chunk.heading_path).strip() if chunk.heading_path else ""
+    if heading and not chunk.content.lstrip().startswith(heading):
+        suffix += f" ｜ 章节：{heading}"
+    if chunk.page_number:
+        suffix += f" ｜ 第 {chunk.page_number} 页"
+    return f"- [{label}]{suffix} {chunk.content}"
 
 
 def _render_evidence(evidence) -> str:

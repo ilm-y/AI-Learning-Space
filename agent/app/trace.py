@@ -25,6 +25,9 @@ class TraceEventType(str, Enum):
     RETRIEVE = "RETRIEVE"
     CONTEXT_BUILT = "CONTEXT_BUILT"
     LLM_CALL = "LLM_CALL"
+    # 回答生成后的来源标注校验。它只记录、不阻断 SSE —— 非法引用目前是
+    # 评估与排查信号，而不是把用户可见回答拦掉的开关。
+    CITATION_CHECK = "CITATION_CHECK"
     ANALYSIS_DECISION = "ANALYSIS_DECISION"
     RUN_END = "RUN_END"
     RUN_ERROR = "RUN_ERROR"

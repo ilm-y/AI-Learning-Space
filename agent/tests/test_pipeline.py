@@ -67,13 +67,96 @@ async def test_evidence_is_retrieved_only_on_demand(runtime):
     assert "判定依据" in challenged.context.messages[0].content
 
 
-async def test_no_concept_hit_skips_retrieval_entirely(runtime):
+async def test_no_concept_hit_still_attempts_knowledge_retrieval(runtime):
+    """没有 Concept 只跳过 U / M / E，不能连带跳过用户上传的文档。"""
     prepared = await runtime.prepare(make_request("今天天气怎么样？"))
 
     assert prepared.state.concept_names == []
-    assert _retrieve_detail(prepared) is None  # 没有概念命中就压根没有 RETRIEVE 事件
+    detail = _retrieve_detail(prepared)
+    assert detail is not None
+    assert detail["conceptIds"] == []
+    assert detail["knowledgeStatus"] == "NO_MATCH"
+    assert detail["understandings"] == []
+    assert detail["evidences"] == 0
+    assert detail["evidenceRequested"] is False
     assert any("没有检索到任何 Understanding" in warning for warning in prepared.context.warnings)
     assert "没有检索到任何历史认知记录" in prepared.context.messages[0].content
+
+
+async def test_no_concept_does_not_call_understanding_memory_or_evidence(settings, monkeypatch):
+    """用计数 Retriever 钉死：Knowledge 被调用，另外三条线一次都不碰。"""
+    from app.retriever.base import KnowledgeResult, KnowledgeStatus
+    from app.state.agent_state import AgentState
+
+    calls = {"knowledge": 0, "understanding": 0, "memory": 0, "evidence": 0}
+
+    class CountingRetriever:
+        name = "counting"
+
+        async def list_concepts(self, space_id):
+            return []
+
+        async def get_knowledge(self, query):
+            calls["knowledge"] += 1
+            assert query.space_id == 1
+            assert query.user_id == 1
+            assert query.top_k == settings.knowledge_top_k == 5
+            assert query.min_score == settings.knowledge_min_score == 0.35
+            return KnowledgeResult(status=KnowledgeStatus.NO_MATCH)
+
+        async def get_understandings(self, *args):
+            calls["understanding"] += 1
+            return []
+
+        async def get_memories(self, *args):
+            calls["memory"] += 1
+            return []
+
+        async def get_evidences(self, *args):
+            calls["evidence"] += 1
+            return []
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(
+        "app.runtime.build_retriever", lambda *args, **kwargs: CountingRetriever()
+    )
+    runtime = AgentRuntime(settings, build_llm_adapter(settings))
+    prepared = await runtime.prepare(make_request("今天天气怎么样？"))
+
+    assert isinstance(prepared.state, AgentState)
+    assert calls == {"knowledge": 1, "understanding": 0, "memory": 0, "evidence": 0}
+
+
+async def test_knowledge_failure_degrades_without_breaking_chat(settings, monkeypatch):
+    """普通知识检索故障只能降级为空知识，不能让整轮对话变成 error / 5xx。"""
+
+    class RaisingKnowledgeRetriever:
+        name = "raising"
+
+        async def list_concepts(self, space_id):
+            return []
+
+        async def get_knowledge(self, query):
+            raise RuntimeError("qdrant down")
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(
+        "app.runtime.build_retriever",
+        lambda *args, **kwargs: RaisingKnowledgeRetriever(),
+    )
+    runtime = AgentRuntime(settings, build_llm_adapter(settings))
+
+    prepared = await runtime.prepare(make_request("今天天气怎么样？"))
+    assert prepared.state.knowledge == []
+    assert prepared.state.knowledge_status == "DEGRADED"
+    assert any("知识检索失败" in warning for warning in prepared.context.warnings)
+
+    events = await collect_events(runtime, make_request("今天天气怎么样？"))
+    assert events[-1].event == "done"
 
 
 async def test_trace_records_the_whole_run(runtime):

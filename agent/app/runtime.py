@@ -37,11 +37,21 @@ from dataclasses import dataclass
 from typing import AsyncIterator
 
 from app.analysis import LearningAnalyzer
+from app.citations import (
+    CitationReport,
+    provided_labels_from_context,
+    validate_citations,
+)
 from app.config import Settings
 from app.context.builder import BuiltContext, ContextBuilder
 from app.llm.base import LLMAdapter, LLMError
 from app.retriever import build_retriever, detect_concepts
-from app.retriever.base import RetrievalError
+from app.retriever.base import (
+    KnowledgeQuery,
+    KnowledgeResult,
+    RetrievalError,
+)
+from app.retriever.knowledge import KnowledgeSearchService
 from app.retriever.routing import FallbackRetriever
 from app.schemas import AnalyzeRequest, AnalyzeResult, ChatRequest
 from app.state.agent_state import AgentState, DetectedConcept
@@ -122,9 +132,11 @@ class AgentRuntime:
         settings: Settings,
         llm: LLMAdapter,
         builder: ContextBuilder | None = None,
+        knowledge_search: KnowledgeSearchService | None = None,
     ) -> None:
         self._settings = settings
         self._llm = llm
+        self._knowledge_search = knowledge_search
         self._builder = builder or ContextBuilder(
             max_context_tokens=settings.max_context_tokens,
             recent_history_limit=settings.recent_history_limit,
@@ -158,9 +170,13 @@ class AgentRuntime:
                 },
             )
 
-            async for delta in self._tutor.stream(prepared.context):
-                prepared.state.response += delta
+            async for delta in self.generate(prepared):
                 yield StreamEvent("delta", {"delta": delta})
+
+            # 只记录、不改变已经产生的回答：当前 SSE 契约没有「引用校验失败」
+            # 这个事件，直接从流里截断会破坏前端体验。真正的硬失败仍由评估集
+            # 与 trace 告警承担。
+            self.validate_citations(prepared)
 
             trace.record(
                 TraceEventType.RUN_END,
@@ -200,6 +216,62 @@ class AgentRuntime:
             if prepared is not None:
                 log.info("run %s 结束：%s", request.run_id, prepared.trace.as_dict())
 
+    async def generate(self, prepared: PreparedRun) -> AsyncIterator[str]:
+        """把一次已组装好的上下文交给模型，逐个产出增量。
+
+        单独抽出来是为了让离线评估能复用同一条生成链路：评估需要拿到完整
+        回答后做引用校验，而不想为了复用 `stream()` 再伪造一套 SSE。
+        """
+        async for delta in self._tutor.stream(prepared.context):
+            prepared.state.response += delta
+            yield delta
+
+    def validate_citations(self, prepared: PreparedRun) -> CitationReport:
+        """校验本轮回答里的来源标注，并把结果写进 trace。
+
+        校验本身失败（比如某些异常实现返回了非字符串）不应影响已经生成的回答，
+        所以入口兜住异常，只记录一条带 error 的 trace。
+        """
+        try:
+            labels = provided_labels_from_context(prepared.context, prepared.state.knowledge)
+            report = validate_citations(
+                prepared.state.response,
+                prepared.state.knowledge,
+                provided_labels=labels,
+            )
+        except Exception as exc:  # noqa: BLE001 —— 观测失败不得打挂对话
+            log.warning("引用校验失败（不影响回答）：%s", type(exc).__name__)
+            prepared.trace.record(
+                TraceEventType.CITATION_CHECK, error=type(exc).__name__
+            )
+            return CitationReport()
+
+        prepared.trace.record(
+            TraceEventType.CITATION_CHECK,
+            total=report.total,
+            valid=report.valid,
+            invalid=report.invalid,
+            illegalRate=report.illegal_rate,
+            invalidLabels=report.invalid_labels,
+            malformedLabels=report.malformed_labels,
+            duplicateLabels=report.duplicate_labels,
+            citedDocuments=report.cited_documents,
+            providedLabels=labels,
+            droppedKnowledge=sum(
+                1
+                for section in prepared.context.sections
+                if section.name.startswith("knowledge:") and section.dropped
+            ),
+        )
+        if report.invalid_labels or report.malformed_labels:
+            log.warning(
+                "run %s 引用校验未通过：invalid=%s malformed=%s",
+                prepared.state.run_id,
+                report.invalid_labels,
+                report.malformed_labels,
+            )
+        return report
+
     # ---------- 分析路径 ----------
 
     async def analyze(self, request: AnalyzeRequest) -> AnalyzeResult:
@@ -228,8 +300,18 @@ class AgentRuntime:
         finally:
             log.info("analyze run %s 结束：%s", request.run_id, trace.as_dict())
 
-    async def prepare(self, request: ChatRequest, trace: RunTrace | None = None) -> PreparedRun:
-        """检索 + 组装，不调用模型。preview 接口直接复用它。"""
+    async def prepare(
+        self,
+        request: ChatRequest,
+        trace: RunTrace | None = None,
+        *,
+        retriever=None,
+    ) -> PreparedRun:
+        """检索 + 组装，不调用模型。preview 接口直接复用它。
+
+        `retriever` 只给评估/测试注入受控检索源；不传时仍按配置构造，
+        并且由本方法负责关闭。传入的检索源归调用方关闭。
+        """
         trace = trace or RunTrace(run_id=request.run_id, trace_id=request.trace_id)
         state = AgentState.from_request(request, trace)
         trace.record(
@@ -241,7 +323,14 @@ class AgentRuntime:
             messageChars=len(request.user_message or ""),
         )
 
-        retriever = build_retriever(self._settings, request.auth_token, user_id=request.user_id)
+        owned_retriever = retriever is None
+        if retriever is None:
+            retriever = build_retriever(
+                self._settings,
+                request.auth_token,
+                user_id=request.user_id,
+                knowledge_search=self._knowledge_search,
+            )
         try:
             await self._retrieve(state, retriever)
             state.context = self._builder.build(state)
@@ -252,7 +341,8 @@ class AgentRuntime:
                 warnings=state.context.warnings,
             )
         finally:
-            await retriever.aclose()
+            if owned_retriever:
+                await retriever.aclose()
 
         return PreparedRun(
             state=state,
@@ -282,26 +372,44 @@ class AgentRuntime:
         )
 
         concept_ids = state.concept_ids
-        if not concept_ids:
-            # 没命中概念不是错误：正常聊天、问新知识点都属于这一类。
-            # 检索一律跳过，省掉三次无意义的往返。
-            return
+        # Knowledge 独立于 Concept：用户问一个还没建 Concept 的新知识点时，
+        # 上传的文档仍然应该参与回答。Concept 只决定 U / M / E 是否有可挂靠对象。
+        knowledge_query = KnowledgeQuery(
+            user_id=state.user_id,
+            space_id=state.space_id,
+            question=query,
+            concept_ids=tuple(concept_ids),
+            top_k=self._settings.knowledge_top_k,
+            min_score=self._settings.knowledge_min_score,
+        )
 
-        wants_evidence = _wants_evidence(query)
-        tasks = [
-            retriever.get_understandings(state.user_id, state.space_id, concept_ids),
-            retriever.get_memories(state.user_id, state.space_id, concept_ids, query),
-            retriever.get_knowledge(state.space_id, concept_ids, query),
-        ]
+        wants_evidence = bool(concept_ids) and _wants_evidence(query)
+        tasks: list = [self._safe_knowledge(retriever, knowledge_query)]
+        if concept_ids:
+            tasks.extend(
+                [
+                    retriever.get_understandings(state.user_id, state.space_id, concept_ids),
+                    retriever.get_memories(state.user_id, state.space_id, concept_ids, query),
+                ]
+            )
         if wants_evidence:
-            tasks.append(retriever.get_evidences(state.user_id, concept_ids, self._settings.evidence_top_k))
+            tasks.append(
+                retriever.get_evidences(
+                    state.user_id, concept_ids, self._settings.evidence_top_k
+                )
+            )
 
         results = await asyncio.gather(*tasks)
-        state.understandings = results[0]
-        state.memories = results[1]
-        state.knowledge = results[2]
-        if wants_evidence:
-            state.evidences = results[3]
+        knowledge_result: KnowledgeResult = results[0]
+        state.knowledge = knowledge_result.chunks
+        state.knowledge_status = knowledge_result.status.value
+        state.knowledge_warning = knowledge_result.warning
+
+        if concept_ids:
+            state.understandings = results[1]
+            state.memories = results[2]
+            if wants_evidence:
+                state.evidences = results[3]
 
         state.trace.record(
             TraceEventType.RETRIEVE,
@@ -310,9 +418,32 @@ class AgentRuntime:
             understandings=[item.concept_name for item in state.understandings],
             memories=len(state.memories),
             knowledge=len(state.knowledge),
+            knowledgeStatus=state.knowledge_status,
+            knowledgeCandidates=knowledge_result.candidates,
             evidences=len(state.evidences),
             evidenceRequested=wants_evidence,
         )
+
+    async def _safe_knowledge(self, retriever, query: KnowledgeQuery) -> KnowledgeResult:
+        """知识检索的故障边界：任何异常都变成带 warning 的空知识。"""
+        try:
+            result = await retriever.get_knowledge(query)
+        except Exception as exc:  # noqa: BLE001 —— 普通检索失败不得打挂 /agent/chat
+            log.warning(
+                "知识检索未预期失败，降级为空：user=%s space=%s error=%s",
+                query.user_id,
+                query.space_id,
+                type(exc).__name__,
+            )
+            return KnowledgeResult.degraded(
+                "知识检索失败，本次回答未使用文档资料。"
+            )
+        if not isinstance(result, KnowledgeResult):
+            log.warning("检索源返回了非 KnowledgeResult，按空知识处理")
+            return KnowledgeResult.degraded(
+                "知识检索返回格式异常，本次回答未使用文档资料。"
+            )
+        return result
 
     async def aclose(self) -> None:
         await self._llm.aclose()

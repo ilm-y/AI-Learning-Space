@@ -204,6 +204,60 @@ def test_recent_history_wins_over_older_history():
     assert max(int(section.name.split(":")[1]) for section in kept) == len(history)
 
 
+def test_knowledge_source_label_is_traceable_document_name_and_chunk_index():
+    chunk = KnowledgeChunk(
+        id=200,
+        document_id=1,
+        chunk_index=3,
+        document_name="操作系统笔记.md",
+        file_type="md",
+        heading_path=["虚拟内存", "TLB"],
+        content="TLB 是 MMU 内部的页表项缓存。",
+    )
+    context = ContextBuilder().build(make_state(knowledge=[chunk]))
+    system = context.messages[0].content
+
+    assert "[资料《操作系统笔记.md》#3]" in system
+    assert "章节：虚拟内存 > TLB" in system
+    # 不要把内部 chunk_id 当作模型可引用的来源名
+    assert "资料片段#200" not in system
+
+
+def test_duplicate_knowledge_chunks_are_rendered_once():
+    first = KnowledgeChunk(
+        id=200, document_name="notes.md", chunk_index=0, content="同一段内容"
+    )
+    duplicate = KnowledgeChunk(
+        id=200, document_name="notes.md", chunk_index=0, content="同一段内容"
+    )
+
+    context = ContextBuilder().build(make_state(knowledge=[first, duplicate]))
+    system = context.messages[0].content
+
+    assert system.count("[资料《notes.md》#0]") == 1
+    assert len([s for s in context.sections if s.name == "knowledge:200"]) == 1
+
+
+def test_knowledge_warning_surfaces_and_low_priority_chunk_is_still_droppable():
+    state = make_state(
+        knowledge=[
+            KnowledgeChunk(
+                id=200,
+                document_name="notes.md",
+                chunk_index=0,
+                content="检索到的资料。" * 60,
+            )
+        ],
+        knowledge_warning="知识检索依赖不可用，本次回答未使用文档资料。",
+    )
+
+    context = ContextBuilder(max_context_tokens=120).build(state)
+
+    assert "knowledge:200" in context.dropped_sections
+    assert any("知识检索依赖不可用" in warning for warning in context.warnings)
+    assert "知识检索依赖不可用" not in context.messages[0].content
+
+
 def test_sections_expose_their_sources_for_debugging():
     context = ContextBuilder().build(
         make_state(understandings=[UNDERSTANDING], memories=[make_memory()])
@@ -219,3 +273,75 @@ def test_preview_payload_is_json_serialisable():
 
     context = ContextBuilder().build(make_state(understandings=[UNDERSTANDING]))
     json.dumps(context.as_dict(), ensure_ascii=False)
+
+
+def test_no_valid_documents_status_reaches_the_model_without_fake_certainty():
+    state = make_state(
+        knowledge_status="NO_VALID_DOCUMENTS",
+        knowledge_warning="学习空间中没有可用文档。",
+    )
+
+    context = ContextBuilder().build(state)
+    system = context.messages[0].content
+
+    assert "本轮知识检索状态" in system
+    assert "没有可用且已就绪的上传文档" in system
+    assert "不要声称「资料中不存在该信息」" in system
+    assert "不要编造资料引用" in system
+    assert "学习空间中没有可用文档。" in system
+
+
+def test_threshold_filtered_status_is_not_reported_as_no_such_fact():
+    state = make_state(
+        knowledge_status="THRESHOLD_FILTERED",
+        knowledge_warning="候选片段均低于相关度阈值。",
+    )
+
+    system = ContextBuilder().build(state).messages[0].content
+
+    assert "全部低于相关度阈值" in system
+    assert "不等同于" in system or "不要把「未检索到」说成「资料中不存在」" in system
+    assert "低分候选不能当作依据" in system
+
+
+def test_degraded_status_says_retrieval_failed_instead_of_no_answer():
+    state = make_state(
+        knowledge_status="DEGRADED",
+        knowledge_warning="知识检索失败，本次回答未使用文档资料。",
+    )
+
+    system = ContextBuilder().build(state).messages[0].content
+
+    assert "知识检索不可用" in system
+    assert "无法判断上传文档是否包含答案" in system
+    assert "不要编造引用" in system
+
+
+def test_success_status_does_not_add_a_redundant_block():
+    state = make_state(
+        knowledge_status="SUCCESS",
+        knowledge=[KnowledgeChunk(id=201, document_name="notes.md", chunk_index=0, content="事实。")],
+    )
+
+    section_names = [section.name for section in ContextBuilder().build(state).sections]
+    assert "knowledge_status" not in section_names
+    assert "knowledge:201" in section_names
+
+
+def test_status_survives_budget_drop_of_low_priority_knowledge_chunk():
+    state = make_state(
+        knowledge_status="THRESHOLD_FILTERED",
+        knowledge=[
+            KnowledgeChunk(
+                id=202,
+                document_name="notes.md",
+                chunk_index=0,
+                content="低分候选。" * 80,
+            )
+        ],
+    )
+
+    context = ContextBuilder(max_context_tokens=150).build(state)
+
+    assert "knowledge:202" in context.dropped_sections
+    assert "本轮知识检索状态" in context.messages[0].content
