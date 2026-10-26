@@ -55,8 +55,14 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler))
                 // 顺序：内部服务凭据先建立「代用户」身份，再由 JWT 过滤器处理普通用户请求。
                 // 两个过滤器都只在 SecurityContext 为空时写入，先成功的一方生效。
-                .addFilterBefore(internalServiceAuthenticationFilter, JwtAuthenticationFilter.class)
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                //
+                // 必须先注册 JWT 过滤器、再以它作为内部过滤器的锚点：
+                // Spring Security 只允许 addFilterBefore/After 的锚点来自内置顺序表，
+                // 或已经通过 addFilter* 注册过顺序的过滤器。反过来写时
+                // JwtAuthenticationFilter 尚未注册，启动会抛
+                // "does not have a registered order"。
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(internalServiceAuthenticationFilter, JwtAuthenticationFilter.class);
         return http.build();
     }
 

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 简易 JSON 工具：用于 JSON 列（如 learning_understanding.misconceptions /
@@ -54,6 +55,21 @@ public final class JsonUtil {
         try {
             return MAPPER.readValue(json,
                     MAPPER.getTypeFactory().constructCollectionType(List.class, elementType));
+        } catch (Exception e) {
+            throw new IllegalStateException("JSON 解析失败: " + json, e);
+        }
+    }
+
+    /**
+     * 把 JSON 对象解析成 Map。用于 chunk metadata 等结构不固定的字段。
+     */
+    public static Map<String, Object> toMap(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return MAPPER.readValue(json, new TypeReference<Map<String, Object>>() {
+            });
         } catch (Exception e) {
             throw new IllegalStateException("JSON 解析失败: " + json, e);
         }

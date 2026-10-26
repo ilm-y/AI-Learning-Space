@@ -15,6 +15,14 @@ spring:
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:root}
 
+  servlet:
+    multipart:
+      # 应用层上限在 ails.document.storage.max-size-bytes（默认 10 MiB）。
+      # 这里留出余量，让略超限的文件进入业务校验并稳定返回 413；
+      # 如果调大 max-size-bytes，必须同步调大这两个 multipart 上限。
+      max-file-size: 20MB
+      max-request-size: 21MB
+
   sql:
     init:
       # CREATE TABLE IF NOT EXISTS，幂等，每次启动执行
@@ -64,6 +72,26 @@ ails:
     secret: ${JWT_SECRET:ails-dev-7f3a9c2e5b8d1f4a6e0c3b7d9f2a5c8e1b4d7f0a3c6e9b2d5f8a1c4e7b0d3f6a}
     # 过期时间（毫秒），默认 7 天
     expiration-ms: ${JWT_EXPIRATION_MS:604800000}
+
+  # ===================== 文档原文存储 =====================
+  document:
+    storage:
+      # 相对路径基于后端进程工作目录；生产环境应指向持久化卷。
+      # 默认 ./data/documents 已加入 backend/backend/.gitignore。
+      root: ${AILS_DOCUMENT_STORAGE_ROOT:./data/documents}
+      # 单文件字节上限，默认 10 MiB。
+      # 必须小于 spring.servlet.multipart.max-file-size（当前 20MB）。
+      max-size-bytes: ${AILS_DOCUMENT_MAX_SIZE_BYTES:10485760}
+
+    # 文档解析 / 切块 / Embedding / Qdrant 索引的后台任务。
+    # 与聊天 SSE 的线程池完全隔离；队列有界，拒绝时文档直接置 FAILED。
+    index:
+      core-pool-size: ${AILS_DOCUMENT_INDEX_CORE_POOL_SIZE:2}
+      max-pool-size: ${AILS_DOCUMENT_INDEX_MAX_POOL_SIZE:2}
+      queue-capacity: ${AILS_DOCUMENT_INDEX_QUEUE_CAPACITY:64}
+      # 解析只需上传文件内容；索引可能包含 Embedding API 调用与批量 upsert。
+      parse-timeout-ms: ${AILS_DOCUMENT_PARSE_TIMEOUT_MS:60000}
+      index-timeout-ms: ${AILS_DOCUMENT_INDEX_TIMEOUT_MS:120000}
 
   agent:
     # AgentGateway 的实现选择，决定「后端把问题发给谁」：
