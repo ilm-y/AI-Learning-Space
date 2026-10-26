@@ -70,6 +70,10 @@ class AgentState:
     understandings: list[Understanding] = field(default_factory=list)
     memories: list[MemoryItem] = field(default_factory=list)
     knowledge: list[KnowledgeChunk] = field(default_factory=list)
+    # 知识检索的失败/空结果原因。它是「这次为什么没有用资料」的唯一事实，
+    # 会进 trace、meta warnings 与 context preview；不要把失败伪装成一次成功空检索。
+    knowledge_status: str = "NOT_RETRIEVED"
+    knowledge_warning: str | None = None
     evidences: list[EvidenceItem] = field(default_factory=list)
 
     # ---------- 组装与产出 ----------

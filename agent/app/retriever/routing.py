@@ -19,10 +19,16 @@ from __future__ import annotations
 import logging
 
 from app.config import Settings
-from app.retriever.base import RetrievalError, Retriever
+from app.retriever.base import (
+    KnowledgeQuery,
+    KnowledgeResult,
+    RetrievalError,
+    Retriever,
+)
 from app.retriever.fixture import FixtureRetriever
 from app.retriever.http_backend import HttpBackendRetriever
-from app.schemas import Concept, EvidenceItem, KnowledgeChunk, MemoryItem, Understanding
+from app.retriever.knowledge import KnowledgeSearchService
+from app.schemas import Concept, EvidenceItem, MemoryItem, Understanding
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +43,7 @@ def build_retriever(
     *,
     allow_degradation: bool = True,
     user_id: int | None = None,
+    knowledge_search: KnowledgeSearchService | None = None,
 ) -> Retriever:
     """按配置与本次请求组装检索源。每次运行一个实例，用完即关。
 
@@ -54,7 +61,7 @@ def build_retriever(
     if mode == MODE_FIXTURE:
         return fixture
 
-    http = _build_http(settings, auth_token, user_id)
+    http = _build_http(settings, auth_token, user_id, knowledge_search)
     if http is None:
         if not allow_degradation:
             raise RetrievalError(
@@ -112,12 +119,21 @@ class FallbackRetriever:
             "get_memories", user_id=user_id, space_id=space_id, concept_ids=concept_ids, query=query
         )
 
-    async def get_knowledge(
-        self, space_id: int, concept_ids: list[int], query: str
-    ) -> list[KnowledgeChunk]:
-        return await self._call(
-            "get_knowledge", space_id=space_id, concept_ids=concept_ids, query=query
-        )
+    async def get_knowledge(self, query: KnowledgeQuery) -> KnowledgeResult:
+        # 知识检索是唯一不能「降级到 Fixture」的线：Fixture 片段没有经过后端
+        # 文档白名单与 Qdrant 权限过滤，拿它顶替会向用户展示不存在的资料来源。
+        # 因此即使本次运行已经在别的检索线上降级，Knowledge 也只返回空 + warning。
+        if self.degraded:
+            return KnowledgeResult.degraded(
+                "检索源已降级，知识检索保持为空且不回退样例数据。"
+            )
+        try:
+            return await self._primary.get_knowledge(query)
+        except RetrievalError as exc:
+            log.warning("知识检索不可用，保持空知识（不回退 Fixture）：%s", exc)
+            return KnowledgeResult.degraded(
+                "知识检索源不可用，本次回答未使用文档资料。"
+            )
 
     async def get_evidences(
         self, user_id: int, concept_ids: list[int], limit: int
@@ -142,7 +158,10 @@ class FallbackRetriever:
 
 
 def _build_http(
-    settings: Settings, auth_token: str | None, user_id: int | None
+    settings: Settings,
+    auth_token: str | None,
+    user_id: int | None,
+    knowledge_search: KnowledgeSearchService | None,
 ) -> HttpBackendRetriever | None:
     """有凭据才建 HTTP 检索源。用户 JWT 优先于服务端凭据。"""
     if auth_token:
@@ -152,6 +171,7 @@ def _build_http(
             timeout_seconds=settings.backend_timeout_seconds,
             memory_top_k=settings.memory_top_k,
             knowledge_top_k=settings.knowledge_top_k,
+            knowledge_search=knowledge_search,
         )
     if settings.internal_token and user_id is not None:
         return HttpBackendRetriever(
@@ -161,6 +181,7 @@ def _build_http(
             timeout_seconds=settings.backend_timeout_seconds,
             memory_top_k=settings.memory_top_k,
             knowledge_top_k=settings.knowledge_top_k,
+            knowledge_search=knowledge_search,
         )
     return None
 

@@ -8,7 +8,8 @@
 | Understanding | `GET /api/understandings/{conceptId}` |
 | Memory | `GET /api/memories/search?spaceId=&conceptId=&keyword=` |
 | Evidence | `GET /api/understandings/{conceptId}/evidence` |
-| Knowledge | 无 —— 文档接口还是 501，第一版固定返回空 |
+| Knowledge 白名单 | `GET /api/spaces/{spaceId}/documents/ready-ids?embeddingModel=` |
+| Knowledge 向量 | 现有 Embedding Provider + Qdrant（`KnowledgeSearchService`） |
 
 **为什么不自己连 MySQL？** 因为 `agent-architecture.md` 第二节写得很清楚：
 业务数据由 Backend 管理，认知判断由 Agent 管理，Agent 不绕过 Backend 直接改库。
@@ -34,12 +35,16 @@ from typing import Any
 
 import httpx
 
-from app.retriever.base import RetrievalError
+from app.retriever.base import (
+    KnowledgeQuery,
+    KnowledgeResult,
+    RetrievalError,
+)
+from app.retriever.knowledge import KnowledgeSearchService
 from app.schemas import (
     ApiResponse,
     Concept,
     EvidenceItem,
-    KnowledgeChunk,
     MemoryItem,
     Understanding,
 )
@@ -63,10 +68,12 @@ class HttpBackendRetriever:
         timeout_seconds: float = 10.0,
         memory_top_k: int = 5,
         knowledge_top_k: int = 5,
+        knowledge_search: KnowledgeSearchService | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._memory_top_k = memory_top_k
         self._knowledge_top_k = knowledge_top_k
+        self._knowledge_search = knowledge_search
         # 二选一：用户 JWT（同步链路）或服务端凭据（异步 Worker）。
         # 两者都没有时直接失败，而不是发一个注定 401 的请求。
         if auth_token:
@@ -127,12 +134,46 @@ class HttpBackendRetriever:
         )
         return _parse_list(data, MemoryItem)[: self._memory_top_k]
 
-    async def get_knowledge(
-        self, space_id: int, concept_ids: list[int], query: str
-    ) -> list[KnowledgeChunk]:
-        # 文档 / 向量检索是 M6，后端对应接口当前返回 501。这里如实返回空，
-        # 而不是退回关键词在内存里假装检索 —— 上层已经能处理「没有知识」。
-        return []
+    async def get_knowledge(self, query: KnowledgeQuery) -> KnowledgeResult:
+        # 第一步必须是后端授权白名单。拿不到就 fail closed；绝不先查 Qdrant 再过滤，
+        # 也不把白名单失败退化成 Fixture 或未过滤搜索。
+        if self._knowledge_search is None:
+            return KnowledgeResult.degraded(
+                "知识检索组件未配置，本次回答未使用文档资料。"
+            )
+
+        params = {"embeddingModel": self._knowledge_search.embedding_model}
+        try:
+            data = await self._get(
+                f"/api/spaces/{query.space_id}/documents/ready-ids",
+                params=params,
+                fatal=False,
+            )
+        except RetrievalError as exc:
+            log.warning("文档白名单获取失败，知识检索 fail closed：%s", exc)
+            return KnowledgeResult.degraded(
+                "无法确认可检索文档的权限，本次回答未使用文档资料。"
+            )
+
+        if data is None:
+            return KnowledgeResult.degraded(
+                "文档白名单获取失败，本次回答未使用文档资料。"
+            )
+
+        allowed = _parse_ready_ids(data)
+        if allowed is None:
+            log.warning("文档白名单格式异常，知识检索 fail closed")
+            return KnowledgeResult.degraded(
+                "文档白名单数据不完整，本次回答未使用文档资料。"
+            )
+
+        try:
+            return await self._knowledge_search.search(query, allowed)
+        except Exception as exc:  # noqa: BLE001 —— 普通检索故障不得打挂对话
+            log.warning("知识检索失败，降级为空：%s", type(exc).__name__)
+            return KnowledgeResult.degraded(
+                "知识检索依赖不可用，本次回答未使用文档资料。"
+            )
 
     async def get_evidences(
         self, user_id: int, concept_ids: list[int], limit: int
@@ -222,3 +263,18 @@ def _parse_one(data: Any, model: type):
     except ValueError:
         log.warning("跳过无法解析的 %s：%s", model.__name__, str(data)[:200])
         return None
+
+
+def _parse_ready_ids(data: Any) -> list[int] | None:
+    """解析后端 ready-ids。任何一条不合法都整体拒绝，避免部分白名单。"""
+    if not isinstance(data, list):
+        return None
+    result: list[int] = []
+    seen: set[int] = set()
+    for value in data:
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            return None
+        if value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result

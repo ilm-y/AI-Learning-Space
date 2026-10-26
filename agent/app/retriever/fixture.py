@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from app.retriever.base import KnowledgeQuery, KnowledgeResult, KnowledgeStatus
 from app.schemas import (
     Concept,
     EvidenceItem,
@@ -81,16 +82,21 @@ class FixtureRetriever:
         ]
         return related[: self._memory_top_k]
 
-    async def get_knowledge(
-        self, space_id: int, concept_ids: list[int], query: str
-    ) -> list[KnowledgeChunk]:
+    async def get_knowledge(self, query: KnowledgeQuery) -> KnowledgeResult:
         self._ensure_loaded()
-        wanted = set(concept_ids)
+        wanted = set(query.concept_ids)
         chunks = [item for item in self._knowledge if item.concept_id in wanted] if wanted else []
-        # 没有 Concept 命中时按关键词给一点兜底，模拟将来的关键词召回
-        if not chunks and query:
-            chunks = [item for item in self._knowledge if _rough_match(item.content, query)]
-        return chunks[: self._knowledge_top_k]
+        # 没有 Concept 命中时按关键词给一点兜底，模拟真实检索里「问题本身也能召回」。
+        if not chunks and query.question:
+            chunks = [
+                item for item in self._knowledge if _rough_match(item.content, query.question)
+            ]
+        limit = min(query.top_k, self._knowledge_top_k)
+        chunks = chunks[:limit]
+        return KnowledgeResult(
+            chunks=chunks,
+            status=KnowledgeStatus.SUCCESS if chunks else KnowledgeStatus.NO_MATCH,
+        )
 
     async def get_evidences(
         self, user_id: int, concept_ids: list[int], limit: int

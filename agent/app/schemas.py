@@ -380,15 +380,17 @@ class EvidenceItem(CamelModel):
 class KnowledgeChunk(CamelModel):
     """知识片段。
 
-    第一版没有文档解析与向量检索，只有 Fixture 里的样例数据；
-    字段与 `document_chunk` 对齐，接 RAG 时不用改上面的层。
-
-    `concept_id` 是 Agent 侧补的：`document_chunk` 表里没有这一列，
-    第一版靠它把片段挂到 Concept 上做筛选；接向量检索后由相似度与 metadata 取代。
+    真实 RAG 链路会填充文档名、片段序号、文件类型与可选的标题路径，
+    让模型引用的来源可被人核对，而不是只看到内部数据库 ID。
+    Fixture 数据可以只提供旧字段，渲染层会退化到片段 ID。
     """
 
     id: int
     document_id: int | None = None
+    chunk_index: int | None = None
+    document_name: str | None = None
+    file_type: str | None = None
+    heading_path: list[str] = Field(default_factory=list)
     concept_id: int | None = None
     content: str
     page_number: int | None = None

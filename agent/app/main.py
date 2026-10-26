@@ -7,6 +7,8 @@
 | `POST /agent/chat` | 对话：接收一次请求，SSE 流式推回回答 |
 | `POST /agent/analyze` | 学习分析：回复结束后抽取证据 / 理解 / 记忆 / 验证决策 |
 | `POST /agent/context/preview` | 调试用：只检索与组装，**不调用模型**，把「这次喂了什么给模型」摊开 |
+| `POST /agent/documents/parse` | 内部接口：接收文件字节，解析并切块 |
+| `POST /agent/documents/index` | 内部接口：Embedding + Qdrant 写入 |
 | `GET /health` | 当前生效的是哪套适配器、上下文预算多大 |
 
 Chat 与 Analyze 是 PRD §24 的两个 Agent Internal API。前者生产用户可见的回答，
@@ -38,11 +40,15 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.analysis import AnalysisError
 from app.config import Settings
+from app.documents.routes import router as documents_router
+from app.embedding import build_embedding_provider
 from app.llm import build_llm_adapter
 from app.llm.base import LLMError
 from app.retriever.base import RetrievalError
+from app.retriever.knowledge import KnowledgeSearchService
 from app.runtime import AgentRuntime, StreamEvent
 from app.schemas import AnalyzeRequest, ChatRequest
+from app.vectorstore.qdrant_store import QdrantDocumentStore
 
 log = logging.getLogger(__name__)
 
@@ -54,17 +60,44 @@ async def lifespan(app: FastAPI):
         format="%(asctime)s %(levelname)s %(name)s | %(message)s",
     )
     settings = Settings()
-    # LLM 适配器跨请求复用（连接池）；Retriever 每个请求一个，因为要带用户自己的 JWT
+    # LLM / Embedding / Qdrant 跨请求复用（连接池）；Retriever 每个请求一个，
+    # 因为要带用户自己的 JWT 或内部服务凭据。
     app.state.settings = settings
-    app.state.runtime = AgentRuntime(settings, build_llm_adapter(settings))
+    embedding_provider = build_embedding_provider(settings)
+    qdrant_store = QdrantDocumentStore(
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key,
+        timeout_seconds=settings.qdrant_timeout_seconds,
+        collection_prefix=settings.qdrant_collection_prefix,
+        upsert_batch_size=settings.qdrant_upsert_batch_size,
+    )
+    app.state.embedding_provider = embedding_provider
+    app.state.qdrant_store = qdrant_store
+    app.state.runtime = AgentRuntime(
+        settings,
+        build_llm_adapter(settings),
+        knowledge_search=KnowledgeSearchService(
+            provider=embedding_provider,
+            store=qdrant_store,
+            collection_prefix=settings.qdrant_collection_prefix,
+            timeout_seconds=settings.knowledge_timeout_seconds,
+        ),
+    )
     log.info("Agent 启动：%s", settings.describe())
     try:
         yield
     finally:
-        await app.state.runtime.aclose()
+        try:
+            await app.state.runtime.aclose()
+        finally:
+            try:
+                await app.state.embedding_provider.aclose()
+            finally:
+                await app.state.qdrant_store.aclose()
 
 
 app = FastAPI(title="AI Learning Space — Learning Agent", version="0.1.0", lifespan=lifespan)
+app.include_router(documents_router)
 
 
 @app.get("/health")
