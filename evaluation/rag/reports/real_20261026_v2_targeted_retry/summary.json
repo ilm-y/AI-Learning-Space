@@ -1,0 +1,531 @@
+{
+  "metadata": {
+    "startedAt": "2026-10-26T14:06:17.972021+00:00",
+    "backendUrl": "http://127.0.0.1:18080",
+    "userId": 8,
+    "mainSpaceId": 13,
+    "emptySpaceId": 14,
+    "documents": [
+      {
+        "id": 49,
+        "name": "zenframe",
+        "status": "READY",
+        "chunkCount": 3,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 48,
+        "name": "zealdeck",
+        "status": "READY",
+        "chunkCount": 3,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 47,
+        "name": "operating-system",
+        "status": "READY",
+        "chunkCount": 3,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 46,
+        "name": "novacache-b",
+        "status": "READY",
+        "chunkCount": 2,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 45,
+        "name": "novacache-a",
+        "status": "READY",
+        "chunkCount": 2,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 44,
+        "name": "helios-compute",
+        "status": "READY",
+        "chunkCount": 6,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 43,
+        "name": "auroragate",
+        "status": "READY",
+        "chunkCount": 3,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      }
+    ],
+    "readyIds": [
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49
+    ],
+    "collection": "ails_phase42_real_e2e_text-embedding-v4_1024",
+    "llm": {
+      "provider": "openai",
+      "model": "qwen-plus",
+      "temperature": 0.0,
+      "maxTokens": 1024
+    },
+    "embedding": {
+      "provider": "openai",
+      "model": "text-embedding-v4",
+      "dimension": 1024
+    },
+    "retrievalBaseline": {
+      "topK": 5,
+      "minScore": 0.35,
+      "maxContextTokens": 3000
+    },
+    "modes": [
+      "rag",
+      "rag+state"
+    ],
+    "cases": 2,
+    "rulesVersion": "v2"
+  },
+  "aggregate": {
+    "rulesVersion": "v2",
+    "runs": 4,
+    "modes": {
+      "rag": {
+        "runs": 2,
+        "autoPass": 0,
+        "failed": 2,
+        "manual": 0,
+        "answerApplicable": 2,
+        "answerPassed": 0,
+        "citationPassed": 2,
+        "latencyMs": 44159,
+        "exactLabels": 0,
+        "illegalLabels": 0,
+        "malformedLabels": 0,
+        "validLabels": 0,
+        "supportWarnings": 0,
+        "citationRequirementRuns": 0,
+        "requiredMissingRuns": 0,
+        "forbiddenRuleRuns": 0,
+        "forbiddenHitRuns": 0,
+        "validCitationRuns": 0,
+        "extraValidRuns": 0,
+        "retrievalApplicable": 2,
+        "retrievalPassed": 2,
+        "contextApplicable": 2,
+        "contextPassed": 2,
+        "answerPassRate": 0.0,
+        "citationPassRate": 1.0,
+        "averageLatencyMs": 22079.5,
+        "retrievalPassRate": 1.0,
+        "contextPassRate": 1.0,
+        "metrics": {
+          "illegal_label_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "非法精确标签 / 精确标签总数"
+          },
+          "malformed_label_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "格式错误标签 / 全部标签出现次数（精确 + 格式错误）"
+          },
+          "required_source_missing_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "缺必需来源的运行 / 有必需来源要求的运行"
+          },
+          "forbidden_source_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "引用了禁止来源的运行 / 配置了禁止来源的运行"
+          },
+          "extra_valid_source_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "含额外合法来源的运行 / 至少有一条合法引用的运行"
+          },
+          "citation_support_warning_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "来源支持度为 none/numeric_conflict 的引用 / 合法引用数"
+          },
+          "citation_pass_rate": {
+            "numerator": 2,
+            "denominator": 2,
+            "rate": 1.0,
+            "definition": "引用层通过的运行 / 全部运行（分母是运行数，不是标签数）"
+          }
+        }
+      },
+      "rag+state": {
+        "runs": 2,
+        "autoPass": 0,
+        "failed": 2,
+        "manual": 0,
+        "answerApplicable": 2,
+        "answerPassed": 0,
+        "citationPassed": 2,
+        "latencyMs": 40859,
+        "exactLabels": 0,
+        "illegalLabels": 0,
+        "malformedLabels": 0,
+        "validLabels": 0,
+        "supportWarnings": 0,
+        "citationRequirementRuns": 0,
+        "requiredMissingRuns": 0,
+        "forbiddenRuleRuns": 0,
+        "forbiddenHitRuns": 0,
+        "validCitationRuns": 0,
+        "extraValidRuns": 0,
+        "retrievalApplicable": 2,
+        "retrievalPassed": 2,
+        "contextApplicable": 2,
+        "contextPassed": 2,
+        "answerPassRate": 0.0,
+        "citationPassRate": 1.0,
+        "averageLatencyMs": 20429.5,
+        "retrievalPassRate": 1.0,
+        "contextPassRate": 1.0,
+        "metrics": {
+          "illegal_label_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "非法精确标签 / 精确标签总数"
+          },
+          "malformed_label_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "格式错误标签 / 全部标签出现次数（精确 + 格式错误）"
+          },
+          "required_source_missing_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "缺必需来源的运行 / 有必需来源要求的运行"
+          },
+          "forbidden_source_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "引用了禁止来源的运行 / 配置了禁止来源的运行"
+          },
+          "extra_valid_source_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "含额外合法来源的运行 / 至少有一条合法引用的运行"
+          },
+          "citation_support_warning_rate": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null,
+            "definition": "来源支持度为 none/numeric_conflict 的引用 / 合法引用数"
+          },
+          "citation_pass_rate": {
+            "numerator": 2,
+            "denominator": 2,
+            "rate": 1.0,
+            "definition": "引用层通过的运行 / 全部运行（分母是运行数，不是标签数）"
+          }
+        }
+      }
+    },
+    "byModeCategory": {
+      "rag": {
+        "D": {
+          "runs": 1,
+          "autoPass": 0,
+          "failed": 1,
+          "manual": 0,
+          "answerApplicable": 1,
+          "answerPassed": 0,
+          "citationPassed": 1,
+          "latencyMs": 20992,
+          "exactLabels": 0,
+          "illegalLabels": 0,
+          "malformedLabels": 0,
+          "validLabels": 0,
+          "supportWarnings": 0,
+          "citationRequirementRuns": 0,
+          "requiredMissingRuns": 0,
+          "forbiddenRuleRuns": 0,
+          "forbiddenHitRuns": 0,
+          "validCitationRuns": 0,
+          "extraValidRuns": 0,
+          "answerPassRate": 0.0,
+          "citationPassRate": 1.0,
+          "averageLatencyMs": 20992.0,
+          "metrics": {
+            "illegal_label_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "非法精确标签 / 精确标签总数"
+            },
+            "malformed_label_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "格式错误标签 / 全部标签出现次数（精确 + 格式错误）"
+            },
+            "required_source_missing_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "缺必需来源的运行 / 有必需来源要求的运行"
+            },
+            "forbidden_source_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "引用了禁止来源的运行 / 配置了禁止来源的运行"
+            },
+            "extra_valid_source_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "含额外合法来源的运行 / 至少有一条合法引用的运行"
+            },
+            "citation_support_warning_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "来源支持度为 none/numeric_conflict 的引用 / 合法引用数"
+            },
+            "citation_pass_rate": {
+              "numerator": 1,
+              "denominator": 1,
+              "rate": 1.0,
+              "definition": "引用层通过的运行 / 全部运行（分母是运行数，不是标签数）"
+            }
+          }
+        },
+        "F": {
+          "runs": 1,
+          "autoPass": 0,
+          "failed": 1,
+          "manual": 0,
+          "answerApplicable": 1,
+          "answerPassed": 0,
+          "citationPassed": 1,
+          "latencyMs": 23167,
+          "exactLabels": 0,
+          "illegalLabels": 0,
+          "malformedLabels": 0,
+          "validLabels": 0,
+          "supportWarnings": 0,
+          "citationRequirementRuns": 0,
+          "requiredMissingRuns": 0,
+          "forbiddenRuleRuns": 0,
+          "forbiddenHitRuns": 0,
+          "validCitationRuns": 0,
+          "extraValidRuns": 0,
+          "answerPassRate": 0.0,
+          "citationPassRate": 1.0,
+          "averageLatencyMs": 23167.0,
+          "metrics": {
+            "illegal_label_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "非法精确标签 / 精确标签总数"
+            },
+            "malformed_label_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "格式错误标签 / 全部标签出现次数（精确 + 格式错误）"
+            },
+            "required_source_missing_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "缺必需来源的运行 / 有必需来源要求的运行"
+            },
+            "forbidden_source_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "引用了禁止来源的运行 / 配置了禁止来源的运行"
+            },
+            "extra_valid_source_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "含额外合法来源的运行 / 至少有一条合法引用的运行"
+            },
+            "citation_support_warning_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "来源支持度为 none/numeric_conflict 的引用 / 合法引用数"
+            },
+            "citation_pass_rate": {
+              "numerator": 1,
+              "denominator": 1,
+              "rate": 1.0,
+              "definition": "引用层通过的运行 / 全部运行（分母是运行数，不是标签数）"
+            }
+          }
+        }
+      },
+      "rag+state": {
+        "D": {
+          "runs": 1,
+          "autoPass": 0,
+          "failed": 1,
+          "manual": 0,
+          "answerApplicable": 1,
+          "answerPassed": 0,
+          "citationPassed": 1,
+          "latencyMs": 20711,
+          "exactLabels": 0,
+          "illegalLabels": 0,
+          "malformedLabels": 0,
+          "validLabels": 0,
+          "supportWarnings": 0,
+          "citationRequirementRuns": 0,
+          "requiredMissingRuns": 0,
+          "forbiddenRuleRuns": 0,
+          "forbiddenHitRuns": 0,
+          "validCitationRuns": 0,
+          "extraValidRuns": 0,
+          "answerPassRate": 0.0,
+          "citationPassRate": 1.0,
+          "averageLatencyMs": 20711.0,
+          "metrics": {
+            "illegal_label_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "非法精确标签 / 精确标签总数"
+            },
+            "malformed_label_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "格式错误标签 / 全部标签出现次数（精确 + 格式错误）"
+            },
+            "required_source_missing_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "缺必需来源的运行 / 有必需来源要求的运行"
+            },
+            "forbidden_source_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "引用了禁止来源的运行 / 配置了禁止来源的运行"
+            },
+            "extra_valid_source_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "含额外合法来源的运行 / 至少有一条合法引用的运行"
+            },
+            "citation_support_warning_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "来源支持度为 none/numeric_conflict 的引用 / 合法引用数"
+            },
+            "citation_pass_rate": {
+              "numerator": 1,
+              "denominator": 1,
+              "rate": 1.0,
+              "definition": "引用层通过的运行 / 全部运行（分母是运行数，不是标签数）"
+            }
+          }
+        },
+        "F": {
+          "runs": 1,
+          "autoPass": 0,
+          "failed": 1,
+          "manual": 0,
+          "answerApplicable": 1,
+          "answerPassed": 0,
+          "citationPassed": 1,
+          "latencyMs": 20148,
+          "exactLabels": 0,
+          "illegalLabels": 0,
+          "malformedLabels": 0,
+          "validLabels": 0,
+          "supportWarnings": 0,
+          "citationRequirementRuns": 0,
+          "requiredMissingRuns": 0,
+          "forbiddenRuleRuns": 0,
+          "forbiddenHitRuns": 0,
+          "validCitationRuns": 0,
+          "extraValidRuns": 0,
+          "answerPassRate": 0.0,
+          "citationPassRate": 1.0,
+          "averageLatencyMs": 20148.0,
+          "metrics": {
+            "illegal_label_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "非法精确标签 / 精确标签总数"
+            },
+            "malformed_label_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "格式错误标签 / 全部标签出现次数（精确 + 格式错误）"
+            },
+            "required_source_missing_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "缺必需来源的运行 / 有必需来源要求的运行"
+            },
+            "forbidden_source_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "引用了禁止来源的运行 / 配置了禁止来源的运行"
+            },
+            "extra_valid_source_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "含额外合法来源的运行 / 至少有一条合法引用的运行"
+            },
+            "citation_support_warning_rate": {
+              "numerator": 0,
+              "denominator": 0,
+              "rate": null,
+              "definition": "来源支持度为 none/numeric_conflict 的引用 / 合法引用数"
+            },
+            "citation_pass_rate": {
+              "numerator": 1,
+              "denominator": 1,
+              "rate": 1.0,
+              "definition": "引用层通过的运行 / 全部运行（分母是运行数，不是标签数）"
+            }
+          }
+        }
+      }
+    }
+  }
+}

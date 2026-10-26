@@ -1,0 +1,421 @@
+{
+  "metadata": {
+    "startedAt": "2026-10-26T13:13:16.677993+00:00",
+    "backendUrl": "http://127.0.0.1:18080",
+    "userId": 4,
+    "mainSpaceId": 7,
+    "emptySpaceId": 8,
+    "documents": [
+      {
+        "id": 28,
+        "name": "zenframe",
+        "status": "READY",
+        "chunkCount": 3,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 27,
+        "name": "zealdeck",
+        "status": "READY",
+        "chunkCount": 3,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 26,
+        "name": "operating-system",
+        "status": "READY",
+        "chunkCount": 3,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 25,
+        "name": "novacache-b",
+        "status": "READY",
+        "chunkCount": 2,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 24,
+        "name": "novacache-a",
+        "status": "READY",
+        "chunkCount": 2,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 23,
+        "name": "helios-compute",
+        "status": "READY",
+        "chunkCount": 6,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      },
+      {
+        "id": 22,
+        "name": "auroragate",
+        "status": "READY",
+        "chunkCount": 3,
+        "embeddingModel": "text-embedding-v4",
+        "indexVersion": 1
+      }
+    ],
+    "readyIds": [
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28
+    ],
+    "collection": "ails_phase42_real_e2e_text-embedding-v4_1024",
+    "llm": {
+      "provider": "openai",
+      "model": "qwen-plus",
+      "temperature": 0.0,
+      "maxTokens": 1024
+    },
+    "embedding": {
+      "provider": "openai",
+      "model": "text-embedding-v4",
+      "dimension": 1024
+    },
+    "retrievalBaseline": {
+      "topK": 5,
+      "minScore": 0.35,
+      "maxContextTokens": 3000
+    },
+    "modes": [
+      "plain",
+      "rag",
+      "rag+state"
+    ],
+    "cases": 41
+  },
+  "aggregate": {
+    "runs": 118,
+    "modes": {
+      "plain": {
+        "runs": 37,
+        "autoPass": 10,
+        "failed": 27,
+        "manual": 0,
+        "answerApplicable": 30,
+        "answerPassed": 6,
+        "citationPassed": 26,
+        "retrievalApplicable": 0,
+        "retrievalPassed": 0,
+        "contextApplicable": 37,
+        "contextPassed": 37,
+        "citations": 8,
+        "illegalCitations": 8,
+        "malformedCitations": 4,
+        "unsupportedCitations": 0,
+        "latencyMs": 535405,
+        "answerPassRate": 0.2,
+        "retrievalPassRate": null,
+        "contextPassRate": 1.0,
+        "citationPassRate": 0.7027,
+        "illegalCitationRate": 1.0,
+        "unsupportedCitationRate": 0.0,
+        "averageLatencyMs": 14470.4
+      },
+      "rag": {
+        "runs": 40,
+        "autoPass": 29,
+        "failed": 11,
+        "manual": 0,
+        "answerApplicable": 40,
+        "answerPassed": 34,
+        "citationPassed": 33,
+        "retrievalApplicable": 40,
+        "retrievalPassed": 40,
+        "contextApplicable": 40,
+        "contextPassed": 40,
+        "citations": 67,
+        "illegalCitations": 0,
+        "malformedCitations": 7,
+        "unsupportedCitations": 9,
+        "latencyMs": 341419,
+        "answerPassRate": 0.85,
+        "retrievalPassRate": 1.0,
+        "contextPassRate": 1.0,
+        "citationPassRate": 0.825,
+        "illegalCitationRate": 0.0,
+        "unsupportedCitationRate": 0.1343,
+        "averageLatencyMs": 8535.5
+      },
+      "rag+state": {
+        "runs": 41,
+        "autoPass": 23,
+        "failed": 17,
+        "manual": 1,
+        "answerApplicable": 41,
+        "answerPassed": 33,
+        "citationPassed": 25,
+        "retrievalApplicable": 41,
+        "retrievalPassed": 41,
+        "contextApplicable": 41,
+        "contextPassed": 41,
+        "citations": 74,
+        "illegalCitations": 2,
+        "malformedCitations": 7,
+        "unsupportedCitations": 11,
+        "latencyMs": 398857,
+        "answerPassRate": 0.8049,
+        "retrievalPassRate": 1.0,
+        "contextPassRate": 1.0,
+        "citationPassRate": 0.6098,
+        "illegalCitationRate": 0.027,
+        "unsupportedCitationRate": 0.1486,
+        "averageLatencyMs": 9728.2
+      }
+    },
+    "byModeCategory": {
+      "plain": {
+        "A": {
+          "runs": 12,
+          "autoPass": 2,
+          "manual": 0,
+          "answerApplicable": 12,
+          "answerPassed": 3,
+          "citationPassed": 5,
+          "citations": 4,
+          "illegalCitations": 4,
+          "answerPassRate": 0.25,
+          "citationPassRate": 0.4167,
+          "illegalCitationRate": 1.0
+        },
+        "B": {
+          "runs": 8,
+          "autoPass": 0,
+          "manual": 0,
+          "answerApplicable": 8,
+          "answerPassed": 0,
+          "citationPassed": 6,
+          "citations": 3,
+          "illegalCitations": 3,
+          "answerPassRate": 0.0,
+          "citationPassRate": 0.75,
+          "illegalCitationRate": 1.0
+        },
+        "C": {
+          "runs": 6,
+          "autoPass": 1,
+          "manual": 0,
+          "answerApplicable": 6,
+          "answerPassed": 1,
+          "citationPassed": 6,
+          "citations": 0,
+          "illegalCitations": 0,
+          "answerPassRate": 0.1667,
+          "citationPassRate": 1.0,
+          "illegalCitationRate": null
+        },
+        "D": {
+          "runs": 6,
+          "autoPass": 5,
+          "manual": 0,
+          "answerApplicable": 0,
+          "answerPassed": 0,
+          "citationPassed": 5,
+          "citations": 1,
+          "illegalCitations": 1,
+          "answerPassRate": null,
+          "citationPassRate": 0.8333,
+          "illegalCitationRate": 1.0
+        },
+        "E": {
+          "runs": 4,
+          "autoPass": 1,
+          "manual": 0,
+          "answerApplicable": 4,
+          "answerPassed": 2,
+          "citationPassed": 3,
+          "citations": 0,
+          "illegalCitations": 0,
+          "answerPassRate": 0.5,
+          "citationPassRate": 0.75,
+          "illegalCitationRate": null
+        },
+        "F": {
+          "runs": 1,
+          "autoPass": 1,
+          "manual": 0,
+          "answerApplicable": 0,
+          "answerPassed": 0,
+          "citationPassed": 1,
+          "citations": 0,
+          "illegalCitations": 0,
+          "answerPassRate": null,
+          "citationPassRate": 1.0,
+          "illegalCitationRate": null
+        }
+      },
+      "rag": {
+        "A": {
+          "runs": 12,
+          "autoPass": 10,
+          "manual": 0,
+          "answerApplicable": 12,
+          "answerPassed": 11,
+          "citationPassed": 10,
+          "citations": 22,
+          "illegalCitations": 0,
+          "answerPassRate": 0.9167,
+          "citationPassRate": 0.8333,
+          "illegalCitationRate": 0.0
+        },
+        "B": {
+          "runs": 8,
+          "autoPass": 8,
+          "manual": 0,
+          "answerApplicable": 8,
+          "answerPassed": 8,
+          "citationPassed": 8,
+          "citations": 15,
+          "illegalCitations": 0,
+          "answerPassRate": 1.0,
+          "citationPassRate": 1.0,
+          "illegalCitationRate": 0.0
+        },
+        "C": {
+          "runs": 6,
+          "autoPass": 4,
+          "manual": 0,
+          "answerApplicable": 6,
+          "answerPassed": 6,
+          "citationPassed": 4,
+          "citations": 21,
+          "illegalCitations": 0,
+          "answerPassRate": 1.0,
+          "citationPassRate": 0.6667,
+          "illegalCitationRate": 0.0
+        },
+        "D": {
+          "runs": 6,
+          "autoPass": 2,
+          "manual": 0,
+          "answerApplicable": 6,
+          "answerPassed": 4,
+          "citationPassed": 4,
+          "citations": 1,
+          "illegalCitations": 0,
+          "answerPassRate": 0.6667,
+          "citationPassRate": 0.6667,
+          "illegalCitationRate": 0.0
+        },
+        "E": {
+          "runs": 4,
+          "autoPass": 4,
+          "manual": 0,
+          "answerApplicable": 4,
+          "answerPassed": 4,
+          "citationPassed": 4,
+          "citations": 8,
+          "illegalCitations": 0,
+          "answerPassRate": 1.0,
+          "citationPassRate": 1.0,
+          "illegalCitationRate": 0.0
+        },
+        "F": {
+          "runs": 4,
+          "autoPass": 1,
+          "manual": 0,
+          "answerApplicable": 4,
+          "answerPassed": 1,
+          "citationPassed": 3,
+          "citations": 0,
+          "illegalCitations": 0,
+          "answerPassRate": 0.25,
+          "citationPassRate": 0.75,
+          "illegalCitationRate": null
+        }
+      },
+      "rag+state": {
+        "A": {
+          "runs": 12,
+          "autoPass": 6,
+          "manual": 0,
+          "answerApplicable": 12,
+          "answerPassed": 11,
+          "citationPassed": 7,
+          "citations": 30,
+          "illegalCitations": 0,
+          "answerPassRate": 0.9167,
+          "citationPassRate": 0.5833,
+          "illegalCitationRate": 0.0
+        },
+        "B": {
+          "runs": 8,
+          "autoPass": 7,
+          "manual": 0,
+          "answerApplicable": 8,
+          "answerPassed": 8,
+          "citationPassed": 7,
+          "citations": 18,
+          "illegalCitations": 0,
+          "answerPassRate": 1.0,
+          "citationPassRate": 0.875,
+          "illegalCitationRate": 0.0
+        },
+        "C": {
+          "runs": 6,
+          "autoPass": 4,
+          "manual": 0,
+          "answerApplicable": 6,
+          "answerPassed": 6,
+          "citationPassed": 4,
+          "citations": 10,
+          "illegalCitations": 0,
+          "answerPassRate": 1.0,
+          "citationPassRate": 0.6667,
+          "illegalCitationRate": 0.0
+        },
+        "D": {
+          "runs": 6,
+          "autoPass": 2,
+          "manual": 0,
+          "answerApplicable": 6,
+          "answerPassed": 3,
+          "citationPassed": 2,
+          "citations": 4,
+          "illegalCitations": 0,
+          "answerPassRate": 0.5,
+          "citationPassRate": 0.3333,
+          "illegalCitationRate": 0.0
+        },
+        "E": {
+          "runs": 5,
+          "autoPass": 4,
+          "manual": 1,
+          "answerApplicable": 5,
+          "answerPassed": 4,
+          "citationPassed": 4,
+          "citations": 10,
+          "illegalCitations": 0,
+          "answerPassRate": 0.8,
+          "citationPassRate": 0.8,
+          "illegalCitationRate": 0.0
+        },
+        "F": {
+          "runs": 4,
+          "autoPass": 0,
+          "manual": 0,
+          "answerApplicable": 4,
+          "answerPassed": 1,
+          "citationPassed": 1,
+          "citations": 2,
+          "illegalCitations": 2,
+          "answerPassRate": 0.25,
+          "citationPassRate": 0.25,
+          "illegalCitationRate": 1.0
+        }
+      }
+    }
+  }
+}

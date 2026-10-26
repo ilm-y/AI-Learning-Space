@@ -1,0 +1,1722 @@
+{
+  "startedAt": "2026-10-26T14:09:56.468518+00:00",
+  "backendUrl": "http://127.0.0.1:18080",
+  "userId": 9,
+  "spaceId": 15,
+  "conversationId": 2,
+  "documents": [
+    {
+      "id": 56,
+      "name": "zenframe",
+      "status": "READY",
+      "chunkCount": 3,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 55,
+      "name": "zealdeck",
+      "status": "READY",
+      "chunkCount": 3,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 54,
+      "name": "operating-system",
+      "status": "READY",
+      "chunkCount": 3,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 53,
+      "name": "novacache-b",
+      "status": "READY",
+      "chunkCount": 2,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 52,
+      "name": "novacache-a",
+      "status": "READY",
+      "chunkCount": 2,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 51,
+      "name": "helios-compute",
+      "status": "READY",
+      "chunkCount": 6,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 50,
+      "name": "auroragate",
+      "status": "READY",
+      "chunkCount": 3,
+      "embeddingModel": "text-embedding-v4"
+    }
+  ],
+  "readyIds": [
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56
+  ],
+  "cases": [
+    {
+      "caseId": "S04",
+      "question": "请解释量子色动力学中的渐进自由。",
+      "conversationId": 2,
+      "events": [
+        {
+          "event": "message.start",
+          "data": {
+            "conversationId": 2,
+            "runId": 9
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "量子"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "色动力学"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "（Q"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "CD）中的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "**渐进自由"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "**（Asym"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "ptotic Freedom）是指"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "：**夸克"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "之间的强相互作用力，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "随着它们彼此距离的减"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "小（或能量"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "尺度的提高）而变"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "弱；反之，当"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "它们被拉开时"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，作用力反而"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "急剧增强。**\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "这与我们熟悉的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "电磁力（随"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "距离平方衰减）或"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "引力截然不同"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，是强相互作用最"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "反直觉、也"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "最关键的特性之一。\n\n---\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "### 🌟"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 直观类比（谨慎"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "使用，仅助"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "理解）\n想象两个"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "夸克被一根“"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "量子橡皮筋"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "”连着：\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "- 当你把"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "它们**拉得很"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "近**（比如在"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "高能对撞中，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "尺度小于 $10"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "^{-15}$ m"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "），橡皮筋几乎"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "松弛 → 相互作用"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "很弱，夸"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "克近似自由"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "运动；\n- 当"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "你试图**把"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "它们分开**，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "橡皮筋越"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "拉越紧 →"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 力越来越大，最终"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "强到足以从"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "真空中拉出新的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "夸克-反"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "夸克对（"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "即“夸克禁"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "闭”）→"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 你永远得不到"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "孤立的夸克。\n\n⚠"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "️ 注意：这不是经典"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "弹性，而是由"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "量子真空和胶"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "子自相互作用导致"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "的**有效耦"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "合强度随能"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "标变化**。\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "---\n\n### 🔬"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 根本原因：胶"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "子带“色荷"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "”，会自我耦"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "合\n\n在Q"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "CD中：\n\n-"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 夸克携带**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "色荷**（red"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": ", green, blue），"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "类似电荷，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "但有3种类型；\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "- 传递强"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "相互作用的媒介"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "粒子是**胶"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "子**（glu"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "on）；\n-"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 关键区别：光"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "子不带电荷"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，所以电磁相互"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "作用中光子不自"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "作用；  \n  **但"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "胶子本身也"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "带色荷**（"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "它携带一种色+"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "一种反色，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "共8种组合"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "）→"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 胶子可以发射"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "/吸收其他胶子。\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "这种**胶子自"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "相互作用**（三"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "胶子、四胶子"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "顶点）改变了"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "真空的极化行为"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "：\n\n- 在短"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "距离（高动"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "量转移 $Q^"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "2$ 大），"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "真空的“屏蔽"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "效应”被**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "反屏蔽**（anti"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "-screening）主导"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "；\n- 结果："
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "夸克感受到的有效"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "色荷（即"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "强耦合常"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "数 $\\alpha_s"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "(Q^2)$"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "）**随 $"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "Q^2$"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 增大而减小"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "**。\n\n数学上，一"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "阶微扰计算"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "给出：\n\\[\n\\alpha"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "_s(Q^2)"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " \\approx \\frac{1"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "}{b_0 \\ln"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "(Q^2 /"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " \\Lambda_{\\text{"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "QCD}}^2)},"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " \\quad \\text{其中"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " } b_0 ="
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " \\frac{33"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " - 2n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "_f}{12"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "\\pi} > 0"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "\n\\]\n（$"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "n_f$ 是"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "参与相互作用的夸"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "克味数，$\\"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "Lambda_{\\text{Q"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "CD}} \\sim"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 200\\"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": ",\\text{Me"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "V}$ 是Q"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "CD能标）\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "✅ 因为 $"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "b_0 >"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 0$（对"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " $n_f \\"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "leq 1"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "6$ 成立），分"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "母随 $Q^"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "2$ 增大"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "而增大 → $\\alpha_s"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "$ 减小 →"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " **渐进自由成立"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "**。\n\n>"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ✅ 这一"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "性质于197"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "3年由 Gross、"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "Wilczek 和"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " Politzer 发现，获"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "2004"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "年诺贝尔物理学奖"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "。\n\n---\n\n### 🧩"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 它解释了什么？\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "| 现象"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " | 如何被"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "渐进自由支持"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " |\n|--------|----------------"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "-----|\n| **深度"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "非弹性散射中"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "夸克表现得"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "像自由点粒子"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "** | 高能电子"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "撞击质子时"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，以极短时间"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "尺度探入内部"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " → $\\alpha_s$"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 很小，微"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "扰QCD适用"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " |\n| **喷"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "注（jets）的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "产生** |"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 高能夸克/"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "胶子喷出后，在"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " $\\alpha_s$"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 尚小时近"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "似直行，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "之后才强子"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "化成喷注 |\n|"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " **夸克禁闭"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "不与渐进自由矛盾"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "** | 正因为"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " $\\alpha_s$"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 在低能（大"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "距离）发散"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，势能 $"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "V(r) \\sim \\"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "kappa r$"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 线性增长"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " → 禁闭"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "自然出现 |\n\n---\n\n###"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ❗注意一个"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "常见误解\n\n> “"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "渐进自由 ="
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 夸克在质"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "子内部是自由的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "。”\n\n❌ 不准确。  \n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "在质子内部"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "（典型动量约"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " $1\\,\\"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "text{GeV}$），$\\"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "alpha_s \\sim 0"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": ".3$ —"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "— 并不小"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，**不可忽略"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "强相互作用**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "。渐进自由只"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "在远高于此"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "的能量（如 L"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "HC 的 TeV"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 尺度）才"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "使 $\\alpha_s \\"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "ll 1$，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "从而允许微扰计算"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "。\n\n真正描述质"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "子内部的是**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "非微扰Q"
+          }
+        },
+        {
+          "event": "message.end",
+          "data": {
+            "runId": 9,
+            "messageId": 10
+          }
+        }
+      ],
+      "analysis": {
+        "eventNames": [
+          "message.start",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.end"
+        ],
+        "eventCount": 223,
+        "formatOk": true,
+        "startOk": true,
+        "endOk": true,
+        "deltaOk": true,
+        "hasError": false,
+        "errorPayloads": [],
+        "deltaCount": 221,
+        "answer": "量子色动力学（QCD）中的**渐进自由**（Asymptotic Freedom）是指：**夸克之间的强相互作用力，随着它们彼此距离的减小（或能量尺度的提高）而变弱；反之，当它们被拉开时，作用力反而急剧增强。**\n\n这与我们熟悉的电磁力（随距离平方衰减）或引力截然不同，是强相互作用最反直觉、也最关键的特性之一。\n\n---\n\n### 🌟 直观类比（谨慎使用，仅助理解）\n想象两个夸克被一根“量子橡皮筋”连着：\n\n- 当你把它们**拉得很近**（比如在高能对撞中，尺度小于 $10^{-15}$ m），橡皮筋几乎松弛 → 相互作用很弱，夸克近似自由运动；\n- 当你试图**把它们分开**，橡皮筋越拉越紧 → 力越来越大，最终强到足以从真空中拉出新的夸克-反夸克对（即“夸克禁闭”）→ 你永远得不到孤立的夸克。\n\n⚠️ 注意：这不是经典弹性，而是由量子真空和胶子自相互作用导致的**有效耦合强度随能标变化**。\n\n---\n\n### 🔬 根本原因：胶子带“色荷”，会自我耦合\n\n在QCD中：\n\n- 夸克携带**色荷**（red, green, blue），类似电荷，但有3种类型；\n- 传递强相互作用的媒介粒子是**胶子**（gluon）；\n- 关键区别：光子不带电荷，所以电磁相互作用中光子不自作用；  \n  **但胶子本身也带色荷**（它携带一种色+一种反色，共8种组合）→ 胶子可以发射/吸收其他胶子。\n\n这种**胶子自相互作用**（三胶子、四胶子顶点）改变了真空的极化行为：\n\n- 在短距离（高动量转移 $Q^2$ 大），真空的“屏蔽效应”被**反屏蔽**（anti-screening）主导；\n- 结果：夸克感受到的有效色荷（即强耦合常数 $\\alpha_s(Q^2)$）**随 $Q^2$ 增大而减小**。\n\n数学上，一阶微扰计算给出：\n\\[\n\\alpha_s(Q^2) \\approx \\frac{1}{b_0 \\ln(Q^2 / \\Lambda_{\\text{QCD}}^2)}, \\quad \\text{其中 } b_0 = \\frac{33 - 2n_f}{12\\pi} > 0\n\\]\n（$n_f$ 是参与相互作用的夸克味数，$\\Lambda_{\\text{QCD}} \\sim 200\\,\\text{MeV}$ 是QCD能标）\n\n✅ 因为 $b_0 > 0$（对 $n_f \\leq 16$ 成立），分母随 $Q^2$ 增大而增大 → $\\alpha_s$ 减小 → **渐进自由成立**。\n\n> ✅ 这一性质于1973年由 Gross、Wilczek 和 Politzer 发现，获2004年诺贝尔物理学奖。\n\n---\n\n### 🧩 它解释了什么？\n\n| 现象 | 如何被渐进自由支持 |\n|--------|---------------------|\n| **深度非弹性散射中夸克表现得像自由点粒子** | 高能电子撞击质子时，以极短时间尺度探入内部 → $\\alpha_s$ 很小，微扰QCD适用 |\n| **喷注（jets）的产生** | 高能夸克/胶子喷出后，在 $\\alpha_s$ 尚小时近似直行，之后才强子化成喷注 |\n| **夸克禁闭不与渐进自由矛盾** | 正因为 $\\alpha_s$ 在低能（大距离）发散，势能 $V(r) \\sim \\kappa r$ 线性增长 → 禁闭自然出现 |\n\n---\n\n### ❗注意一个常见误解\n\n> “渐进自由 = 夸克在质子内部是自由的。”\n\n❌ 不准确。  \n在质子内部（典型动量约 $1\\,\\text{GeV}$），$\\alpha_s \\sim 0.3$ —— 并不小，**不可忽略强相互作用**。渐进自由只在远高于此的能量（如 LHC 的 TeV 尺度）才使 $\\alpha_s \\ll 1$，从而允许微扰计算。\n\n真正描述质子内部的是**非微扰Q",
+        "citations": [],
+        "citedDocuments": [],
+        "malformedCitations": [],
+        "startPayload": {
+          "conversationId": 2,
+          "runId": 9
+        },
+        "endPayload": {
+          "runId": 9,
+          "messageId": 10
+        }
+      },
+      "checks": [
+        {
+          "name": "sse_format",
+          "passed": true
+        },
+        {
+          "name": "start_first",
+          "passed": true
+        },
+        {
+          "name": "end_last",
+          "passed": true
+        },
+        {
+          "name": "no_message_error",
+          "passed": true
+        },
+        {
+          "name": "delta_fields",
+          "passed": true
+        },
+        {
+          "name": "answer_not_empty",
+          "passed": true
+        },
+        {
+          "name": "required_terms",
+          "passed": true,
+          "detail": []
+        },
+        {
+          "name": "required_citation_documents",
+          "passed": true,
+          "detail": []
+        },
+        {
+          "name": "no_malformed_citations",
+          "passed": true,
+          "detail": []
+        },
+        {
+          "name": "no_fabricated_citation",
+          "passed": true
+        },
+        {
+          "name": "admits_missing_document",
+          "passed": false,
+          "detail": {
+            "patterns": [
+              "(?:资料|文档|上传)[^。！？\\n]{0,15}(?:没有|未|不)(?:直接|相关|命中|检索到|找到|包含|提供|提及|覆盖)",
+              "(?:没有|未)(?:找到|检索到|命中|检索出)[^。！？\\n]{0,15}(?:资料|文档|内容|相关|依据)",
+              "没有直接答案"
+            ],
+            "found": []
+          }
+        }
+      ],
+      "passed": false
+    }
+  ],
+  "passed": false
+}
