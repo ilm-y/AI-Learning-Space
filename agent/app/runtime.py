@@ -44,6 +44,7 @@ from app.citations import (
 )
 from app.config import Settings
 from app.context.builder import BuiltContext, ContextBuilder
+from app.evidence_guard import GUARD_STATUSES, evidence_status_notice
 from app.llm.base import LLMAdapter, LLMError
 from app.retriever import build_retriever, detect_concepts
 from app.retriever.base import (
@@ -221,10 +222,38 @@ class AgentRuntime:
 
         单独抽出来是为了让离线评估能复用同一条生成链路：评估需要拿到完整
         回答后做引用校验，而不想为了复用 `stream()` 再伪造一套 SSE。
+
+        非成功检索状态下的兜底也在这里：模型输出结束后、`done` 之前，如果
+        本轮没有知识片段且模型自己没说明资料状态，就追加一条固定说明。
+        它是一个普通 delta，不缓冲、不删除、不覆盖模型已经产出的内容，
+        因此 SSE 事件序列与引用校验入口都不变。
         """
         async for delta in self._tutor.stream(prepared.context):
             prepared.state.response += delta
             yield delta
+
+        status = prepared.state.knowledge_status
+        if status not in GUARD_STATUSES:
+            return
+
+        notice = None
+        if not prepared.state.knowledge:
+            notice = evidence_status_notice(
+                status,
+                prepared.state.user_message,
+                prepared.state.response,
+            )
+        prepared.trace.record(
+            TraceEventType.EVIDENCE_GUARD,
+            status=status,
+            added=bool(notice),
+            hasKnowledge=bool(prepared.state.knowledge),
+        )
+        if notice:
+            # 单独成段，避免和模型最后一句粘在一起被误读成同一句断言。
+            addition = f"\n\n{notice}"
+            prepared.state.response += addition
+            yield addition
 
     def validate_citations(self, prepared: PreparedRun) -> CitationReport:
         """校验本轮回答里的来源标注，并把结果写进 trace。

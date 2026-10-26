@@ -28,6 +28,9 @@ class TraceEventType(str, Enum):
     # 回答生成后的来源标注校验。它只记录、不阻断 SSE —— 非法引用目前是
     # 评估与排查信号，而不是把用户可见回答拦掉的开关。
     CITATION_CHECK = "CITATION_CHECK"
+    # 非成功知识检索状态的运行时兜底：记录本轮状态、是否追加了说明、以及
+    # 触发/跳过原因。它不改变 SSE 事件类型，只影响回答末尾的固定说明。
+    EVIDENCE_GUARD = "EVIDENCE_GUARD"
     ANALYSIS_DECISION = "ANALYSIS_DECISION"
     RUN_END = "RUN_END"
     RUN_ERROR = "RUN_ERROR"
