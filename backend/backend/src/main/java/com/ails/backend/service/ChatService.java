@@ -21,7 +21,6 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -139,7 +138,7 @@ public class ChatService {
         // 5) 创建 SSE 连接句柄。SseEmitter 是 Spring MVC 的异步响应对象：
         //    返回给 Controller 后 HTTP 响应不再被请求线程阻塞，
         //    之后任何线程都能通过 emitter.send() 往里推数据，直到 emitter.complete() 关流。
-        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+        SseEmitter emitter = createEmitter();
         // finished：全局「已终局」开关。onComplete / onError / catch 三条「生成侧」路径
         // 都可能竞争收尾，只允许拿到开关的那条写最终状态，避免重复落库、重复关流。
         AtomicBoolean finished = new AtomicBoolean(false);
@@ -173,10 +172,18 @@ public class ChatService {
             // 这里只能走「仍在 RUNNING 才落」的条件更新：本 run 的生成线程从未启动，
             // 但用无条件写去碰它没有意义，条件更新表达的正是「没人收尾过才轮到我来收」。
             finishRunIfRunning(run, AgentRunStatus.FAILED, "chatStreamExecutor rejected", startedAt);
-            emitter.complete();
+            completeQuietly(emitter);
         }
 
         return emitter;
+    }
+
+    /**
+     * 创建 SSE 连接句柄。单独抽出来只为一个测试缝：单元测试可以返回一个
+     * 在 send/complete 上模拟客户端断开的实现。生产路径仍使用标准 SseEmitter。
+     */
+    protected SseEmitter createEmitter() {
+        return new SseEmitter(SSE_TIMEOUT_MS);
     }
 
     // ================= 流式推送（跑在 chat-stream-* 线程池线程上） =================
@@ -269,18 +276,18 @@ public class ChatService {
                                 "message", "回复保存失败"));
                         finishRun(run, AgentRunStatus.FAILED, null, e.toString(), startedAt);
                     } finally {
-                        // 无论中间哪步抛异常，都保证 SSE 连接被关闭，容器资源随之释放
-                        emitter.complete();
+                        // 先安全关流：emitter.complete() 在客户端断开时可能抛传输层异常
+                        // （Tomcat 里实际出现过 MimeHeaders.setValue NPE）。它不能阻断
+                        // 后面的学习分析 —— 传输结束不等于这一轮没有完成。
+                        completeQuietly(emitter);
+                        // 只有助手消息真正落库后才启动分析。appendAssistantMessage 失败时
+                        // assistantMessage 为 null，此时不拿内存里的 buffer 冒充已持久化消息。
+                        // 落库成功但 complete() 失败时，分析照常执行。
+                        if (assistantMessage != null) {
+                            analyzeQuietly(conversation, userMessage, buffer.toString(),
+                                    assistantMessage.getId(), authToken, opening);
+                        }
                     }
-                    // 对话闭环的最后一步：静默做学习分析。
-                    // 助手回复用 buffer 的全文而不是回读数据库 —— 即使落库失败（assistantMessage 为 null），
-                    // Agent 仍能结合它判断这一轮是否产生了学习信号；此时历史里也不会有它，
-                    // 因为那条消息根本没有落库。
-                    // 顺序上刻意排在 emitter.complete() 之后：这一步要写 Evidence / Understanding /
-                    // Revision / State，慢且与前端的即时体验无关，不该让 SSE 连接多挂一秒。
-                    analyzeQuietly(conversation, userMessage, buffer.toString(),
-                            assistantMessage == null ? null : assistantMessage.getId(),
-                            authToken, opening);
                 }
 
                 @Override
@@ -296,7 +303,7 @@ public class ChatService {
                             "code", code,
                             "message", message));
                     finishRun(run, AgentRunStatus.FAILED, null, message, startedAt);
-                    emitter.complete();
+                    completeQuietly(emitter);
                 }
             });
 
@@ -312,7 +319,7 @@ public class ChatService {
                         "code", 500,
                         "message", "生成回复失败"));
                 finishRun(run, AgentRunStatus.FAILED, null, e.toString(), startedAt);
-                emitter.complete();
+                completeQuietly(emitter);
             }
         }
     }
@@ -431,7 +438,8 @@ public class ChatService {
      * </pre>
      * payload 用 LinkedHashMap 做防御性拷贝，保证 JSON 字段顺序与传入一致、稳定可读。
      * <p>
-     * 发送时抛 IOException / IllegalStateException 说明客户端已经不在了（关页面、断网、代理超时）——
+     * 发送时抛出的 IOException / IllegalStateException，以及 Tomcat 在连接已断开时
+     * 可能抛出的运行时异常，都说明客户端已经不在了（关页面、断网、代理超时）——
      * 长流式连接里这是常态而非异常，所以只打 debug 日志，不刷 error。
      * 注意：客户端断开<b>不会</b>打断线程池里的 agent 线程，它会一直跑到 onComplete / onError，
      * 助手消息仍会照常落库 —— 用户重进对话时，消息列表里回复是完整的，不会丢。
@@ -441,9 +449,25 @@ public class ChatService {
             emitter.send(SseEmitter.event()
                     .name(event)
                     .data(new LinkedHashMap<>(payload), MediaType.APPLICATION_JSON));
-        } catch (IOException | IllegalStateException e) {
-            // 客户端断开是常态，不值得刷错误日志
+        } catch (Exception e) {
+            // 客户端断开是常态，不值得刷错误日志。这里只包住传输边界：
+            // 业务异常（落库、分析）不经过本方法，不会被这个 catch 掩盖。
             log.debug("SSE send failed, event={}", event, e);
+        }
+    }
+
+    /**
+     * 关闭 SSE 连接，但绝不让传输层异常向上逃。
+     * <p>
+     * 与 {@link #send} 同理：客户端断开时 {@code complete()} 可能抛出运行时异常
+     * （Tomcat 的 {@code MimeHeaders.setValue} NPE 实际发生过）。调用方在
+     * {@code complete()} 之后还要落复核/触发学习分析，不能被它截断。
+     */
+    private void completeQuietly(SseEmitter emitter) {
+        try {
+            emitter.complete();
+        } catch (Exception e) {
+            log.debug("SSE complete failed", e);
         }
     }
 
