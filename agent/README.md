@@ -195,8 +195,12 @@ curl -s -X POST http://127.0.0.1:8000/agent/context/preview \
 ### 测试
 
 ```bash
-python -m pytest -q          # 65 passed, 2 skipped（真实 Broker 用例需设置 URL）
+python -m pytest -q          # 232 passed, 5 skipped（2026-10-27）
 ```
+
+5 个 skip 都是环境门控，**跳过不等于通过**：真实 Qdrant（2）、真实 broker（2）、
+真实知识 E2E（1）。完整口径见
+[../docs/delivery/TEST_MATRIX.md](../docs/delivery/TEST_MATRIX.md)。
 
 ---
 
@@ -245,7 +249,7 @@ agent/
 │
 ├── app/worker.py                     Worker 入口（进程独立于 HTTP 服务）
 ├── fixtures/demo_space.json          样例认知数据（README 里那个 TLB 场景）
-├── tests/                            67 个用例：概念识别 / 上下文组装 / 分析器 / 消息契约 / 端到端
+├── tests/                            232 个通过用例：概念识别 / 上下文组装 / 分析器 / 消息契约 / 端到端
 ├── docs/pipeline.md                  各层职责与数据契约
 ├── docs/progress.md                  进度、边界与下一步
 ├── requirements.txt / requirements-dev.txt
@@ -490,9 +494,9 @@ error   { runId, code, message }     code: 500 内部错误 / 502 模型上游�
 - **异步分析（可选）**：`python -m app.worker` 消费 `learning.analysis.request`，
   使用服务端凭据回访后端检索，结果经 `learning.analysis.result` 回到 Spring Boot。
   拓扑、契约与失败处理见 [../docs/analysis-mq.md](../docs/analysis-mq.md)；
-- 65 个不依赖数据库与网络的测试，另有 2 个真实 Broker 用例在设置
-  `AILS_TEST_RABBITMQ_URL` 后执行；端到端验收见 `scripts/regress-closed-loop.sh`
-  与 `evaluation/`。
+- 232 个不依赖数据库与网络的测试已通过；另有 5 个环境门控用例（真实 Qdrant / 真实
+  broker / 真实知识 E2E）本轮跳过。端到端验收见 `scripts/phase51-e2e.sh`、
+  `scripts/phase52-e2e.sh` 与 `evaluation/`。
 
 **明确没做**：
 

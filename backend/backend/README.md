@@ -721,11 +721,16 @@ Agent 日志不在默认的 `/tmp/agent.log` 时，用 `AGENT_LOG=/path/to/agent
 ### 测试
 
 ```bash
-./mvnw test                                    # 58 条执行 + 1 条跳过，不需要 MySQL
+./mvnw test                                    # 189 passed, 29 skipped, 0 failed（2026-10-27）
 ./mvnw test -Dtest=MisconceptionLifecycleTest  # 单跑某个纯函数测试类
+./mvnw -B clean test -Pmq-integration          # Testcontainers 拉 RabbitMQ；本轮未执行
 ```
 
-现有测试全是**纯 JUnit 5 + AssertJ + Mockito，不起 Spring 上下文、不连数据库**：
+默认 `./mvnw test` 里实际执行的主要是**纯 JUnit 5 + AssertJ + Mockito**，
+不需要 MySQL；29 个 skip 是需要真实 MySQL / Docker / 环境变量的门控用例
+（`AILS_SECURITY_IT`、`AILS_DOCUMENT_IT` 等）。**skip 不等于通过**；
+`AnalysisMqIntegrationTest` 在默认 profile 下 0 个用例执行，也不写成通过。
+完整分类见 [../../docs/delivery/TEST_MATRIX.md](../../docs/delivery/TEST_MATRIX.md)。
 
 | 测试类                                | 覆盖                                                                 |
 | ------------------------------------- | -------------------------------------------------------------------- |
@@ -740,7 +745,9 @@ Agent 日志不在默认的 `/tmp/agent.log` 时，用 `AGENT_LOG=/path/to/agent
 
 `BackendApplicationTests` 是脚手架自带的 `@SpringBootTest` 上下文加载冒烟测试，
 标了 `@Disabled("需要本地 MySQL 与库表已初始化，CI/无库环境下跳过")`，所以默认的
-`./mvnw test` 不需要数据库也能过（输出里那 1 条 skipped 就是它）。要在本地跑它，去掉 `@Disabled` 即可。
+`./mvnw test` 不需要数据库也能过；它是 29 条 skipped 中的一条。其余 skipped 来自
+`SecurityContextIntegrationTest`、文档索引 / 存储集成测试等环境门控类。
+要在本地跑它们，去掉对应 `@Disabled` 或设置相应的 `AILS_*_IT` 环境变量。
 
 ---
 
