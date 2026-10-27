@@ -33,6 +33,8 @@ class OpenAICompatibleAdapter:
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._client = httpx.AsyncClient(timeout=timeout_seconds)
+        # 仅用于观测：流式响应本身不携带 HTTP 状态，评估需要知道这次是不是 2xx。
+        self.last_status_code: int | None = None
 
     @property
     def name(self) -> str:
@@ -52,6 +54,7 @@ class OpenAICompatibleAdapter:
             async with self._client.stream(
                 "POST", self._endpoint, json=payload, headers=self._headers
             ) as response:
+                self.last_status_code = response.status_code
                 if response.status_code >= 400:
                     body = (await response.aread()).decode("utf-8", errors="replace")
                     raise LLMError(
@@ -102,6 +105,7 @@ class OpenAICompatibleAdapter:
                 f"模型连接失败：{type(exc).__name__}", status_code=502
             ) from exc
 
+        self.last_status_code = response.status_code
         if response.status_code >= 400:
             raise LLMError(
                 f"模型返回 {response.status_code}：{response.text[:500]}", status_code=502

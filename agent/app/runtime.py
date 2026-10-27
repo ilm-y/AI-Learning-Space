@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import AsyncIterator
 
@@ -44,7 +45,17 @@ from app.citations import (
 )
 from app.config import Settings
 from app.context.builder import BuiltContext, ContextBuilder
+from app.context.trajectory import (
+    attach_evidences,
+    build_trajectories,
+    collect_evidence_ids,
+)
 from app.evidence_guard import GUARD_STATUSES, evidence_status_notice
+from app.history_guard import (
+    build_history_fallback,
+    check_history_answer,
+    retry_instruction,
+)
 from app.llm.base import LLMAdapter, LLMError
 from app.retriever import build_retriever, detect_concepts
 from app.retriever.base import (
@@ -78,6 +89,27 @@ _EVIDENCE_TRIGGERS = (
     "回顾",
 )
 
+# 显式复盘意图：只有这些词命中时，才读取 Revision 历史并精确回查旧证据。
+# 普通知识问题（哪怕含「为什么」）不应该无条件注入完整学习轨迹。
+_REVIEW_TRIGGERS = (
+    "之前",
+    "以前",
+    "曾经",
+    "过去",
+    "后来",
+    "纠正",
+    "改过来",
+    "错在哪",
+    "哪里错",
+    "哪一步错",
+    "搞错",
+    "说错",
+    "误解",
+    "复盘",
+    "回顾",
+    "学习轨迹",
+)
+
 
 @dataclass(slots=True)
 class StreamEvent:
@@ -107,6 +139,10 @@ class StreamEvent:
 
 # error 事件的 code 取值。直接用 HTTP 语义，因为这一跳无论怎么实现都是 HTTP，
 # 而且后端 message.error 的 code 字段本来就是一个 int（ChatService 里失败一侧用的就是 500/503）。
+# 复盘回答是缓冲后推送的：按固定大小分块，保持 delta 语义，避免一条巨大的
+# delta 让前端渲染出现整段跳变。它不改变事件类型或最终文本。
+_HISTORY_STREAM_CHUNK = 120
+
 _ERROR_CODE_INTERNAL = 500  # Agent 内部未预期异常
 _ERROR_CODE_LLM = 502  # 模型上游（LLM Adapter）失败
 _ERROR_CODE_RETRIEVAL = 503  # 后端检索不可用
@@ -223,14 +259,21 @@ class AgentRuntime:
         单独抽出来是为了让离线评估能复用同一条生成链路：评估需要拿到完整
         回答后做引用校验，而不想为了复用 `stream()` 再伪造一套 SSE。
 
+        两条路径的分界只有一条：**显式复盘**回答需要先完成生成后校验再推送。
+        普通对话仍然边生成边推送，不缓冲、不增加首字延迟。
+
         非成功检索状态下的兜底也在这里：模型输出结束后、`done` 之前，如果
         本轮没有知识片段且模型自己没说明资料状态，就追加一条固定说明。
-        它是一个普通 delta，不缓冲、不删除、不覆盖模型已经产出的内容，
+        它是一个普通 delta，不删除、不覆盖模型已经产出的内容，
         因此 SSE 事件序列与引用校验入口都不变。
         """
-        async for delta in self._tutor.stream(prepared.context):
-            prepared.state.response += delta
-            yield delta
+        if prepared.state.history_review_requested:
+            async for delta in self._generate_history_review(prepared):
+                yield delta
+        else:
+            async for delta in self._tutor.stream(prepared.context):
+                prepared.state.response += delta
+                yield delta
 
         status = prepared.state.knowledge_status
         if status not in GUARD_STATUSES:
@@ -254,6 +297,79 @@ class AgentRuntime:
             addition = f"\n\n{notice}"
             prepared.state.response += addition
             yield addition
+
+    async def _generate_history_review(self, prepared: PreparedRun) -> AsyncIterator[str]:
+        """复盘回答：先完整生成并校验，再推送给用户。
+
+        首字延迟因此等于一次完整生成（需要重生成时再加一次），这是显式复盘
+        独有的代价。普通对话不走这里，仍保持即时流式。
+
+        允许一次受限重生成；重生成仍不通过（或重生成本身失败）时，使用由
+        当前记录确定性拼出的回退文本，不把已确认无依据的断言推给用户。
+        """
+        state = prepared.state
+        started = time.monotonic()
+        raw = await self._collect_history_answer(prepared)
+        initial_issues = check_history_answer(raw, state)
+        issues = initial_issues
+
+        final = raw
+        regenerated = False
+        regeneration_error: str | None = None
+        remaining_issues: list = []
+        fallback_used = False
+
+        if issues:
+            regenerated = True
+            retry = ""
+            try:
+                retry = await self._collect_history_answer(
+                    prepared,
+                    extra_instruction=retry_instruction(issues),
+                )
+            except LLMError as exc:
+                # 第一次调用已经成功，重生成失败时用确定性回退比把
+                # 已知无依据的内容推出去更安全；调用次数仍只有两次。
+                regeneration_error = str(exc)[:200]
+            if retry:
+                remaining_issues = check_history_answer(retry, state)
+                if not remaining_issues:
+                    final = retry
+                    issues = []
+            if issues:
+                final = build_history_fallback(state)
+                fallback_used = True
+
+        state.response = final
+        first_delta_ms = int((time.monotonic() - started) * 1000)
+        prepared.trace.record(
+            TraceEventType.HISTORY_GUARD,
+            hasTrajectory=bool(state.trajectories),
+            evidenceCount=sum(len(item.evidences) for item in state.trajectories),
+            rawChars=len(raw),
+            issues=[issue.as_dict() for issue in initial_issues],
+            regenerated=regenerated,
+            regenerationError=regeneration_error,
+            remainingIssues=[issue.as_dict() for issue in remaining_issues],
+            fallback=fallback_used,
+            outputChars=len(final),
+            firstDeltaElapsedMs=first_delta_ms,
+        )
+        for index in range(0, len(final), _HISTORY_STREAM_CHUNK):
+            yield final[index : index + _HISTORY_STREAM_CHUNK]
+
+    async def _collect_history_answer(
+        self,
+        prepared: PreparedRun,
+        *,
+        extra_instruction: str | None = None,
+    ) -> str:
+        parts: list[str] = []
+        async for delta in self._tutor.stream(
+            prepared.context, extra_instruction=extra_instruction
+        ):
+            parts.append(delta)
+        return "".join(parts)
 
     def validate_citations(self, prepared: PreparedRun) -> CitationReport:
         """校验本轮回答里的来源标注，并把结果写进 trace。
@@ -412,7 +528,18 @@ class AgentRuntime:
             min_score=self._settings.knowledge_min_score,
         )
 
+        # 复盘校验比「读取轨迹」更窄：只有个人历史问题才缓冲回答。
+        # 否则「过去十年 CPU 架构有什么变化」这类知识问题会因为一个「过去」
+        # 被当成复盘，既增加首字延迟，又可能被要求说明「没有历史记录」。
+        state.history_review_requested = _is_history_review(query)
+
         wants_evidence = bool(concept_ids) and _wants_evidence(query)
+        # 轨迹只注入显式复盘问题；「之前学过链表，现在学树」这类普通问题
+        # 即使带时间词，也不应该被塞进历史轨迹。
+        retrieve_trajectory = bool(concept_ids) and state.history_review_requested
+        # 复盘时用 Revision 关联精确回查，而不是再塞一份「最近 3 条」，
+        # 否则同一批证据会在上下文里出现两次。
+        fetch_recent_evidence = wants_evidence and not retrieve_trajectory
         tasks: list = [self._safe_knowledge(retriever, knowledge_query)]
         if concept_ids:
             tasks.extend(
@@ -421,7 +548,7 @@ class AgentRuntime:
                     retriever.get_memories(state.user_id, state.space_id, concept_ids, query),
                 ]
             )
-        if wants_evidence:
+        if fetch_recent_evidence:
             tasks.append(
                 retriever.get_evidences(
                     state.user_id, concept_ids, self._settings.evidence_top_k
@@ -437,8 +564,26 @@ class AgentRuntime:
         if concept_ids:
             state.understandings = results[1]
             state.memories = results[2]
-            if wants_evidence:
+            if fetch_recent_evidence:
                 state.evidences = results[3]
+
+        if retrieve_trajectory:
+            revisions = await retriever.get_revisions(state.user_id, concept_ids)
+            state.trajectories = build_trajectories(state.understandings, revisions)
+            if state.trajectories:
+                evidence_ids = collect_evidence_ids(
+                    state.trajectories, state.understandings
+                )
+                if evidence_ids:
+                    state.evidences = await retriever.get_evidence_details(
+                        state.user_id, concept_ids, evidence_ids
+                    )
+                attach_evidences(state.trajectories, state.evidences)
+            elif wants_evidence:
+                # 没有 Revision 时仍保留原有按需召回，避免「复盘」比普通追问拿到更少信息。
+                state.evidences = await retriever.get_evidences(
+                    state.user_id, concept_ids, self._settings.evidence_top_k
+                )
 
         state.trace.record(
             TraceEventType.RETRIEVE,
@@ -451,6 +596,10 @@ class AgentRuntime:
             knowledgeCandidates=knowledge_result.candidates,
             evidences=len(state.evidences),
             evidenceRequested=wants_evidence,
+            historyReviewRequested=state.history_review_requested,
+            trajectoryConcepts=[item.concept_name for item in state.trajectories],
+            trajectoryRevisions=sum(len(item.revisions) for item in state.trajectories),
+            trajectoryEvidenceIds=[item.id for item in state.evidences],
         )
 
     async def _safe_knowledge(self, retriever, query: KnowledgeQuery) -> KnowledgeResult:
@@ -480,3 +629,35 @@ class AgentRuntime:
 
 def _wants_evidence(query: str) -> bool:
     return any(trigger in query for trigger in _EVIDENCE_TRIGGERS)
+
+
+def _wants_trajectory(query: str) -> bool:
+    return any(trigger in query for trigger in _REVIEW_TRIGGERS)
+
+
+# 个人历史问题的特征：要么是第一人称，要么直接问「错在哪 / 怎么纠正」。
+# 它同时决定**是否检索轨迹、是否缓冲并校验回答**；不带第一人称的
+# 「以前 CPU 架构有哪些常见误解」不应因为「误解」二字被当成个人复盘。
+_PERSONAL_HISTORY_MARKERS = ("我", "自己")
+_HISTORY_ERROR_MARKERS = (
+    "错在哪",
+    "哪里错",
+    "哪一步错",
+    "错在",
+    "错了",
+    "纠正",
+    "改过来",
+    "搞错",
+    "说错",
+    "复盘",
+    "回顾",
+    "学习轨迹",
+)
+
+
+def _is_history_review(query: str) -> bool:
+    if not _wants_trajectory(query):
+        return False
+    return any(marker in query for marker in _PERSONAL_HISTORY_MARKERS) or any(
+        marker in query for marker in _HISTORY_ERROR_MARKERS
+    )

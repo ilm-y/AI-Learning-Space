@@ -262,9 +262,29 @@ async def test_notice_is_streamed_as_a_normal_delta_and_keeps_sse_contract() -> 
 def test_question_shape_heuristic_is_deliberately_narrow() -> None:
     assert is_knowledge_request("请解释量子色动力学中的渐进自由。") is True
     assert is_knowledge_request("ZenFrame 的提醒模块通过什么协议发送？") is True
+    assert is_knowledge_request("TLB 的核心要点是什么？") is True
     assert is_knowledge_request("今天天气怎么样？") is False
     assert is_knowledge_request("为什么天空是蓝的？") is False
     assert is_knowledge_request("你好") is False
+
+
+def test_history_and_personal_questions_do_not_get_a_knowledge_status_notice() -> None:
+    """知识状态兜底只服务知识问句，不能在复盘 / 个人历史问题上加一段资料说明。"""
+
+    history_questions = [
+        # C：显式复盘，Trajectory-enabled 与 Current-only 都不该触发。
+        "我之前对 TLB 的理解错在哪里？后来是怎么纠正的？",
+        # D：对当前理解的个人问题，不是资料检索问题。
+        "当前应如何理解 TLB？",
+    ]
+    for question in history_questions:
+        assert is_knowledge_request(question) is False
+        assert evidence_status_notice("NO_MATCH", question, "回答") is None
+
+    # 混合问题确实在问知识，仍应触发状态说明。
+    mixed = "TLB 的核心要点是什么？我之前哪里理解错了？"
+    assert is_knowledge_request(mixed) is True
+    assert evidence_status_notice("NO_MATCH", mixed, "回答") is not None
 
     assert evidence_status_notice(
         "NO_MATCH", "请解释量子色动力学中的渐进自由。", "回答"
