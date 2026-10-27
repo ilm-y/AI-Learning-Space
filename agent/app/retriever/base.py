@@ -24,7 +24,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol, runtime_checkable
 
-from app.schemas import Concept, EvidenceItem, KnowledgeChunk, MemoryItem, Understanding
+from app.schemas import (
+    Concept,
+    EvidenceItem,
+    KnowledgeChunk,
+    MemoryItem,
+    Understanding,
+    UnderstandingRevision,
+)
 
 
 class RetrievalError(RuntimeError):
@@ -122,6 +129,26 @@ class Retriever(Protocol):
         self, user_id: int, concept_ids: list[int], limit: int
     ) -> list[EvidenceItem]:
         """判定依据。按需召回，默认条数很小 —— 不是每次回答都需要它。"""
+        ...
+
+    async def get_revisions(
+        self, user_id: int, concept_ids: list[int]
+    ) -> dict[int, list[UnderstandingRevision]]:
+        """理解快照的不可变版本历史，按 conceptId 分组。
+
+        只有显式复盘才调用；它用于找到「误区何时出现、何时被纠正」以及
+        每次变化的 triggerEvidenceId，而不是把所有版本无差别塞进上下文。
+        """
+        ...
+
+    async def get_evidence_details(
+        self, user_id: int, concept_ids: list[int], evidence_ids: list[int]
+    ) -> list[EvidenceItem]:
+        """按 id 精确读取证据及其来源。
+
+        复盘时用 Revision 的 trigger/reversal 关联直接回查原始证据，
+        不再按 createdAt 取最近 N 条。
+        """
         ...
 
     async def aclose(self) -> None:

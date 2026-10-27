@@ -28,7 +28,13 @@ from app.retriever.base import (
 from app.retriever.fixture import FixtureRetriever
 from app.retriever.http_backend import HttpBackendRetriever
 from app.retriever.knowledge import KnowledgeSearchService
-from app.schemas import Concept, EvidenceItem, MemoryItem, Understanding
+from app.schemas import (
+    Concept,
+    EvidenceItem,
+    MemoryItem,
+    Understanding,
+    UnderstandingRevision,
+)
 
 log = logging.getLogger(__name__)
 
@@ -139,6 +145,21 @@ class FallbackRetriever:
         self, user_id: int, concept_ids: list[int], limit: int
     ) -> list[EvidenceItem]:
         return await self._call("get_evidences", user_id=user_id, concept_ids=concept_ids, limit=limit)
+
+    async def get_revisions(
+        self, user_id: int, concept_ids: list[int]
+    ) -> dict[int, list[UnderstandingRevision]]:
+        return await self._call("get_revisions", user_id=user_id, concept_ids=concept_ids)
+
+    async def get_evidence_details(
+        self, user_id: int, concept_ids: list[int], evidence_ids: list[int]
+    ) -> list[EvidenceItem]:
+        return await self._call(
+            "get_evidence_details",
+            user_id=user_id,
+            concept_ids=concept_ids,
+            evidence_ids=evidence_ids,
+        )
 
     async def aclose(self) -> None:
         await self._primary.aclose()

@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from app.context.builder import ContextBuilder
 from app.schemas import (
     EvidenceCorrectness,
@@ -345,3 +347,69 @@ def test_status_survives_budget_drop_of_low_priority_knowledge_chunk():
 
     assert "knowledge:202" in context.dropped_sections
     assert "本轮知识检索状态" in context.messages[0].content
+
+
+def test_learning_memory_is_marked_as_historical_not_current_belief():
+    memory = MemoryItem(
+        id=105,
+        memory_type=MemoryType.LEARNING,
+        content="用户认为 TLB 缓存整个页表",
+        created_at=datetime(2026, 10, 27, 0, 46),
+    )
+
+    system = ContextBuilder().build(make_state(memories=[memory])).messages[0].content
+
+    assert "学习状态（历史记录）" in system
+    assert "用户认为 TLB 缓存整个页表" in system
+    assert "记录于 2026-10-27 00:46" in system
+    assert "不等于用户此刻的认知" in system
+
+
+def test_understanding_block_limits_mastery_to_explicit_known_parts():
+    system = ContextBuilder().build(
+        make_state(understandings=[UNDERSTANDING])
+    ).messages[0].content
+
+    assert "只有「已经理解」明确列出的内容才算已掌握" in system
+    assert "「部分理解」「接触过」「未接触」都不能说成已掌握" in system
+
+
+def test_prompt_requires_evidence_bound_history_and_missing_data_disclosure():
+    from app.prompts import BASE_SYSTEM_INSTRUCTION
+
+    # 历史复盘只能陈述记录事实，不能补写心理过程。
+    assert "你突然意识到" in BASE_SYSTEM_INSTRUCTION
+    assert "记录里看不出原因" in BASE_SYSTEM_INSTRUCTION
+    # Current-only 没有轨迹时不能否认历史。
+    assert "不要因此断言「你以前没有这个错误」" in BASE_SYSTEM_INSTRUCTION
+    # 机制类问题要求区分缓存未命中 / 查找 / 异常 / 处理者。
+    assert "缓存里有没有命中" in BASE_SYSTEM_INSTRUCTION
+    assert "由谁处理这个异常" in BASE_SYSTEM_INSTRUCTION
+
+
+def test_learning_memory_conflict_is_called_out_next_to_current_understanding():
+    memory = MemoryItem(
+        id=105,
+        concept_id=10,
+        memory_type=MemoryType.LEARNING,
+        content="用户认为 TLB 缓存整个页表",
+        created_at=datetime(2026, 10, 27, 0, 46),
+    )
+
+    system = ContextBuilder().build(
+        make_state(understandings=[UNDERSTANDING], memories=[memory])
+    ).messages[0].content
+
+    assert "长期记忆里另有一条较早的学习状态记录" in system
+    assert "当前状态已不同" in system
+    assert "不要把它当成本轮事实" in system
+
+
+def test_understanding_block_handles_missing_trajectory_explicitly():
+    system = ContextBuilder().build(
+        make_state(understandings=[UNDERSTANDING])
+    ).messages[0].content
+
+    assert "如果本轮没有提供历史轨迹" in system
+    assert "不要从当前状态反推过去" in system
+    assert "没有看到错误记录" in system

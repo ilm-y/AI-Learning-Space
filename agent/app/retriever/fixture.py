@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from app.retriever.base import KnowledgeQuery, KnowledgeResult, KnowledgeStatus
@@ -24,6 +25,7 @@ from app.schemas import (
     MemoryScopeType,
     MemoryStatus,
     Understanding,
+    UnderstandingRevision,
 )
 
 
@@ -38,6 +40,7 @@ class FixtureRetriever:
         self._memories: list[MemoryItem] = []
         self._knowledge: list[KnowledgeChunk] = []
         self._evidences: list[EvidenceItem] = []
+        self._revisions: list[UnderstandingRevision] = []
         self.space_id: int | None = None
         self.space_name: str = ""
 
@@ -108,6 +111,33 @@ class FixtureRetriever:
         items = [item for item in self._evidences if item.concept_id in wanted]
         return items[-limit:] if limit > 0 else []
 
+    async def get_revisions(
+        self, user_id: int, concept_ids: list[int]
+    ) -> dict[int, list[UnderstandingRevision]]:
+        self._ensure_loaded()
+        wanted = set(concept_ids)
+        result: dict[int, list[UnderstandingRevision]] = {}
+        for concept_id in concept_ids:
+            if concept_id not in wanted:
+                continue
+            revisions = [item for item in self._revisions if item.concept_id == concept_id]
+            result[concept_id] = sorted(revisions, key=lambda item: item.revision_no)
+        return result
+
+    async def get_evidence_details(
+        self, user_id: int, concept_ids: list[int], evidence_ids: list[int]
+    ) -> list[EvidenceItem]:
+        self._ensure_loaded()
+        wanted = set(concept_ids)
+        by_id = {item.id: item for item in self._evidences}
+        items = [
+            by_id[evidence_id]
+            for evidence_id in evidence_ids
+            if evidence_id in by_id and by_id[evidence_id].concept_id in wanted
+        ]
+        items.sort(key=lambda item: item.created_at or datetime.min)
+        return items
+
     async def aclose(self) -> None:
         return None
 
@@ -133,6 +163,9 @@ class FixtureRetriever:
         self._memories = [MemoryItem.model_validate(item) for item in raw.get("memories", [])]
         self._knowledge = [KnowledgeChunk.model_validate(item) for item in raw.get("knowledge", [])]
         self._evidences = [EvidenceItem.model_validate(item) for item in raw.get("evidences", [])]
+        self._revisions = [
+            UnderstandingRevision.model_validate(item) for item in raw.get("revisions", [])
+        ]
         self._loaded = True
 
 

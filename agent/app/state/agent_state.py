@@ -24,6 +24,7 @@ from app.schemas import (
     EvidenceItem,
     HistoryMessage,
     KnowledgeChunk,
+    LearningTrajectory,
     MemoryItem,
     SessionContext,
     Understanding,
@@ -75,6 +76,12 @@ class AgentState:
     knowledge_status: str = "NOT_RETRIEVED"
     knowledge_warning: str | None = None
     evidences: list[EvidenceItem] = field(default_factory=list)
+    # 仅显式复盘时填充：真实 Revision 历史 + 由 trigger/reversal 关联精确找回的 Evidence。
+    trajectories: list[LearningTrajectory] = field(default_factory=list)
+    # 用户这句话是否是显式个人复盘（由 _is_history_review 判定，与是否检索到概念无关）。
+    # Runtime 只对这类回答做「生成后、推送前」的证据校验：普通知识问题仍即时流式，
+    # 不能被缓冲。它也是 Current-only 场景的判断依据 —— 没有轨迹但要约束回答。
+    history_review_requested: bool = False
 
     # ---------- 组装与产出 ----------
     context: "BuiltContext | None" = None

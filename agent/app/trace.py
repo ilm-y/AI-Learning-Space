@@ -31,6 +31,9 @@ class TraceEventType(str, Enum):
     # 非成功知识检索状态的运行时兜底：记录本轮状态、是否追加了说明、以及
     # 触发/跳过原因。它不改变 SSE 事件类型，只影响回答末尾的固定说明。
     EVIDENCE_GUARD = "EVIDENCE_GUARD"
+    # 显式复盘回答的证据约束：记录校验发现的问题、是否重生成、是否回退。
+    # 只在 generate() 里记录；prepare() 不产生它，上下文预览的事件序列保持不变。
+    HISTORY_GUARD = "HISTORY_GUARD"
     ANALYSIS_DECISION = "ANALYSIS_DECISION"
     RUN_END = "RUN_END"
     RUN_ERROR = "RUN_ERROR"

@@ -47,6 +47,7 @@ from app.schemas import (
     EvidenceItem,
     MemoryItem,
     Understanding,
+    UnderstandingRevision,
 )
 
 log = logging.getLogger(__name__)
@@ -197,6 +198,48 @@ class HttpBackendRetriever:
             reverse=True,
         )
         return results[:limit]
+
+    async def get_revisions(
+        self, user_id: int, concept_ids: list[int]
+    ) -> dict[int, list[UnderstandingRevision]]:
+        """读取每个概念的真实版本历史。
+
+        没有快照/没有历史是正常情况（返回空列表），不抛 RetrievalError。
+        后端接口本身按登录用户鉴权，这里不自行推断权限。
+        """
+        results: dict[int, list[UnderstandingRevision]] = {}
+        for concept_id in concept_ids:
+            data = await self._get(
+                f"/api/understandings/{concept_id}/revisions", fatal=False
+            )
+            revisions = _parse_list(data, UnderstandingRevision)
+            revisions.sort(key=lambda item: item.revision_no)
+            results[concept_id] = revisions
+        return results
+
+    async def get_evidence_details(
+        self, user_id: int, concept_ids: list[int], evidence_ids: list[int]
+    ) -> list[EvidenceItem]:
+        """按 Evidence id 精确回查，用于复盘时还原 trigger/reversal 证据。
+
+        单条读取是为了复用已有的详情接口（含 sources），不再新增后端查询；
+        条数由上游按 Revision 关联裁剪，通常只有个位数。
+        """
+        wanted_concepts = set(concept_ids)
+        results: list[EvidenceItem] = []
+        seen: set[int] = set()
+        for evidence_id in evidence_ids:
+            if evidence_id in seen:
+                continue
+            seen.add(evidence_id)
+            data = await self._get(f"/api/evidence/{evidence_id}", fatal=False)
+            item = _parse_one(data, EvidenceItem)
+            # 详情接口按用户鉴权，但仍校验它确实属于本轮概念，避免把别的概念
+            # （即使同属该用户）的证据混进当前轨迹。
+            if item is not None and item.concept_id in wanted_concepts:
+                results.append(item)
+        results.sort(key=lambda item: item.created_at or datetime.min)
+        return results
 
     async def aclose(self) -> None:
         await self._client.aclose()
