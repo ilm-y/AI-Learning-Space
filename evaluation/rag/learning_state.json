@@ -1,0 +1,144 @@
+{
+  "_note": "受控学习状态，仅用于 RAG + learning state 模式对比。这里的内容是人工编写的教学背景/偏好/历史判断，不是上传文档原文，也不参与引用合法性判断。",
+  "concepts": [
+    {"id": 900001, "canonicalName": "ZenFrame", "displayName": "ZenFrame"},
+    {"id": 900002, "canonicalName": "ZealDeck", "displayName": "ZealDeck"},
+    {"id": 900003, "canonicalName": "HeliosCompute", "displayName": "HeliosCompute"},
+    {"id": 900004, "canonicalName": "NovaCache", "displayName": "NovaCache"},
+    {"id": 900005, "canonicalName": "AuroraGate", "displayName": "AuroraGate"},
+    {"id": 900006, "canonicalName": "TLB", "displayName": "TLB"}
+  ],
+  "understandings": [
+    {
+      "id": 920001,
+      "conceptId": 900001,
+      "conceptName": "ZenFrame",
+      "summary": "知道 ZenFrame 有云端提醒和近场传输两条链路，但对具体协议不确定。",
+      "knownParts": ["知道设备有云端提醒和近场传输"],
+      "uncertainParts": ["不确定提醒使用哪种协议", "不确定近场传输使用哪种短距无线技术"],
+      "misconceptions": [{"text": "可能把 ZenFrame 的近场传输误认为蓝牙 BLE", "status": "ACTIVE"}],
+      "status": "PARTIAL"
+    },
+    {
+      "id": 920002,
+      "conceptId": 900002,
+      "conceptName": "ZealDeck",
+      "summary": "知道 ZealDeck 与 ZenFrame 是相似设备，但容易把两者的协议记混。",
+      "knownParts": ["知道 ZealDeck 也有云端提醒和近场传输"],
+      "uncertainParts": ["不确定提醒协议和近场传输技术"],
+      "misconceptions": [{"text": "可能把 ZealDeck 的提醒协议误认为 MQTT", "status": "ACTIVE"}],
+      "status": "PARTIAL"
+    },
+    {
+      "id": 920003,
+      "conceptId": 900003,
+      "conceptName": "HeliosCompute",
+      "summary": "接触过 HeliosCompute 的调度概念，但说不出完整阶段。",
+      "knownParts": ["知道调度器会做准入和放置"],
+      "uncertainParts": ["不清楚从准入控制到抢占回收的完整阶段"],
+      "misconceptions": [],
+      "status": "EXPOSED"
+    },
+    {
+      "id": 920004,
+      "conceptId": 900004,
+      "conceptName": "NovaCache",
+      "summary": "知道 NovaCache 有多个生产集群，但不确定配置是否一致。",
+      "knownParts": ["知道 NovaCache 有集群 A 和集群 B"],
+      "uncertainParts": ["不确定不同集群的默认超时和连接数是否相同"],
+      "misconceptions": [],
+      "status": "EXPOSED"
+    },
+    {
+      "id": 920005,
+      "conceptId": 900005,
+      "conceptName": "AuroraGate",
+      "summary": "了解 AuroraGate 是安全组件，但记不清轮换和审计参数。",
+      "knownParts": ["知道 AuroraGate 涉及密钥和审计"],
+      "uncertainParts": ["不确定密钥轮换周期", "不确定审计日志保留期"],
+      "misconceptions": [],
+      "status": "PARTIAL"
+    },
+    {
+      "id": 920006,
+      "conceptId": 900006,
+      "conceptName": "TLB",
+      "summary": "知道 TLB 是页表项缓存，但会把 TLB Miss 与缺页异常混为一谈。",
+      "knownParts": ["知道 TLB 是页表项缓存"],
+      "uncertainParts": [],
+      "misconceptions": [{"text": "把 TLB Miss 和 Page Fault 混为一谈", "status": "ACTIVE"}],
+      "status": "MISCONCEPTION"
+    }
+  ],
+  "memories": [
+    {
+      "id": 910001,
+      "scopeType": "SPACE",
+      "conceptId": 900001,
+      "memoryType": "LEARNING",
+      "memoryKey": "zenframe_protocol_belief",
+      "content": "用户曾凭印象说 ZenFrame 的提醒协议是 Kafka，但自己也不确定，尚未被资料确认。",
+      "status": "ACTIVE",
+      "importance": 0.6
+    },
+    {
+      "id": 910002,
+      "scopeType": "GLOBAL",
+      "memoryType": "PREFERENCE",
+      "memoryKey": "answer_style",
+      "content": "用户偏好先给结论，再给对比表，最后补充细节。",
+      "status": "ACTIVE",
+      "importance": 0.8
+    },
+    {
+      "id": 910003,
+      "scopeType": "CONCEPT",
+      "conceptId": 900006,
+      "memoryType": "LEARNING",
+      "memoryKey": "tlb_pagefault_confusion",
+      "content": "用户曾经把 TLB Miss 误认为缺页异常，需要用对比方式纠正。",
+      "status": "ACTIVE",
+      "importance": 0.7
+    },
+    {
+      "id": 910004,
+      "scopeType": "SPACE",
+      "conceptId": 900004,
+      "memoryType": "LEARNING",
+      "memoryKey": "novacache_cluster_uncertainty",
+      "content": "用户知道 NovaCache 有多个生产集群，但不确定各集群配置是否一致。",
+      "status": "ACTIVE",
+      "importance": 0.5
+    },
+    {
+      "id": 910005,
+      "scopeType": "SPACE",
+      "conceptId": 900003,
+      "memoryType": "PREFERENCE",
+      "memoryKey": "helios_overview_first",
+      "content": "用户希望先看调度阶段总览，再看每个阶段的细节。",
+      "status": "ACTIVE",
+      "importance": 0.4
+    }
+  ],
+  "evidences": [
+    {
+      "id": 930001,
+      "conceptId": 900001,
+      "observation": "用户能说出云端提醒，但说不出具体协议。",
+      "correctness": "PARTIAL"
+    },
+    {
+      "id": 930002,
+      "conceptId": 900006,
+      "observation": "上一轮用户把 TLB Miss 描述成缺页异常。",
+      "correctness": "INCORRECT"
+    },
+    {
+      "id": 930003,
+      "conceptId": 900004,
+      "observation": "用户能区分集群 A/B 的名称，但不确定配置差异。",
+      "correctness": "PARTIAL"
+    }
+  ]
+}

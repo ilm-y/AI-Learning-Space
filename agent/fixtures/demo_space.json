@@ -137,6 +137,10 @@
     {
       "id": 200,
       "documentId": 1,
+      "chunkIndex": 0,
+      "documentName": "操作系统笔记.md",
+      "fileType": "md",
+      "headingPath": ["虚拟内存", "TLB"],
       "conceptId": 10,
       "content": "TLB（Translation Lookaside Buffer）是 MMU 内部的页表项缓存。CPU 发出的虚拟地址先查 TLB：命中则直接得到物理页框号；未命中则由 MMU 进行页表遍历（page walk）。",
       "pageNumber": 12,
@@ -145,6 +149,10 @@
     {
       "id": 201,
       "documentId": 1,
+      "chunkIndex": 1,
+      "documentName": "操作系统笔记.md",
+      "fileType": "md",
+      "headingPath": ["虚拟内存", "TLB Miss"],
       "conceptId": 10,
       "content": "TLB Miss 与 Page Fault 是两个层次的未命中：前者是缓存未命中，代价是一次页表遍历；后者是页面根本不在物理内存中，代价是一次磁盘 I/O 与进程陷入内核。",
       "pageNumber": 19,
@@ -153,6 +161,10 @@
     {
       "id": 202,
       "documentId": 1,
+      "chunkIndex": 2,
+      "documentName": "操作系统笔记.md",
+      "fileType": "md",
+      "headingPath": ["虚拟内存", "Page Fault"],
       "conceptId": 12,
       "content": "Page Fault（缺页异常）发生在页表项的有效位标记为「不在内存」时，由 MMU 触发异常，内核缺页处理程序负责把页面从磁盘换入，再重新执行那条导致异常的指令。",
       "pageNumber": 18,

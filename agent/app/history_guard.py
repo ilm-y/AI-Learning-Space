@@ -1,0 +1,540 @@
+"""显式复盘回答的证据约束（阶段 5.3.2）。
+
+为什么需要这一层：显式复盘问题（「我之前错在哪」「后来怎么纠正的」）的回答
+最容易出现两类无依据断言 —— 补写用户的心理过程（「你意识到」「你自己推导出」），
+以及断言记录里根本没有的外部资料使用情况（「没有外部提示」「完全靠自己」）。
+Prompt 已经写了这些规则，但只靠 prompt 时模型仍会偶尔补一个合理的故事。
+
+而 SSE 是边生成边推送的：回答一旦推到前端，事后校验无法撤回。所以本模块只
+服务**显式复盘**这一小类问题，在模型生成完成之后、Runtime 推送之前检查：
+
+1. 回答里的历史断言能否由 trajectories / revisions / evidences 里可核对的事实支撑；
+2. 当前没有历史轨迹时，回答有没有把「没有可见记录」写成「过去没有发生过」，
+   或者从当前状态反推过去；
+3. 记录条数、PARTIAL 状态、显式批注来源有没有被改写或遗漏。
+
+它不是关键词清洗：记录原文里出现过的表述可以放行；检查的是**断言是否被记录支撑**。
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from datetime import datetime
+
+from app.schemas import (
+    EvidenceCorrectness,
+    EvidenceType,
+    LearningTrajectory,
+    UnderstandingStatus,
+)
+from app.state.agent_state import AgentState
+
+_STATUS_LABEL = {
+    UnderstandingStatus.UNKNOWN: "未接触",
+    UnderstandingStatus.EXPOSED: "接触过",
+    UnderstandingStatus.PARTIAL: "部分理解",
+    UnderstandingStatus.DEMONSTRATED: "已能讲清",
+    UnderstandingStatus.MISCONCEPTION: "存在误区",
+}
+
+_CORRECTNESS_LABEL = {
+    EvidenceCorrectness.CORRECT: "答对",
+    EvidenceCorrectness.INCORRECT: "答错",
+    EvidenceCorrectness.PARTIAL: "部分正确",
+    EvidenceCorrectness.UNKNOWN: "未判定",
+}
+
+_EVIDENCE_TYPE_LABEL = {
+    EvidenceType.USER_EXPLANATION: "用户解释",
+    EvidenceType.OBSERVATION: "观察",
+    EvidenceType.TEST_RESULT: "测试结果",
+    EvidenceType.USER_CORRECTION: "用户纠正批注",
+    EvidenceType.HIGHLIGHT_SIGNAL: "批注信号",
+}
+
+_SOURCE_TYPE_LABEL = {
+    "MESSAGE": "消息",
+    "HIGHLIGHT": "批注",
+    "TEST_ANSWER": "测试回答",
+}
+
+# 内省 / 心理过程。记录没有写出的，不能替用户补写。
+_PROCESS_TERMS = (
+    "意识到",
+    "想通",
+    "想明白",
+    "顿悟",
+    "领悟",
+    "恍然大悟",
+    "推导",
+    "推演",
+    "修正",
+    "发现",
+    "总结出",
+    "归纳出",
+    "摸索",
+    "琢磨",
+    "进一步想到",
+    "举一反三",
+)
+
+_INTERNAL_PROCESS_RE = re.compile(
+    r"(突然|忽然)?(意识到|想通|想明白|顿悟|领悟|恍然大悟)"
+    r"|(自己|自行|独立|主动)(推导|推演|修正|发现|总结|归纳|摸索|琢磨)"
+    r"|进一步想到|抓住(了)?(核心|要点|关键)|举一反三"
+    r"|(很可能|可能|大概|也许|应该是|估计是|想必)[^。！？!?\n]{0,40}"
+    r"(通过|借助|依靠|基于|由于|因为)"
+    r"|(通过|借助|依靠)[^。！？!?\n]{0,24}"
+    r"(重读|重新阅读|反复阅读|对比|迁移|类推|联想)"
+    r"|你(之所以|之所以能)[^。！？!?\n]{0,24}(因为|是由于|是因为|源于)"
+)
+
+# 外部帮助 / 资料使用。只有记录明确写了才可以说「没有」。
+_EXTERNAL_ABSENCE_RE = re.compile(
+    r"(没有|未|无)[^。！？!?\n]{0,12}(外部|他人|别人|老师)[^。！？!?\n]{0,8}"
+    r"(提示|资料|文档|帮助|指导|介入|参与|参考)"
+    r"|(没有|未|无)[^。！？!?\n]{0,12}(提示|资料|文档|帮助|指导|介入|参与)"
+    r"[^。！？!?\n]{0,6}(介入|参与|帮助|提示|指导)"
+    r"|完全(靠|依靠|凭)(自己|自学)"
+    r"|独立(完成|解决|想通|推导)"
+    r"|无人(指导|帮助|提示)"
+    r"|没有(查|查阅|查过|参考|看)(过)?(资料|文档|书|答案)"
+    r"|没(有)?(借助|使用|依赖|参考)(过)?(任何)?(外部|他人)?"
+    r"(提示|资料|文档|工具|帮助)"
+    r"|不靠(任何)?(外部|他人|帮助|资料)"
+)
+
+# 即使同一句里在说明「记录没有写是否借助资料」，这些说法仍然是
+# 对过去事实的肯定断言，不能被不确定性说明一并放行。
+_STRONG_EXTERNAL_ABSENCE_RE = re.compile(
+    r"完全(靠|依靠|凭)(自己|自学)"
+    r"|独立(完成|解决|想通|推导)"
+    r"|无人(指导|帮助|提示)"
+    r"|没有(查|查阅|查过|参考|看)(过)?(资料|文档|书|答案)"
+)
+
+# 记录完整性：把多条证据说成「唯一 / 只有一条」。
+_ONLY_EVIDENCE_RE = re.compile(
+    r"(唯一|仅有|只有|仅)[^。！？!?\n]{0,8}(一|1)?[^。！？!?\n]{0,4}证据"
+)
+
+# 把 PARTIAL 升级成绝对判断。
+_ABSOLUTE_CORRECT_RE = re.compile(
+    r"(完全|彻底|全部)(答对|正确|掌握|理解)|完全正确|完全答对|全部答对"
+)
+_WRONG_ANSWER_RE = re.compile(r"(答错|回答错误|答错了)")
+
+# 「记录没有写 / 无法确认是否借助过外部资料」是对记录状态的真实说明，
+# 不是「没有借助」的断言。它可能包含「没有……外部资料」的字面片段。
+_RECORD_UNCERTAINTY_RE = re.compile(
+    r"没有记录|未记录|记录(里)?(没有|未|无法)|无法确认|不能确认|看不出|"
+    r"没有写明|没有说明|未说明"
+)
+
+# 当前没有历史轨迹时：否认过去 / 从当前状态反推过去。
+_NO_HISTORY_DENIAL_RE = re.compile(
+    r"你(以前|之前|过去|当时)[^。！？!?\n]{0,10}(没有|从未|从没|不曾)"
+    r"[^。！？!?\n]{0,10}(错误|误解|问题|犯过|出现)"
+    r"|你(以前|之前|过去)(从未|从没|没有)[^。！？!?\n]{0,8}(错|误解|问题)"
+    r"|你(一直|本来就|一直都)(是)?(正确|理解|掌握)"
+    r"|并不存在[^。！？!?\n]{0,8}(误解|错误|问题)"
+    r"|你没有(犯过|出现过)[^。！？!?\n]{0,6}(错|误解)"
+)
+
+_NO_HISTORY_INFERENCE_RE = re.compile(
+    r"你(以前|之前|过去|当时)[^。！？!?\n]{0,12}"
+    r"(可能|大概|也许|应该|想必|估计|显然)[^。！？!?\n]{0,30}"
+    r"(理解|知道|学过|接触|掌握|认为|以为|想|推导|纠正)"
+    r"|(说明|可见|表明)你(以前|之前|过去|当时)[^。！？!?\n]{0,20}"
+    r"(已经|就|一直|没有|可能|应该)"
+    r"|你(之前|以前)(就)?已经(理解|掌握|知道)"
+    # 「你已经越过 / 避开了某个误区」同样是在断言过去，不能由当前答对反推。
+    r"|你(也|已经|已)?[^。！？!?\n]{0,4}"
+    r"(越过|避开|避免|克服|走出|摆脱|改正|纠正)"
+    r"[^。！？!?\n]{0,12}(误区|混淆|错误|问题|陷阱)"
+)
+
+# 没有轨迹时必须出现的「信息不足」表达。
+_NO_HISTORY_ACK_MARKERS = (
+    "可见",
+    "记录",
+    "历史",
+    "没有检索到",
+    "没有保存",
+    "没有看到",
+    "看不到",
+    "无法确认",
+    "不能确认",
+    "不能断言",
+    "当前状态",
+    "目前",
+)
+
+# 有显式批注来源时，回答至少要把这条来源讲出来，不能只讲「错误 → 正确」。
+_ANNOTATION_MARKERS = ("批注", "标注", "高亮", "勾画", "划出", "标记")
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryIssue:
+    kind: str
+    excerpt: str
+    reason: str
+
+    def as_dict(self) -> dict[str, str]:
+        return {"kind": self.kind, "excerpt": self.excerpt, "reason": self.reason}
+
+
+def check_history_answer(answer: str, state: AgentState) -> list[HistoryIssue]:
+    """检查一段复盘回答里的断言是否被记录支撑。"""
+    text = answer or ""
+    if not text.strip():
+        return [HistoryIssue("empty_answer", "", "回答为空")]
+
+    corpus = _recorded_corpus(state)
+    sentences = _sentences(text)
+    issues: list[HistoryIssue] = []
+
+    for sentence in sentences:
+        issues.extend(_check_internal_process(sentence, corpus))
+        issues.extend(_check_external_absence(sentence, corpus))
+
+    if state.trajectories:
+        issues.extend(_check_record_facts(state, text))
+    else:
+        issues.extend(_check_no_history(sentences, text))
+
+    return _dedupe(issues)
+
+
+def retry_instruction(issues: list[HistoryIssue]) -> str:
+    """一次受限重生成用的指令。只描述问题类别，不把原回答塞回去。"""
+    guidance = {
+        "internal_process": (
+            "删除对用户心理过程、学习方式或变化原因的推断；记录没有写出的，"
+            "写成「记录里看不出原因」。"
+        ),
+        "external_absence": (
+            "不要断言用户没有使用外部提示、资料或帮助；记录没有写，就说明无法确认。"
+        ),
+        "record_completeness": "按记录的实际条数陈述，不要把多条证据概括成「唯一 / 只有一条」。",
+        "partial_upgrade": "「部分正确」只能写成部分正确，不能升级成「答错」或「完全答对」。",
+        "missing_source_mapping": "记录里有显式批注时，要说明这条批注记录，不能只讲错误和正确答案。",
+        "no_history_denial": "当前没有历史轨迹：不要断言用户过去没有出现过这个误解。",
+        "no_history_inference": "当前没有历史轨迹：不要从当前状态反推用户过去怎么想、怎么学过。",
+        "missing_history_acknowledgement": (
+            "当前没有历史轨迹：先说明当前可见信息不足以确认过去，再回答。"
+        ),
+    }
+    lines = [
+        "上一次回答包含当前记录无法支撑的断言。请整段重写，只陈述上下文里"
+        "「学习轨迹 / 当前认知」可核对的事实："
+    ]
+    seen: list[str] = []
+    for issue in issues:
+        rule = guidance.get(issue.kind)
+        if rule and rule not in seen:
+            seen.append(rule)
+            lines.append(f"- {rule}")
+    lines.append(
+        "- 无法确认的地方直接写「无法确认」，不要补一个合理的故事；"
+        "保留对用户本来问题的回答，不要改写成泛泛的知识讲解。"
+    )
+    return "\n".join(lines)
+
+
+def build_history_fallback(state: AgentState) -> str:
+    """校验仍不通过时的确定性回退：只复述记录里可核对的事实。
+
+    不包含任何内部 id、证据编号或模型推断，因此它一定不会比原始回答更不可靠。
+    """
+    if state.trajectories:
+        return _trajectory_fallback(state.trajectories)
+    return _no_history_fallback(state)
+
+
+# ---------- 检查 ----------
+
+
+def _check_internal_process(sentence: str, corpus: list[str]) -> list[HistoryIssue]:
+    issues: list[HistoryIssue] = []
+    for match in _INTERNAL_PROCESS_RE.finditer(sentence):
+        span = match.group(0)
+        if _recorded_phrase(span, corpus):
+            continue
+        # 同一断言里的内省词若原样出现在记录中，视为引用记录，不判为编造。
+        # 只在这个匹配片段内看，避免同一句里一句有记录的「意识到」把另一句
+        # 没记录的「自己推导」也一起放行。
+        if any(term in span and _recorded_phrase(term, corpus) for term in _PROCESS_TERMS):
+            continue
+        issues.append(
+            HistoryIssue(
+                "internal_process",
+                _excerpt(sentence),
+                f"记录没有写出的过程断言：「{span}」",
+            )
+        )
+    return issues
+
+
+def _check_external_absence(sentence: str, corpus: list[str]) -> list[HistoryIssue]:
+    # 「记录没有写是否借助资料」不是「没有借助」；这类不确定性说明必须放行。
+    # 但如果同一句里还有「完全靠自己」这类肯定断言，就不能整句放行。
+    if _RECORD_UNCERTAINTY_RE.search(sentence) and not _STRONG_EXTERNAL_ABSENCE_RE.search(
+        sentence
+    ):
+        return []
+    issues: list[HistoryIssue] = []
+    for match in _EXTERNAL_ABSENCE_RE.finditer(sentence):
+        span = match.group(0)
+        if _recorded_phrase(span, corpus):
+            continue
+        issues.append(
+            HistoryIssue(
+                "external_absence",
+                _excerpt(sentence),
+                "记录没有写明外部资料 / 帮助的使用情况",
+            )
+        )
+    return issues
+
+
+def _check_record_facts(state: AgentState, text: str) -> list[HistoryIssue]:
+    issues: list[HistoryIssue] = []
+    evidences = [evidence for item in state.trajectories for evidence in item.evidences]
+
+    if len(evidences) > 1:
+        match = _ONLY_EVIDENCE_RE.search(text)
+        if match:
+            issues.append(
+                HistoryIssue(
+                    "record_completeness",
+                    _excerpt(match.group(0)),
+                    f"本轮记录里有 {len(evidences)} 条证据，不是唯一一条",
+                )
+            )
+
+    correctness = {evidence.correctness for evidence in evidences}
+    if _ABSOLUTE_CORRECT_RE.search(text) and EvidenceCorrectness.CORRECT not in correctness:
+        issues.append(
+            HistoryIssue(
+                "partial_upgrade",
+                _excerpt(_ABSOLUTE_CORRECT_RE.search(text).group(0)),
+                "记录里没有完全答对的证据",
+            )
+        )
+    if (
+        _WRONG_ANSWER_RE.search(text)
+        and EvidenceCorrectness.INCORRECT not in correctness
+        and EvidenceCorrectness.PARTIAL in correctness
+    ):
+        issues.append(
+            HistoryIssue(
+                "partial_upgrade",
+                _excerpt(_WRONG_ANSWER_RE.search(text).group(0)),
+                "记录只判定为部分正确，不能改写成答错",
+            )
+        )
+
+    has_annotation = any(
+        evidence.evidence_type is EvidenceType.USER_CORRECTION
+        or any(source.source_type == "HIGHLIGHT" for source in evidence.sources)
+        for evidence in evidences
+    )
+    if has_annotation and not any(marker in text for marker in _ANNOTATION_MARKERS):
+        issues.append(
+            HistoryIssue(
+                "missing_source_mapping",
+                _excerpt(text),
+                "记录里有显式批注来源，回答没有提到这条记录",
+            )
+        )
+    return issues
+
+
+def _check_no_history(sentences: list[str], text: str) -> list[HistoryIssue]:
+    issues: list[HistoryIssue] = []
+    for sentence in sentences:
+        for pattern, kind, reason in (
+            (_NO_HISTORY_DENIAL_RE, "no_history_denial", "当前没有历史轨迹，不能断言过去没有错误"),
+            (
+                _NO_HISTORY_INFERENCE_RE,
+                "no_history_inference",
+                "当前没有历史轨迹，不能从当前状态反推过去",
+            ),
+        ):
+            match = pattern.search(sentence)
+            if match:
+                issues.append(
+                    HistoryIssue(kind, _excerpt(sentence), reason)
+                )
+    if not any(marker in text for marker in _NO_HISTORY_ACK_MARKERS):
+        issues.append(
+            HistoryIssue(
+                "missing_history_acknowledgement",
+                _excerpt(text),
+                "没有历史轨迹时，回答必须先说明当前可见信息不足",
+            )
+        )
+    return issues
+
+
+# ---------- 回退文本 ----------
+
+
+def _trajectory_fallback(trajectories: list[LearningTrajectory]) -> str:
+    lines = ["我只能按当前记录复述可以核对的部分，不推断记录之外的经过。"]
+    for trajectory in trajectories:
+        lines.extend(["", f"**{trajectory.concept_name}**"])
+        status = _STATUS_LABEL.get(
+            trajectory.current_status, trajectory.current_status.value
+        )
+        lines.append(f"- 当前状态：{status}")
+        if trajectory.current_misconceptions:
+            lines.append(
+                "- 当前仍存在的误区：" + "；".join(trajectory.current_misconceptions)
+            )
+
+        historical: list[str] = []
+        for revision in trajectory.revisions:
+            for misconception in revision.misconceptions:
+                if misconception.text not in historical:
+                    historical.append(misconception.text)
+        if historical:
+            lines.append(
+                "- 记录中的错误理解："
+                + "；".join(f"「{text}」" for text in historical)
+            )
+
+        if trajectory.evidences:
+            lines.append("- 可以核对的记录（按时间）：")
+            for evidence in trajectory.evidences:
+                lines.append("  - " + _render_evidence(evidence))
+
+        correct = [
+            evidence
+            for evidence in trajectory.evidences
+            if evidence.correctness is EvidenceCorrectness.CORRECT
+        ]
+        if correct:
+            lines.append(f"- 后续正确记录：{len(correct)} 条。")
+
+    lines.extend(
+        [
+            "",
+            "这些记录能说明你的表述发生过哪些变化；但记录没有写你为什么改变看法，"
+            "也没有记录是否借助过外部提示或资料，这两点无法确认。",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _no_history_fallback(state: AgentState) -> str:
+    names = [item.concept_name for item in state.understandings if item.has_content]
+    names = names or state.concept_names
+    subject = "、".join(names) if names else "这个问题"
+    lines = [
+        f"当前可见的记录里，没有关于{subject}的过往错误表述、显式批注、测试回答或历史版本。",
+        "因此我无法确认你过去是否出现过这个误解，也不能断言你过去没有出现过。",
+    ]
+    for understanding in state.understandings:
+        if not understanding.has_content:
+            continue
+        status = _STATUS_LABEL.get(understanding.status, understanding.status.value)
+        lines.append(f"- {understanding.concept_name} 的当前状态：{status}")
+        if understanding.known_parts:
+            lines.append("  - 已经理解：" + "；".join(understanding.known_parts))
+        if understanding.misconceptions:
+            lines.append(
+                "  - 当前仍存在的误区："
+                + "；".join(item.text for item in understanding.misconceptions)
+            )
+    lines.extend(
+        [
+            "",
+            "记录里也没有你之前如何学习这个概念的经过；这部分无法补写。",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _render_evidence(evidence) -> str:
+    correctness = _CORRECTNESS_LABEL.get(
+        evidence.correctness, evidence.correctness.value
+    )
+    evidence_type = _EVIDENCE_TYPE_LABEL.get(
+        evidence.evidence_type, evidence.evidence_type.value
+    )
+    sources = "、".join(
+        _SOURCE_TYPE_LABEL.get(source.source_type, source.source_type)
+        for source in evidence.sources
+    )
+    parts = [
+        _format_time(evidence.created_at),
+        f"[{correctness}/{evidence_type}]",
+        f"来源：{sources}" if sources else "",
+        f"原记录：「{evidence.observation}」",
+    ]
+    return " ｜ ".join(part for part in parts if part)
+
+
+# ---------- 工具 ----------
+
+
+def _recorded_corpus(state: AgentState) -> list[str]:
+    texts: list[str] = []
+    for understanding in state.understandings:
+        if understanding.summary:
+            texts.append(understanding.summary)
+        texts.extend(understanding.known_parts)
+        texts.extend(item.text for item in understanding.misconceptions)
+        if understanding.latest_user_explanation:
+            texts.append(understanding.latest_user_explanation)
+    for trajectory in state.trajectories:
+        texts.extend(trajectory.current_misconceptions)
+        for revision in trajectory.revisions:
+            if revision.summary:
+                texts.append(revision.summary)
+            texts.extend(revision.known_parts)
+            texts.extend(item.text for item in revision.misconceptions)
+            if revision.user_explanation:
+                texts.append(revision.user_explanation)
+        texts.extend(evidence.observation for evidence in trajectory.evidences)
+    return [_normalise(text) for text in texts if text]
+
+
+def _recorded_phrase(span: str, corpus: list[str]) -> bool:
+    normalised = _normalise(span)
+    if not normalised:
+        return False
+    return any(normalised in item for item in corpus)
+
+
+def _normalise(text: str) -> str:
+    return re.sub(r"[\s*_`「」『』\"'“”‘’]+", "", text or "")
+
+
+def _sentences(text: str) -> list[str]:
+    parts = re.split(r"[。！？!?\n]+", text)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _excerpt(text: str, limit: int = 80) -> str:
+    compact = re.sub(r"\s+", " ", text or "").strip()
+    return compact if len(compact) <= limit else compact[:limit] + "…"
+
+
+def _dedupe(issues: list[HistoryIssue]) -> list[HistoryIssue]:
+    seen: set[tuple[str, str]] = set()
+    unique: list[HistoryIssue] = []
+    for issue in issues:
+        key = (issue.kind, issue.excerpt)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(issue)
+    return unique
+
+
+def _format_time(value: datetime | None) -> str:
+    return value.strftime("%Y-%m-%d %H:%M") if value else "时间未记录"

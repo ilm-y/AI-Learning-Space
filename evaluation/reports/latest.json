@@ -1,25 +1,25 @@
 {
-  "generatedAt": "2026-10-21T21:17:23+08:00",
-  "commit": "34b59b5",
-  "mode": "all",
+  "generatedAt": "2026-10-27T02:12:54+08:00",
+  "commit": "74d99a1",
+  "mode": "offline",
   "environment": {
-    "backend": "http://127.0.0.1:8080",
-    "agent": "http://127.0.0.1:8000"
+    "backend": null,
+    "agent": null
   },
   "summary": {
-    "total": 49,
-    "passed": 49,
+    "total": 40,
+    "passed": 40,
     "failed": 0,
     "skipped": 0,
     "passRate": 1.0,
-    "assertionCount": 194,
-    "assertionPassed": 194,
+    "assertionCount": 124,
+    "assertionPassed": 124,
     "assertionPassRate": 1.0,
     "byCategory": {
       "cross_session": {
         "label": "跨会话上下文",
-        "total": 6,
-        "passed": 6,
+        "total": 4,
+        "passed": 4,
         "failed": 0,
         "skipped": 0,
         "passRate": 1.0,
@@ -36,8 +36,8 @@
       },
       "memory_scope": {
         "label": "记忆作用域",
-        "total": 8,
-        "passed": 8,
+        "total": 6,
+        "passed": 6,
         "failed": 0,
         "skipped": 0,
         "passRate": 1.0,
@@ -45,8 +45,8 @@
       },
       "understanding_revision": {
         "label": "理解演进",
-        "total": 8,
-        "passed": 8,
+        "total": 6,
+        "passed": 6,
         "failed": 0,
         "skipped": 0,
         "passRate": 1.0,
@@ -54,8 +54,8 @@
       },
       "memory_conflict": {
         "label": "记忆冲突收敛",
-        "total": 7,
-        "passed": 7,
+        "total": 5,
+        "passed": 5,
         "failed": 0,
         "skipped": 0,
         "passRate": 1.0,
@@ -63,8 +63,8 @@
       },
       "verification": {
         "label": "验证策略",
-        "total": 7,
-        "passed": 7,
+        "total": 6,
+        "passed": 6,
         "failed": 0,
         "skipped": 0,
         "passRate": 1.0,
@@ -87,13 +87,6 @@
         "failed": 0,
         "skipped": 0,
         "passRate": 1.0
-      },
-      "live": {
-        "total": 9,
-        "passed": 9,
-        "failed": 0,
-        "skipped": 0,
-        "passRate": 1.0
       }
     }
   },
@@ -104,7 +97,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型把 JSON 包在 ```json 围栏里时，仍能取出对象并解析",
-      "durationMs": 6,
+      "durationMs": 18,
       "checks": [
         {
           "path": "evidence.count",
@@ -231,7 +224,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型输出里没有 JSON 对象时，抛 AnalysisError，而不是静默返回空结果",
-      "durationMs": 2,
+      "durationMs": 9,
       "checks": [
         {
           "path": "error",
@@ -251,7 +244,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "未知的 evidenceType 属于契约违约：整份结果作废，不能把半份写进库",
-      "durationMs": 3,
+      "durationMs": 9,
       "checks": [
         {
           "path": "error",
@@ -271,7 +264,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型把结果多包一层（{\"result\": {...}}）时必须报错：AnalyzeResult 全字段有默认值，放行就变成「成功但零候选」",
-      "durationMs": 2,
+      "durationMs": 8,
       "checks": [
         {
           "path": "error",
@@ -291,7 +284,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "空白消息直接返回空结果，不检索、不调用模型",
-      "durationMs": 1,
+      "durationMs": 8,
       "checks": [
         {
           "path": "evidence.count",
@@ -396,7 +389,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "闲聊不命中任何 Concept 时返回空结果（没有可挂证据的对象）",
-      "durationMs": 2,
+      "durationMs": 7,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -485,7 +478,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "未知字段被忽略；越界质量分被裁剪到 [0,1]；analyzerVersion 由分析器决定而不是模型决定",
-      "durationMs": 2,
+      "durationMs": 12,
       "checks": [
         {
           "path": "evidence.count",
@@ -613,7 +606,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "本轮消息不含概念名时，从最近的用户历史里找回 TLB（跨轮上下文）",
-      "durationMs": 2,
+      "durationMs": 12,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -752,7 +745,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "用户与 AI 的历史都提到概念时，优先采信用户自己说的（避免被 AI 的措辞带偏）",
-      "durationMs": 2,
+      "durationMs": 11,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -859,7 +852,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "回看窗口只有最近 4 条：更早提到的概念不再影响本轮识别",
-      "durationMs": 1,
+      "durationMs": 10,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -940,7 +933,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "用户历史没有线索时才回看 AI 历史：虚拟内存仍能被识别",
-      "durationMs": 1,
+      "durationMs": 8,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -1055,7 +1048,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "同一结果里的重复候选（概念+类型+观察都相同）只保留一条",
-      "durationMs": 1,
+      "durationMs": 8,
       "checks": [
         {
           "path": "evidence.count",
@@ -1151,7 +1144,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "文本相同但证据类型不同，是两条不同的观察，不能合并",
-      "durationMs": 1,
+      "durationMs": 8,
       "checks": [
         {
           "path": "evidence.count",
@@ -1257,7 +1250,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "单个概念最多保留 2 条证据，防止一次分析把状态刷屏",
-      "durationMs": 1,
+      "durationMs": 7,
       "checks": [
         {
           "path": "evidence.count",
@@ -1363,7 +1356,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "整份结果最多 6 条证据：三个概念各 3 条，最后只留下 6 条",
-      "durationMs": 2,
+      "durationMs": 15,
       "checks": [
         {
           "path": "evidence.count",
@@ -1532,7 +1525,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型编造的 conceptId 一律丢弃；同一结果里合法的候选仍然保留",
-      "durationMs": 1,
+      "durationMs": 8,
       "checks": [
         {
           "path": "evidence.count",
@@ -1640,7 +1633,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "空白观察不构成证据，不能占用去重名额",
-      "durationMs": 1,
+      "durationMs": 11,
       "checks": [
         {
           "path": "evidence.count",
@@ -1736,7 +1729,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "ADD 语义原样保留，由后端判断同身份记忆是否已存在",
-      "durationMs": 1,
+      "durationMs": 7,
       "checks": [
         {
           "path": "memory.count",
@@ -1844,7 +1837,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "UPDATE 语义原样保留；后端只会更新仍是 CANDIDATE 的那条",
-      "durationMs": 1,
+      "durationMs": 12,
       "checks": [
         {
           "path": "memory.count",
@@ -1940,7 +1933,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "IGNORE 也保留在结果里 —— 让后端日志能看出「模型想过但不写」，而不是凭空消失",
-      "durationMs": 1,
+      "durationMs": 8,
       "checks": [
         {
           "path": "memory.count",
@@ -2036,7 +2029,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "空白内容不是一条可写的记忆，不能进入后端 Reconcile",
-      "durationMs": 1,
+      "durationMs": 7,
       "checks": [
         {
           "path": "memory.count",
@@ -2132,7 +2125,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "importance 越界被裁剪到 [0,1]，避免影响后端排序与阈值判断",
-      "durationMs": 2,
+      "durationMs": 10,
       "checks": [
         {
           "path": "memory.count",
@@ -2238,7 +2231,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "GLOBAL 记忆必须清空 spaceId / conceptId，否则 scope_key 会出现两种真相",
-      "durationMs": 2,
+      "durationMs": 8,
       "checks": [
         {
           "path": "memory.count",
@@ -2370,7 +2363,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "SPACE 记忆的空间取自当前请求，模型给别的空间 id 会被纠正",
-      "durationMs": 1,
+      "durationMs": 9,
       "checks": [
         {
           "path": "memory.count",
@@ -2490,7 +2483,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "CONCEPT 记忆保留本轮命中的 conceptId，且不带 spaceId（由后端按概念反查）",
-      "durationMs": 1,
+      "durationMs": 10,
       "checks": [
         {
           "path": "memory.count",
@@ -2610,7 +2603,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型给了一个没命中的 conceptId 时，CONCEPT 记忆回落到本轮主概念，而不是被丢弃或写错",
-      "durationMs": 1,
+      "durationMs": 9,
       "checks": [
         {
           "path": "memory.count",
@@ -2706,7 +2699,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "未声明 scope 时默认 CONCEPT；未给 conceptId 时回落到主概念",
-      "durationMs": 1,
+      "durationMs": 17,
       "checks": [
         {
           "path": "memory.count",
@@ -2838,7 +2831,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "同一结果里内容相同的两条记忆只提一次（跨轮去重由后端唯一约束负责）",
-      "durationMs": 1,
+      "durationMs": 17,
       "checks": [
         {
           "path": "memory.count",
@@ -2934,7 +2927,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "理解提案是增量：known / uncertain / explanation 原样进入候选，交给后端合并",
-      "durationMs": 1,
+      "durationMs": 10,
       "checks": [
         {
           "path": "proposal.present",
@@ -3046,7 +3039,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "空提案（全是空列表 / 空白文本）不产生 Revision，也不能制造一次假的理解变化",
-      "durationMs": 2,
+      "durationMs": 8,
       "checks": [
         {
           "path": "proposal.present",
@@ -3114,7 +3107,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "误区作为提案的一部分进入候选；是否新增 / 解除由后端生命周期决定",
-      "durationMs": 2,
+      "durationMs": 7,
       "checks": [
         {
           "path": "proposal.present",
@@ -3196,7 +3189,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "提案指向未命中的 conceptId 时回落到主概念，避免把理解写到别处",
-      "durationMs": 1,
+      "durationMs": 10,
       "checks": [
         {
           "path": "proposal.present",
@@ -3286,7 +3279,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "过长的用户自述被截断到 500 字（保留省略号），防止 prompt 与数据库字段被撑爆",
-      "durationMs": 1,
+      "durationMs": 8,
       "checks": [
         {
           "path": "proposal.present",
@@ -3370,7 +3363,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "离线规则路径：用户自述会产生只带 latestUserExplanation 的提案（不猜 knownParts）",
-      "durationMs": 1,
+      "durationMs": 9,
       "checks": [
         {
           "path": "proposal.present",
@@ -3486,7 +3479,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "首次接触一个概念且用户在提问时，只记 ASK_LATER，不打断教学",
-      "durationMs": 1,
+      "durationMs": 7,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -3613,7 +3606,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "已有理解快照的概念不重复触发验证（TLB 在 fixture 里是 MISCONCEPTION）",
-      "durationMs": 1,
+      "durationMs": 7,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -3708,7 +3701,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "用户在解释而不是提问时，不插入验证（这一轮的任务是把话说完）",
-      "durationMs": 1,
+      "durationMs": 7,
       "checks": [
         {
           "path": "verification.action",
@@ -3800,7 +3793,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型给出 ASK_NOW 时，题型 / 题干 / 正确答案 / trigger 原样保留",
-      "durationMs": 1,
+      "durationMs": 6,
       "checks": [
         {
           "path": "verification.action",
@@ -3907,7 +3900,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "验证决策引用未命中的概念时降级为 SKIP：宁可不出题，也不能给别的知识点出题",
-      "durationMs": 1,
+      "durationMs": 3,
       "checks": [
         {
           "path": "verification.action",
@@ -3982,7 +3975,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "ASK_NOW 没给题干时补一个可作答的默认题，而不是静默降级成 SKIP",
-      "durationMs": 1,
+      "durationMs": 4,
       "checks": [
         {
           "path": "verification.action",
@@ -4057,1524 +4050,6 @@
             "explanationTruncated": false
           }
         }
-      }
-    },
-    {
-      "id": "live-cross-session-attaches",
-      "category": "cross_session",
-      "mode": "live",
-      "status": "passed",
-      "description": "对话 A 里写下的自述，会进入对话 B 的 Agent 上下文（跨会话理解检索）",
-      "durationMs": 2170,
-      "checks": [
-        {
-          "path": "step1/sendMessage: data.started",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step1/sendMessage: data.ended",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step1/sendMessage: data.sessionId",
-          "op": "truthy",
-          "expected": null,
-          "actual": 34,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/highlight: httpStatus",
-          "op": "eq",
-          "expected": 200,
-          "actual": 200,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/highlight: data.markType",
-          "op": "eq",
-          "expected": "MY_UNDERSTANDING",
-          "actual": "MY_UNDERSTANDING",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/waitForUnderstanding: data.status",
-          "op": "eq",
-          "expected": "PARTIAL",
-          "actual": "PARTIAL",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/waitForUnderstanding: data.latestUserExplanation",
-          "op": "contains",
-          "expected": "我理解 TLB",
-          "actual": "我理解 TLB 就是 Page Table 的缓存",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/getRevisions: data.count",
-          "op": "gte",
-          "expected": 1,
-          "actual": 1,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/getRevisions: data.statuses",
-          "op": "contains",
-          "expected": "PARTIAL",
-          "actual": [
-            "PARTIAL"
-          ],
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step5/contextPreview: data.hasUnderstanding",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step5/contextPreview: data.systemInstruction",
-          "op": "contains",
-          "expected": "我理解 TLB",
-          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
-          "passed": true,
-          "message": ""
-        }
-      ],
-      "error": null,
-      "detail": {
-        "steps": [
-          {
-            "index": 1,
-            "action": "sendMessage",
-            "data": {
-              "data": {
-                "events": [
-                  "message.start",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.end"
-                ],
-                "delta": "（Mock LLM 输出）我收到的问题是：\n> 我理解 TLB 就是 Page Table 的缓存\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「TLB、Page Table」的学习\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
-                "ended": true,
-                "started": true,
-                "error": null,
-                "assistantMessageId": 100,
-                "conversationId": 53,
-                "userMessageId": 99,
-                "sessionId": 34
-              }
-            }
-          },
-          {
-            "index": 2,
-            "action": "highlight",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "id": 19,
-                "messageId": 99,
-                "markType": "MY_UNDERSTANDING",
-                "selectedText": "我理解 TLB 就是 Page Table 的缓存",
-                "startOffset": 0,
-                "endOffset": 0,
-                "note": "自己琢磨出来的",
-                "createdAt": "2026-10-21T21:17:25.6370033"
-              }
-            }
-          },
-          {
-            "index": 3,
-            "action": "waitForUnderstanding",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "id": 45,
-                "conceptId": 60,
-                "conceptName": "TLB",
-                "summary": "已理解：我理解 TLB 就是 Page Table 的缓存",
-                "knownParts": [
-                  "我理解 TLB 就是 Page Table 的缓存"
-                ],
-                "misconceptions": [],
-                "uncertainParts": [],
-                "latestUserExplanation": "我理解 TLB 就是 Page Table 的缓存",
-                "status": "PARTIAL",
-                "currentRevisionId": 64,
-                "updatedAt": "2026-10-21T21:17:26"
-              },
-              "timedOut": false
-            }
-          },
-          {
-            "index": 4,
-            "action": "getRevisions",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "count": 1,
-                "statuses": [
-                  "PARTIAL"
-                ],
-                "hasExposed": false,
-                "hasPartial": true,
-                "hasDemonstrated": false,
-                "hasMisconception": false,
-                "revisionNos": [
-                  1
-                ],
-                "items": [
-                  {
-                    "id": 64,
-                    "revisionNo": 1,
-                    "summary": "已理解：我理解 TLB 就是 Page Table 的缓存",
-                    "knownParts": [
-                      "我理解 TLB 就是 Page Table 的缓存"
-                    ],
-                    "misconceptions": [],
-                    "uncertainParts": [],
-                    "userExplanation": "我理解 TLB 就是 Page Table 的缓存",
-                    "status": "PARTIAL",
-                    "triggerEvidenceId": 94,
-                    "createdAt": "2026-10-21T21:17:26"
-                  }
-                ]
-              }
-            }
-          },
-          {
-            "index": 5,
-            "action": "contextPreview",
-            "data": {
-              "truncated": "{\"httpStatus\": 200, \"data\": {\"sections\": [\"user_input\", \"understanding:60\"], \"hasUnderstanding\": true, \"hasSession\": false, \"understandingPreview\": \"### TLB ｜ 状态：部分理解\\n- 当前理解：已理解：我理解 TLB 就是 Page Table 的缓存\\n- 已经理解：我理解 TLB 就是 Page Table 的缓存\\n- 用户自己的说法：「我理解 TLB 就是 Page Table 的缓存」\", \"systemInstruction\": \"你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\\n\\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\\n\\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\\n- 他仍然存在的误区：要针对性地纠正 —— 指出他的推理在哪一步分叉、为什么会这样想、正确的理解在那一步是什么。不要直接说「你错了」，也不要只是把正确答案摆出来。\\n- 他还不确定的部分：这是本次最该补的，优先处理。\\n- 他曾经自己给出的解释：可以引用他的话继续往下推，这比重新讲一遍有效得多。\\n\\n关于这份记录，有三条硬性规则：\\n\\n1. 不要复述它的结构，也不要说「根据我的记录」「系统显示你已经理解」之类的话。它只是你的参考，不是要念给用户听的内容。\\n2. 不要向用户输出任何内部分析信号 —— 包括正确性判断、置信度、推理质量、\\n   证据编号，以及 Evidence / Understanding / Revision 这类内部术语。这些是系统内部用的。\\n3. 用户本轮…"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "live-cross-session-session-attach",
-      "category": "cross_session",
-      "mode": "live",
-      "status": "passed",
-      "description": "同一个学习活动下的第二个对话应 ATTACH 到已有 Session，而不是新建一个",
-      "durationMs": 909,
-      "checks": [
-        {
-          "path": "step1/sendMessage: data.sessionId",
-          "op": "truthy",
-          "expected": null,
-          "actual": 35,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/sendMessage: data.sessionId",
-          "op": "eq",
-          "expected": 35,
-          "actual": 35,
-          "passed": true,
-          "message": ""
-        }
-      ],
-      "error": null,
-      "detail": {
-        "steps": [
-          {
-            "index": 1,
-            "action": "sendMessage",
-            "data": {
-              "data": {
-                "events": [
-                  "message.start",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.end"
-                ],
-                "delta": "（Mock LLM 输出）我收到的问题是：\n> 我理解 TLB 就是页表项的缓存\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「TLB」的学习\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
-                "ended": true,
-                "started": true,
-                "error": null,
-                "assistantMessageId": 102,
-                "conversationId": 55,
-                "userMessageId": 101,
-                "sessionId": 35
-              }
-            }
-          },
-          {
-            "index": 2,
-            "action": "sendMessage",
-            "data": {
-              "data": {
-                "events": [
-                  "message.start",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.end"
-                ],
-                "delta": "（Mock LLM 输出）我收到的问题是：\n> 那 TLB Miss 之后呢？\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「TLB」的学习\n- 用户自己的说法：「我理解 TLB 就是页表项的缓存」\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
-                "ended": true,
-                "started": true,
-                "error": null,
-                "assistantMessageId": 104,
-                "conversationId": 56,
-                "userMessageId": 103,
-                "sessionId": 35
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "live-memory-identity-conflict",
-      "category": "memory_conflict",
-      "mode": "live",
-      "status": "passed",
-      "description": "同作用域同身份（缺省 key = content 哈希）重复创建返回 409；显式给不同 key 才能并存",
-      "durationMs": 479,
-      "checks": [
-        {
-          "path": "step1/createMemory: code",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step1/createMemory: data.scopeType",
-          "op": "eq",
-          "expected": "GLOBAL",
-          "actual": "GLOBAL",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/createMemory: code",
-          "op": "eq",
-          "expected": 409,
-          "actual": 409,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/createMemory: data",
-          "op": "eq",
-          "expected": null,
-          "actual": null,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/createMemory: code",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/createMemory: data.memoryKey",
-          "op": "eq",
-          "expected": "eval-explicit-1",
-          "actual": "eval-explicit-1",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/createMemory: code",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/createMemory: data.memoryKey",
-          "op": "eq",
-          "expected": "eval-explicit-2",
-          "actual": "eval-explicit-2",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step5/searchMemories: data.count",
-          "op": "gte",
-          "expected": 3,
-          "actual": 3,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step5/searchMemories: data.keys",
-          "op": "contains",
-          "expected": "eval-explicit-1",
-          "actual": [
-            "auto:7ba7236cdf28c80d966c4965cb590578",
-            "eval-explicit-1",
-            "eval-explicit-2"
-          ],
-          "passed": true,
-          "message": ""
-        }
-      ],
-      "error": null,
-      "detail": {
-        "steps": [
-          {
-            "index": 1,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 200,
-              "code": 0,
-              "data": {
-                "id": 80,
-                "scopeType": "GLOBAL",
-                "learningSpaceId": null,
-                "conceptId": null,
-                "memoryType": "PREFERENCE",
-                "memoryKey": "auto:7ba7236cdf28c80d966c4965cb590578",
-                "content": "用户喜欢从硬件实际执行路径理解操作系统",
-                "status": "ACTIVE",
-                "importance": null,
-                "createdAt": "2026-10-21T21:17:27.2213308",
-                "updatedAt": "2026-10-21T21:17:27.2213308"
-              },
-              "message": "已记住"
-            }
-          },
-          {
-            "index": 2,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 409,
-              "code": 409,
-              "data": null,
-              "message": "同一作用域下已存在标识为「auto:7ba7236cdf28c80d966c4965cb590578」的记忆（GLOBAL）"
-            }
-          },
-          {
-            "index": 3,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 200,
-              "code": 0,
-              "data": {
-                "id": 81,
-                "scopeType": "GLOBAL",
-                "learningSpaceId": null,
-                "conceptId": null,
-                "memoryType": "PREFERENCE",
-                "memoryKey": "eval-explicit-1",
-                "content": "用户喜欢从硬件实际执行路径理解操作系统",
-                "status": "ACTIVE",
-                "importance": null,
-                "createdAt": "2026-10-21T21:17:27.2765517",
-                "updatedAt": "2026-10-21T21:17:27.2765517"
-              },
-              "message": "已记住"
-            }
-          },
-          {
-            "index": 4,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 200,
-              "code": 0,
-              "data": {
-                "id": 82,
-                "scopeType": "GLOBAL",
-                "learningSpaceId": null,
-                "conceptId": null,
-                "memoryType": "PREFERENCE",
-                "memoryKey": "eval-explicit-2",
-                "content": "用户喜欢从硬件实际执行路径理解操作系统",
-                "status": "ACTIVE",
-                "importance": null,
-                "createdAt": "2026-10-21T21:17:27.3195842",
-                "updatedAt": "2026-10-21T21:17:27.3195842"
-              },
-              "message": "已记住"
-            }
-          },
-          {
-            "index": 5,
-            "action": "searchMemories",
-            "data": {
-              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 3, \"scopes\": [\"GLOBAL\", \"GLOBAL\", \"GLOBAL\"], \"hasGlobal\": true, \"hasSpace\": false, \"hasConcept\": false, \"keys\": [\"auto:7ba7236cdf28c80d966c4965cb590578\", \"eval-explicit-1\", \"eval-explicit-2\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户喜欢从硬件实际执行路径理解操作系统\", \"用户喜欢从硬件实际执行路径理解操作系统\", \"用户喜欢从硬件实际执行路径理解操作系统\"], \"items\": [{\"id\": 80, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:7ba7236cdf28c80d966c4965cb590578\", \"content\": \"用户喜欢从硬件实际执行路径理解操作系统\", \"status\": \"ACTIVE\", \"importance\": null, \"createdAt\": \"2026-10-21T21:17:27\", \"updatedAt\": \"2026-10-21T21:17:27\"}, {\"id\": 81, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"eval-…"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "live-memory-global-visible-everywhere",
-      "category": "memory_conflict",
-      "mode": "live",
-      "status": "passed",
-      "description": "GLOBAL 记忆对任意空间可见，且不会被空间的同名 scope_key 覆盖",
-      "durationMs": 438,
-      "checks": [
-        {
-          "path": "step1/createMemory: code",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step1/createMemory: data.scopeType",
-          "op": "eq",
-          "expected": "GLOBAL",
-          "actual": "GLOBAL",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/createMemory: code",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/createMemory: data.scopeType",
-          "op": "eq",
-          "expected": "SPACE",
-          "actual": "SPACE",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/searchMemories: data.count",
-          "op": "eq",
-          "expected": 2,
-          "actual": 2,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/searchMemories: data.hasGlobal",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/searchMemories: data.hasSpace",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/searchMemories: data.count",
-          "op": "eq",
-          "expected": 1,
-          "actual": 1,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/searchMemories: data.hasGlobal",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/searchMemories: data.hasSpace",
-          "op": "eq",
-          "expected": false,
-          "actual": false,
-          "passed": true,
-          "message": ""
-        }
-      ],
-      "error": null,
-      "detail": {
-        "steps": [
-          {
-            "index": 1,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 200,
-              "code": 0,
-              "data": {
-                "id": 83,
-                "scopeType": "GLOBAL",
-                "learningSpaceId": null,
-                "conceptId": null,
-                "memoryType": "USER",
-                "memoryKey": "auto:a3c98459047a59a16351f6a65aff0c01",
-                "content": "用户是计算机专业学生",
-                "status": "ACTIVE",
-                "importance": null,
-                "createdAt": "2026-10-21T21:17:27.6854105",
-                "updatedAt": "2026-10-21T21:17:27.6854105"
-              },
-              "message": "已记住"
-            }
-          },
-          {
-            "index": 2,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 200,
-              "code": 0,
-              "data": {
-                "id": 84,
-                "scopeType": "SPACE",
-                "learningSpaceId": 57,
-                "conceptId": null,
-                "memoryType": "PREFERENCE",
-                "memoryKey": "auto:224fe9f079725c87efd1738a10447c7b",
-                "content": "当前空间的偏好",
-                "status": "ACTIVE",
-                "importance": null,
-                "createdAt": "2026-10-21T21:17:27.7254333",
-                "updatedAt": "2026-10-21T21:17:27.7254333"
-              },
-              "message": "已记住"
-            }
-          },
-          {
-            "index": 3,
-            "action": "searchMemories",
-            "data": {
-              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 2, \"scopes\": [\"GLOBAL\", \"SPACE\"], \"hasGlobal\": true, \"hasSpace\": true, \"hasConcept\": false, \"keys\": [\"auto:a3c98459047a59a16351f6a65aff0c01\", \"auto:224fe9f079725c87efd1738a10447c7b\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户是计算机专业学生\", \"当前空间的偏好\"], \"items\": [{\"id\": 83, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"USER\", \"memoryKey\": \"auto:a3c98459047a59a16351f6a65aff0c01\", \"content\": \"用户是计算机专业学生\", \"status\": \"ACTIVE\", \"importance\": null, \"createdAt\": \"2026-10-21T21:17:28\", \"updatedAt\": \"2026-10-21T21:17:28\"}, {\"id\": 84, \"scopeType\": \"SPACE\", \"learningSpaceId\": 57, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:224fe9f079725c87efd1738a10447c7b\", \"content\": \"当前空间的偏好\", \"status\": \"ACTIVE\", \"imp…"
-            }
-          },
-          {
-            "index": 4,
-            "action": "searchMemories",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "count": 1,
-                "scopes": [
-                  "GLOBAL"
-                ],
-                "hasGlobal": true,
-                "hasSpace": false,
-                "hasConcept": false,
-                "keys": [
-                  "auto:a3c98459047a59a16351f6a65aff0c01"
-                ],
-                "statuses": [
-                  "ACTIVE"
-                ],
-                "contents": [
-                  "用户是计算机专业学生"
-                ],
-                "items": [
-                  {
-                    "id": 83,
-                    "scopeType": "GLOBAL",
-                    "learningSpaceId": null,
-                    "conceptId": null,
-                    "memoryType": "USER",
-                    "memoryKey": "auto:a3c98459047a59a16351f6a65aff0c01",
-                    "content": "用户是计算机专业学生",
-                    "status": "ACTIVE",
-                    "importance": null,
-                    "createdAt": "2026-10-21T21:17:28",
-                    "updatedAt": "2026-10-21T21:17:28"
-                  }
-                ]
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "live-memory-scopes-visible",
-      "category": "memory_scope",
-      "mode": "live",
-      "status": "passed",
-      "description": "同一空间 + 概念下检索时，GLOBAL / SPACE / CONCEPT 三种作用域都应可见",
-      "durationMs": 454,
-      "checks": [
-        {
-          "path": "step1/createMemory: code",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step1/createMemory: data.scopeType",
-          "op": "eq",
-          "expected": "GLOBAL",
-          "actual": "GLOBAL",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step1/createMemory: data.learningSpaceId",
-          "op": "eq",
-          "expected": null,
-          "actual": null,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step1/createMemory: data.conceptId",
-          "op": "eq",
-          "expected": null,
-          "actual": null,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/createMemory: code",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/createMemory: data.scopeType",
-          "op": "eq",
-          "expected": "SPACE",
-          "actual": "SPACE",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/createMemory: data.learningSpaceId",
-          "op": "eq",
-          "expected": 58,
-          "actual": 58,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/createMemory: code",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/createMemory: data.scopeType",
-          "op": "eq",
-          "expected": "CONCEPT",
-          "actual": "CONCEPT",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/createMemory: data.conceptId",
-          "op": "eq",
-          "expected": 63,
-          "actual": 63,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/searchMemories: data.count",
-          "op": "gte",
-          "expected": 3,
-          "actual": 3,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/searchMemories: data.hasGlobal",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/searchMemories: data.hasSpace",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/searchMemories: data.hasConcept",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        }
-      ],
-      "error": null,
-      "detail": {
-        "steps": [
-          {
-            "index": 1,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 200,
-              "code": 0,
-              "data": {
-                "id": 85,
-                "scopeType": "GLOBAL",
-                "learningSpaceId": null,
-                "conceptId": null,
-                "memoryType": "PREFERENCE",
-                "memoryKey": "auto:7ba7236cdf28c80d966c4965cb590578",
-                "content": "用户喜欢从硬件实际执行路径理解操作系统",
-                "status": "ACTIVE",
-                "importance": 0.9,
-                "createdAt": "2026-10-21T21:17:28.1139137",
-                "updatedAt": "2026-10-21T21:17:28.1139137"
-              },
-              "message": "已记住"
-            }
-          },
-          {
-            "index": 2,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 200,
-              "code": 0,
-              "data": {
-                "id": 86,
-                "scopeType": "SPACE",
-                "learningSpaceId": 58,
-                "conceptId": null,
-                "memoryType": "LEARNING",
-                "memoryKey": "auto:4d8f1748fb227ff547c51fa563bd33f0",
-                "content": "这个空间里已经学过虚拟内存基础",
-                "status": "ACTIVE",
-                "importance": null,
-                "createdAt": "2026-10-21T21:17:28.1352797",
-                "updatedAt": "2026-10-21T21:17:28.1352797"
-              },
-              "message": "已记住"
-            }
-          },
-          {
-            "index": 3,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 200,
-              "code": 0,
-              "data": {
-                "id": 87,
-                "scopeType": "CONCEPT",
-                "learningSpaceId": 58,
-                "conceptId": 63,
-                "memoryType": "LEARNING",
-                "memoryKey": "auto:c19a0bb43d5ff605f9769e0d31d4cdde",
-                "content": "TLB 这条线用户已经能自己讲清楚",
-                "status": "ACTIVE",
-                "importance": null,
-                "createdAt": "2026-10-21T21:17:28.1780535",
-                "updatedAt": "2026-10-21T21:17:28.1780535"
-              },
-              "message": "已记住"
-            }
-          },
-          {
-            "index": 4,
-            "action": "searchMemories",
-            "data": {
-              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 3, \"scopes\": [\"GLOBAL\", \"CONCEPT\", \"SPACE\"], \"hasGlobal\": true, \"hasSpace\": true, \"hasConcept\": true, \"keys\": [\"auto:7ba7236cdf28c80d966c4965cb590578\", \"auto:c19a0bb43d5ff605f9769e0d31d4cdde\", \"auto:4d8f1748fb227ff547c51fa563bd33f0\"], \"statuses\": [\"ACTIVE\", \"ACTIVE\", \"ACTIVE\"], \"contents\": [\"用户喜欢从硬件实际执行路径理解操作系统\", \"TLB 这条线用户已经能自己讲清楚\", \"这个空间里已经学过虚拟内存基础\"], \"items\": [{\"id\": 85, \"scopeType\": \"GLOBAL\", \"learningSpaceId\": null, \"conceptId\": null, \"memoryType\": \"PREFERENCE\", \"memoryKey\": \"auto:7ba7236cdf28c80d966c4965cb590578\", \"content\": \"用户喜欢从硬件实际执行路径理解操作系统\", \"status\": \"ACTIVE\", \"importance\": 0.9, \"createdAt\": \"2026-10-21T21:17:28\", \"updatedAt\": \"2026-10-21T21:17:28\"}, {\"id\": 87, \"scopeType\": \"CONCEPT\", \"learningSpaceId\": 58, \"conceptId\": 63, \"memoryType\": \"…"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "live-memory-scope-isolation",
-      "category": "memory_scope",
-      "mode": "live",
-      "status": "passed",
-      "description": "带别的 spaceId 检索时只能看到 GLOBAL：SPACE / CONCEPT 记忆不能跨空间泄漏",
-      "durationMs": 477,
-      "checks": [
-        {
-          "path": "step1/createMemory: code",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/createMemory: code",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/createMemory: code",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/searchMemories: data.count",
-          "op": "eq",
-          "expected": 1,
-          "actual": 1,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/searchMemories: data.scopes",
-          "op": "eq",
-          "expected": [
-            "GLOBAL"
-          ],
-          "actual": [
-            "GLOBAL"
-          ],
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/searchMemories: data.contents",
-          "op": "eq",
-          "expected": [
-            "全局可见的用户画像"
-          ],
-          "actual": [
-            "全局可见的用户画像"
-          ],
-          "passed": true,
-          "message": ""
-        }
-      ],
-      "error": null,
-      "detail": {
-        "steps": [
-          {
-            "index": 1,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 200,
-              "code": 0,
-              "data": {
-                "id": 88,
-                "scopeType": "GLOBAL",
-                "learningSpaceId": null,
-                "conceptId": null,
-                "memoryType": "USER",
-                "memoryKey": "auto:a2be18935afb796f32477d2cd946b8c2",
-                "content": "全局可见的用户画像",
-                "status": "ACTIVE",
-                "importance": null,
-                "createdAt": "2026-10-21T21:17:28.6122134",
-                "updatedAt": "2026-10-21T21:17:28.6122134"
-              },
-              "message": "已记住"
-            }
-          },
-          {
-            "index": 2,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 200,
-              "code": 0,
-              "data": {
-                "id": 89,
-                "scopeType": "SPACE",
-                "learningSpaceId": 59,
-                "conceptId": null,
-                "memoryType": "PREFERENCE",
-                "memoryKey": "auto:7fba75c724920107b9316e34b734b54b",
-                "content": "只属于当前空间的偏好",
-                "status": "ACTIVE",
-                "importance": null,
-                "createdAt": "2026-10-21T21:17:28.6440008",
-                "updatedAt": "2026-10-21T21:17:28.6440008"
-              },
-              "message": "已记住"
-            }
-          },
-          {
-            "index": 3,
-            "action": "createMemory",
-            "data": {
-              "httpStatus": 200,
-              "code": 0,
-              "data": {
-                "id": 90,
-                "scopeType": "CONCEPT",
-                "learningSpaceId": 59,
-                "conceptId": 64,
-                "memoryType": "LEARNING",
-                "memoryKey": "auto:077e43752dbb7390fd86b17cff0ba0af",
-                "content": "只属于当前知识点的一条记忆",
-                "status": "ACTIVE",
-                "importance": null,
-                "createdAt": "2026-10-21T21:17:28.6772508",
-                "updatedAt": "2026-10-21T21:17:28.6772508"
-              },
-              "message": "已记住"
-            }
-          },
-          {
-            "index": 4,
-            "action": "searchMemories",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "count": 1,
-                "scopes": [
-                  "GLOBAL"
-                ],
-                "hasGlobal": true,
-                "hasSpace": false,
-                "hasConcept": false,
-                "keys": [
-                  "auto:a2be18935afb796f32477d2cd946b8c2"
-                ],
-                "statuses": [
-                  "ACTIVE"
-                ],
-                "contents": [
-                  "全局可见的用户画像"
-                ],
-                "items": [
-                  {
-                    "id": 88,
-                    "scopeType": "GLOBAL",
-                    "learningSpaceId": null,
-                    "conceptId": null,
-                    "memoryType": "USER",
-                    "memoryKey": "auto:a2be18935afb796f32477d2cd946b8c2",
-                    "content": "全局可见的用户画像",
-                    "status": "ACTIVE",
-                    "importance": null,
-                    "createdAt": "2026-10-21T21:17:29",
-                    "updatedAt": "2026-10-21T21:17:29"
-                  }
-                ]
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "live-revision-question-exposes-concept",
-      "category": "understanding_revision",
-      "mode": "live",
-      "status": "passed",
-      "description": "Bad Case BC-001 回归：用户只是提问、Agent 没有形成判断时，状态也必须从 UNKNOWN 推进到 EXPOSED",
-      "durationMs": 829,
-      "checks": [
-        {
-          "path": "step1/sendMessage: data.ended",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/waitForUnderstanding: data.status",
-          "op": "eq",
-          "expected": "EXPOSED",
-          "actual": "EXPOSED",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/waitForUnderstanding: timedOut",
-          "op": "eq",
-          "expected": false,
-          "actual": false,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/getRevisions: data.count",
-          "op": "gte",
-          "expected": 1,
-          "actual": 1,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/getRevisions: data.statuses",
-          "op": "contains",
-          "expected": "EXPOSED",
-          "actual": [
-            "EXPOSED"
-          ],
-          "passed": true,
-          "message": ""
-        }
-      ],
-      "error": null,
-      "detail": {
-        "steps": [
-          {
-            "index": 1,
-            "action": "sendMessage",
-            "data": {
-              "data": {
-                "events": [
-                  "message.start",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.end"
-                ],
-                "delta": "（Mock LLM 输出）我收到的问题是：\n> 缺页异常是什么？\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「缺页异常」的学习\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
-                "ended": true,
-                "started": true,
-                "error": null,
-                "assistantMessageId": 106,
-                "conversationId": 57,
-                "userMessageId": 105,
-                "sessionId": 36
-              }
-            }
-          },
-          {
-            "index": 2,
-            "action": "waitForUnderstanding",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "id": 48,
-                "conceptId": 65,
-                "conceptName": "缺页异常",
-                "summary": null,
-                "knownParts": [],
-                "misconceptions": [],
-                "uncertainParts": [],
-                "latestUserExplanation": null,
-                "status": "EXPOSED",
-                "currentRevisionId": 67,
-                "updatedAt": "2026-10-21T21:17:29"
-              },
-              "timedOut": false
-            }
-          },
-          {
-            "index": 3,
-            "action": "getRevisions",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "count": 1,
-                "statuses": [
-                  "EXPOSED"
-                ],
-                "hasExposed": true,
-                "hasPartial": false,
-                "hasDemonstrated": false,
-                "hasMisconception": false,
-                "revisionNos": [
-                  1
-                ],
-                "items": [
-                  {
-                    "id": 67,
-                    "revisionNo": 1,
-                    "summary": null,
-                    "knownParts": [],
-                    "misconceptions": [],
-                    "uncertainParts": [],
-                    "userExplanation": null,
-                    "status": "EXPOSED",
-                    "triggerEvidenceId": 100,
-                    "createdAt": "2026-10-21T21:17:29"
-                  }
-                ]
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "live-revision-correction-appends",
-      "category": "understanding_revision",
-      "mode": "live",
-      "status": "passed",
-      "description": "用户先自述（CORRECT）再自我纠正（INCORRECT）时，Revision 只追加不覆盖，状态推进到 MISCONCEPTION",
-      "durationMs": 818,
-      "checks": [
-        {
-          "path": "step1/sendMessage: data.ended",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/highlight: httpStatus",
-          "op": "eq",
-          "expected": 200,
-          "actual": 200,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/waitForUnderstanding: data.status",
-          "op": "eq",
-          "expected": "PARTIAL",
-          "actual": "PARTIAL",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step4/highlight: httpStatus",
-          "op": "eq",
-          "expected": 200,
-          "actual": 200,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step5/waitForUnderstanding: data.status",
-          "op": "eq",
-          "expected": "MISCONCEPTION",
-          "actual": "MISCONCEPTION",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step6/getRevisions: data.count",
-          "op": "gte",
-          "expected": 2,
-          "actual": 2,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step6/getRevisions: data.hasPartial",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step6/getRevisions: data.hasMisconception",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        }
-      ],
-      "error": null,
-      "detail": {
-        "steps": [
-          {
-            "index": 1,
-            "action": "sendMessage",
-            "data": {
-              "data": {
-                "events": [
-                  "message.start",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.end"
-                ],
-                "delta": "（Mock LLM 输出）我收到的问题是：\n> 我理解 TLB 就是页表项的缓存\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「TLB」的学习\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
-                "ended": true,
-                "started": true,
-                "error": null,
-                "assistantMessageId": 108,
-                "conversationId": 58,
-                "userMessageId": 107,
-                "sessionId": 37
-              }
-            }
-          },
-          {
-            "index": 2,
-            "action": "highlight",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "id": 20,
-                "messageId": 107,
-                "markType": "MY_UNDERSTANDING",
-                "selectedText": "我理解 TLB 就是页表项的缓存",
-                "startOffset": 0,
-                "endOffset": 0,
-                "note": null,
-                "createdAt": "2026-10-21T21:17:30.1575161"
-              }
-            }
-          },
-          {
-            "index": 3,
-            "action": "waitForUnderstanding",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "id": 49,
-                "conceptId": 66,
-                "conceptName": "TLB",
-                "summary": "已理解：我理解 TLB 就是页表项的缓存",
-                "knownParts": [
-                  "我理解 TLB 就是页表项的缓存"
-                ],
-                "misconceptions": [],
-                "uncertainParts": [],
-                "latestUserExplanation": "我理解 TLB 就是页表项的缓存",
-                "status": "PARTIAL",
-                "currentRevisionId": 68,
-                "updatedAt": "2026-10-21T21:17:30"
-              },
-              "timedOut": false
-            }
-          },
-          {
-            "index": 4,
-            "action": "highlight",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "id": 21,
-                "messageId": 107,
-                "markType": "MISCONCEPTION_CANDIDATE",
-                "selectedText": "我把 TLB Miss 当成了缺页",
-                "startOffset": 0,
-                "endOffset": 0,
-                "note": "我总觉得 TLB Miss 就是缺页",
-                "createdAt": "2026-10-21T21:17:30.2551837"
-              }
-            }
-          },
-          {
-            "index": 5,
-            "action": "waitForUnderstanding",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "id": 49,
-                "conceptId": 66,
-                "conceptName": "TLB",
-                "summary": "已理解：我理解 TLB 就是页表项的缓存 存在误区：我总觉得 TLB Miss 就是缺页",
-                "knownParts": [
-                  "我理解 TLB 就是页表项的缓存"
-                ],
-                "misconceptions": [
-                  {
-                    "text": "我总觉得 TLB Miss 就是缺页",
-                    "status": "ACTIVE",
-                    "firstDetectedAt": "2026-10-21T21:17:30.2637089",
-                    "lastEvidenceAt": "2026-10-21T21:17:30.2637089",
-                    "reversalEvidenceIds": []
-                  }
-                ],
-                "uncertainParts": [],
-                "latestUserExplanation": "我理解 TLB 就是页表项的缓存",
-                "status": "MISCONCEPTION",
-                "currentRevisionId": 69,
-                "updatedAt": "2026-10-21T21:17:30"
-              },
-              "timedOut": false
-            }
-          },
-          {
-            "index": 6,
-            "action": "getRevisions",
-            "data": {
-              "truncated": "{\"httpStatus\": 200, \"data\": {\"count\": 2, \"statuses\": [\"PARTIAL\", \"MISCONCEPTION\"], \"hasExposed\": false, \"hasPartial\": true, \"hasDemonstrated\": false, \"hasMisconception\": true, \"revisionNos\": [1, 2], \"items\": [{\"id\": 68, \"revisionNo\": 1, \"summary\": \"已理解：我理解 TLB 就是页表项的缓存\", \"knownParts\": [\"我理解 TLB 就是页表项的缓存\"], \"misconceptions\": [], \"uncertainParts\": [], \"userExplanation\": \"我理解 TLB 就是页表项的缓存\", \"status\": \"PARTIAL\", \"triggerEvidenceId\": 101, \"createdAt\": \"2026-10-21T21:17:30\"}, {\"id\": 69, \"revisionNo\": 2, \"summary\": \"已理解：我理解 TLB 就是页表项的缓存 存在误区：我总觉得 TLB Miss 就是缺页\", \"knownParts\": [\"我理解 TLB 就是页表项的缓存\"], \"misconceptions\": [{\"text\": \"我总觉得 TLB Miss 就是缺页\", \"status\": \"ACTIVE\", \"firstDetectedAt\": \"2026-10-21T21:17:30.2637089\", \"lastEvidenceAt\": \"2026-10-21T21:17:30.2637089\", \"reversalEvidenceIds\": []}], \"unc…"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "live-verification-no-interrupt-on-first-question",
-      "category": "verification",
-      "mode": "live",
-      "status": "passed",
-      "description": "首次接触概念且用户在提问时，Agent 只记 ASK_LATER，不创建 TestTask（不打断教学）",
-      "durationMs": 830,
-      "checks": [
-        {
-          "path": "step1/sendMessage: data.ended",
-          "op": "eq",
-          "expected": true,
-          "actual": true,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/waitForUnderstanding: data.status",
-          "op": "eq",
-          "expected": "EXPOSED",
-          "actual": "EXPOSED",
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step2/waitForUnderstanding: timedOut",
-          "op": "eq",
-          "expected": false,
-          "actual": false,
-          "passed": true,
-          "message": ""
-        },
-        {
-          "path": "step3/pendingTests: data.count",
-          "op": "eq",
-          "expected": 0,
-          "actual": 0,
-          "passed": true,
-          "message": ""
-        }
-      ],
-      "error": null,
-      "detail": {
-        "steps": [
-          {
-            "index": 1,
-            "action": "sendMessage",
-            "data": {
-              "data": {
-                "events": [
-                  "message.start",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.delta",
-                  "message.end"
-                ],
-                "delta": "（Mock LLM 输出）我收到的问题是：\n> 缺页异常是什么？\n\n这次我实际拿到的学习背景是：\n- 这一阶段要解决：围绕「缺页异常」的学习\n\n如果我是一个真实模型，我会接着上面这些已有认知讲，而不是从零重新解释一遍。\n\n（这是 mock 适配器，用于离线跑通链路。把 AILS_LLM_PROVIDER 设成 openai 并配好 Key，这里会换成真实模型的回答。）",
-                "ended": true,
-                "started": true,
-                "error": null,
-                "assistantMessageId": 110,
-                "conversationId": 59,
-                "userMessageId": 109,
-                "sessionId": 38
-              }
-            }
-          },
-          {
-            "index": 2,
-            "action": "waitForUnderstanding",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "id": 50,
-                "conceptId": 68,
-                "conceptName": "缺页异常",
-                "summary": null,
-                "knownParts": [],
-                "misconceptions": [],
-                "uncertainParts": [],
-                "latestUserExplanation": null,
-                "status": "EXPOSED",
-                "currentRevisionId": 70,
-                "updatedAt": "2026-10-21T21:17:31"
-              },
-              "timedOut": false
-            }
-          },
-          {
-            "index": 3,
-            "action": "pendingTests",
-            "data": {
-              "httpStatus": 200,
-              "data": {
-                "count": 0,
-                "items": []
-              }
-            }
-          }
-        ]
       }
     }
   ]

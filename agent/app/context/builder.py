@@ -25,12 +25,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
+from app.citations import format_source_label
 from app.context.tokens import estimate_tokens, truncate_to_tokens
+from app.context.trajectory import (
+    historical_misconceptions,
+    misconception_first_seen,
+    misconception_last_status,
+)
 from app.llm.base import ChatMessage
 from app.prompts import BASE_SYSTEM_INSTRUCTION
 from app.schemas import (
     EvidenceCorrectness,
+    EvidenceItem,
+    EvidenceType,
+    KnowledgeChunk,
+    LearningTrajectory,
     MemoryItem,
     MemoryScopeType,
     MemoryType,
@@ -49,13 +60,57 @@ PRIORITY_HISTORY = 90
 # 丢了它只是少一层「我们正在做什么」的框架，丢了 Understanding 才是丢了「你之前是怎么理解的」。
 PRIORITY_SESSION = 85
 PRIORITY_UNDERSTANDING = 70
+# 历史轨迹低于当前理解：复盘要能看到过去，但当前状态永远先被保留。
+PRIORITY_TRAJECTORY = 68
 PRIORITY_MEMORY = 50
+# 知识检索状态比知识片段本身略高：即使片段全部被预算丢掉，模型也必须知道
+# 「这次是没有可用文档 / 阈值过滤 / 检索降级」，而不是把空知识区当成「资料里没有」。
+PRIORITY_KNOWLEDGE_STATUS = 45
 PRIORITY_KNOWLEDGE = 40
 PRIORITY_EVIDENCE = 20
 
 # 渲染进 System Instruction 时的区块顺序（与优先级无关：优先级决定谁被丢，
 # 顺序决定人读起来顺不顺）。session 放最前：它是后面一切内容的框架。
-RENDER_ORDER = ("session", "understanding", "memory", "knowledge", "evidence")
+RENDER_ORDER = (
+    "session",
+    "understanding",
+    "trajectory",
+    "memory",
+    "knowledge_status",
+    "knowledge",
+    "evidence",
+)
+
+# 只有检索结果不是 SUCCESS 时才需要向模型解释「为什么没有知识片段」。
+# 每一种状态的措辞都必须区分「没有可用文档」「没有检索到支持」「检索失败无法确认」，
+# 不能让模型把「这次没检索到」说成「资料或世界上不存在」。
+_KNOWLEDGE_STATUS_NOTES = {
+    "NO_VALID_DOCUMENTS": (
+        "本轮没有可用且已就绪的上传文档（空间为空或文档尚未索引完成）。"
+        "你无法判断文档里是否有答案；不要声称「资料中不存在该信息」，也不要编造资料引用。"
+        "如果回答，先说明没有可用资料，再明确区分通用知识。"
+    ),
+    "NO_MATCH": (
+        "本轮知识检索没有找到可用的文档片段（没有命中）。"
+        "这不等同于该信息在资料或世界上不存在。回答文档相关问题时，"
+        "先说明上传资料中没有检索到直接依据；不要编造引用。通用知识必须标明为通用知识。"
+        "即使这个问题可以用通用知识回答，也必须先在回答里明确说明"
+        "「本轮上传资料中没有检索到可确认的依据」，再区分通用知识。"
+    ),
+    "THRESHOLD_FILTERED": (
+        "本轮知识检索的候选片段全部低于相关度阈值，未作为可靠证据使用。"
+        "低分候选不能当作依据；请说明没有检索到可确认的资料依据，"
+        "不要编造引用，也不要把「未检索到」说成「资料中不存在」。"
+        "即使这个问题可以用通用知识回答，也必须先在回答里明确说明"
+        "「本轮上传资料中没有检索到可确认的依据」，再区分通用知识。"
+    ),
+    "DEGRADED": (
+        "本轮知识检索不可用（Embedding / 向量检索失败），"
+        "系统无法判断上传文档是否包含答案。"
+        "不要声称资料中没有答案，也不要编造引用；回答时说明本次无法检索文档，"
+        "通用知识必须明确区分。"
+    ),
+}
 
 # 一段被裁到小于这个 Token 数就没有意义了，不如整段丢掉
 MIN_USEFUL_SECTION_TOKENS = 40
@@ -70,7 +125,9 @@ _STATUS_LABEL = {
 
 _MEMORY_LABEL = {
     MemoryType.USER: "长期事实",
-    MemoryType.LEARNING: "学习状态",
+    # 学习类记忆是过去写下的状态判断，最容易与当前 Understanding 冲突，
+    # 所以在标签上就标明历史属性，而不是只靠区块说明。
+    MemoryType.LEARNING: "学习状态（历史记录）",
     MemoryType.PREFERENCE: "偏好",
 }
 
@@ -87,6 +144,20 @@ _CORRECTNESS_LABEL = {
     EvidenceCorrectness.INCORRECT: "答错",
     EvidenceCorrectness.PARTIAL: "部分正确",
     EvidenceCorrectness.UNKNOWN: "未判定",
+}
+
+_EVIDENCE_TYPE_LABEL = {
+    EvidenceType.USER_EXPLANATION: "用户解释",
+    EvidenceType.OBSERVATION: "观察",
+    EvidenceType.TEST_RESULT: "测试结果",
+    EvidenceType.USER_CORRECTION: "用户纠正批注",
+    EvidenceType.HIGHLIGHT_SIGNAL: "批注信号",
+}
+
+_SOURCE_TYPE_LABEL = {
+    "MESSAGE": "消息",
+    "HIGHLIGHT": "批注",
+    "TEST_ANSWER": "测试回答",
 }
 
 
@@ -220,21 +291,55 @@ class ContextBuilder:
                 )
 
         # 认知背景
+        learning_memory_concept_ids = {
+            memory.concept_id
+            for memory in state.memories
+            if memory.memory_type is MemoryType.LEARNING
+        }
         for understanding in state.understandings:
             if not understanding.has_content:
                 # 只有 UNKNOWN 空快照的概念不提供任何信息，塞进去只会浪费预算
                 continue
+            has_learning_memory = (
+                None in learning_memory_concept_ids
+                or understanding.concept_id in learning_memory_concept_ids
+            )
             sections.append(
                 ContextSection(
                     name=f"understanding:{understanding.concept_id}",
                     title=understanding.concept_name,
-                    content=_render_understanding(understanding),
+                    content=_render_understanding(
+                        understanding, has_learning_memory=has_learning_memory
+                    ),
                     priority=PRIORITY_UNDERSTANDING,
                     source_ids=[f"understanding:{understanding.id}"],
                     dedupe_key=f"understanding:{understanding.concept_id}",
                     allow_truncate=True,
                 )
             )
+
+        # 历史轨迹只在显式复盘时存在；普通问题 state.trajectories 为空，不占预算。
+        for trajectory in state.trajectories:
+            sections.append(
+                ContextSection(
+                    name=f"trajectory:{trajectory.concept_id}",
+                    title=f"{trajectory.concept_name} 学习轨迹",
+                    content=_render_trajectory(trajectory),
+                    priority=PRIORITY_TRAJECTORY,
+                    source_ids=[
+                        *(f"revision:{item.id}" for item in trajectory.revisions),
+                        *(f"evidence:{item.id}" for item in trajectory.evidences),
+                    ],
+                    dedupe_key=f"trajectory:{trajectory.concept_id}",
+                    allow_truncate=True,
+                )
+            )
+
+        trajectory_evidence_ids = {
+            evidence.id
+            for trajectory in state.trajectories
+            for evidence in trajectory.evidences
+        }
 
         for memory in state.memories:
             sections.append(
@@ -245,6 +350,21 @@ class ContextBuilder:
                     priority=PRIORITY_MEMORY,
                     source_ids=[f"memory:{memory.id}"],
                     dedupe_key=f"memory:{memory.id}",
+                )
+            )
+
+        status_note = _render_knowledge_status(
+            state.knowledge_status, state.knowledge_warning
+        )
+        if status_note:
+            sections.append(
+                ContextSection(
+                    name="knowledge_status",
+                    title="知识检索状态",
+                    content=status_note,
+                    priority=PRIORITY_KNOWLEDGE_STATUS,
+                    source_ids=[f"knowledge-status:{state.knowledge_status}"],
+                    dedupe_key="knowledge_status",
                 )
             )
 
@@ -261,6 +381,9 @@ class ContextBuilder:
             )
 
         for evidence in state.evidences:
+            # 复盘轨迹已经把关联证据按时间渲染过；再走通用 evidence 区块会重复注入。
+            if evidence.id in trajectory_evidence_ids:
+                continue
             sections.append(
                 ContextSection(
                     name=f"evidence:{evidence.id}",
@@ -347,7 +470,13 @@ class ContextBuilder:
             body = "\n".join(section.content for section in group)
             blocks.append(f"## {heading}\n{note}\n\n{body}")
 
-        if not any(_kind(section) in RENDER_ORDER and not section.dropped for section in sections):
+        # 这句话只描述「历史认知记录」。知识状态 / 知识片段 / 判定依据都不属于
+        # 学习者认知记录，不能让它们把「没有历史认知」这句话顶掉。
+        cognitive_kinds = {"session", "understanding", "trajectory", "memory"}
+        if not any(
+            _kind(section) in cognitive_kinds and not section.dropped
+            for section in sections
+        ):
             blocks.append("## 学习者背景\n（本次没有检索到任何历史认知记录，按新知识正常教学。）")
         return "\n\n".join(blocks)
 
@@ -374,6 +503,10 @@ class ContextBuilder:
         # 所以这里看的是可用的快照，而不是列表是否为空。
         if not any(understanding.has_content for understanding in state.understandings):
             warnings.append("没有检索到任何 Understanding：这次回答无法接着用户已有认知讲。")
+        # 知识检索的正常空结果 / 阈值过滤 / 依赖失败由检索层给出明确原因。
+        # 这里只负责把它带进 context preview 与 meta，不把失败伪装成「没有资料」。
+        if state.knowledge_warning:
+            warnings.append(state.knowledge_warning)
         pending = [section.name for section in sections if section.dropped]
         if pending:
             warnings.append(f"以下片段因超出 Token 预算被丢弃：{', '.join(pending)}")
@@ -392,15 +525,35 @@ _BLOCK_HEADINGS = {
     "understanding": (
         "学习者的当前认知（系统长期记录）",
         "> 这是系统对「这个用户现在怎么理解这些概念」的判断，用来决定**从哪讲起**。"
+        "只有「已经理解」明确列出的内容才算已掌握；状态「已能讲清」不覆盖未列出的相关知识，"
+        "「部分理解」「接触过」「未接触」都不能说成已掌握。"
         "不要向用户复述这一段的结构，也不要说「根据我的记录」。",
     ),
+    "trajectory": (
+        "学习轨迹（历史记录，不等于当前状态）",
+        "> 这些是用户过去真实发生过的版本与证据，只在复盘时使用。"
+        "已纠正的历史误区必须说成「过去曾经」，不能描述成当前仍在的误区；"
+        "只能陈述这里的原话、批注、测试回答、状态与时间，不得补写「意识到」「推导出」"
+        "「想通」等未被记录的心理过程；记录没写原因时就说看不出原因。"
+        "尤其不要断言纠正是否借助外部资料、是否由用户独立完成。"
+        "当前状态以「学习者的当前认知」区块为准，历史不能覆盖它。",
+    ),
     "memory": (
-        "这个用户的长期背景与偏好",
-        "> 用来调整讲解方式。当前用户本轮明确表达的意思，永远优先于这里的历史偏好。",
+        "这个用户的长期记忆（历史记录）",
+        "> 用来调整讲解方式。这些是过去写下的历史记录，不等于用户此刻的认知；"
+        "与当前认知/本轮证据冲突时，说明这是较早的记录、当前状态已经不同，"
+        "但不要推断用户为什么改变，也不要删除或改写长期记忆，"
+        "也不要把旧记忆无条件当成本轮事实。与当前问题无关的记忆不要主动展开。",
+    ),
+    "knowledge_status": (
+        "本轮知识检索状态",
+        "> 这决定了本轮能不能把上传资料当作依据。按状态说明回答，不要自行补成「资料不存在」。",
     ),
     "knowledge": (
-        "参考资料",
-        "> 回答时可以参考的知识片段；与学习者认知冲突时，先确认是不是误区，再决定怎么讲。",
+        "参考资料（来自用户上传的文档）",
+        "> 这些是检索到的文档片段，不是绝对真理。只能引用这里实际出现的来源标注，"
+        "不要编造文件名或片段序号；资料不足时明确说明。与学习者认知冲突时，"
+        "先确认是不是误区，再决定怎么讲。",
     ),
     "evidence": (
         "判定依据",
@@ -424,13 +577,21 @@ def _render_session(session: SessionContext) -> str:
     return "\n".join(lines)
 
 
-def _render_understanding(understanding: Understanding) -> str:
+def _render_understanding(
+    understanding: Understanding, *, has_learning_memory: bool = False
+) -> str:
     label = _STATUS_LABEL.get(understanding.status, understanding.status.value)
     lines = [f"### {understanding.concept_name} ｜ 状态：{label}"]
     if understanding.summary:
         lines.append(f"- 当前理解：{understanding.summary}")
     if understanding.known_parts:
-        lines.append("- 已经理解：" + "；".join(understanding.known_parts))
+        lines.append(
+            "- 已经理解（只有这个列表里的内容可以称为已掌握）："
+            + "；".join(understanding.known_parts)
+        )
+        lines.append(
+            "- 这个列表之外的相关知识，即使本轮讲解提到，也不能说成用户已经掌握。"
+        )
     if understanding.misconceptions:
         lines.append("- 仍然存在的误区（要针对性纠正，指出推理在哪一步分叉，而不是直接说「你错了」）：")
         for item in understanding.misconceptions:
@@ -440,20 +601,163 @@ def _render_understanding(understanding: Understanding) -> str:
         lines.append("- 还不确定（本次可以重点补）：" + "；".join(understanding.uncertain_parts))
     if understanding.latest_user_explanation:
         lines.append(f"- 用户自己的说法：「{understanding.latest_user_explanation}」")
+    if has_learning_memory:
+        lines.append(
+            "- 注意：长期记忆里另有一条较早的学习状态记录，可能与本条当前认知不同；"
+            "回答直接相关问题时，说明它是历史记录、当前状态已不同，不要把它当成本轮事实。"
+        )
+    # 这条规则在 Trajectory-enabled 与 Current-only 两种上下文里都必须存在，
+    # 否则两种模式的非轨迹输入就不一致，C 的对照会失去意义。
+    lines.append(
+        "- 如果本轮没有提供历史轨迹：不要从当前状态反推过去，也不要把"
+        "「没有看到错误记录」说成「过去没有错误」；用户问历史时说明当前可见信息不足。"
+    )
     return "\n".join(lines)
 
 
 def _render_memory(memory: MemoryItem) -> str:
     label = _MEMORY_LABEL.get(memory.memory_type, memory.memory_type.value)
     scope = _MEMORY_SCOPE_LABEL.get(memory.scope_type, memory.scope_type.value)
-    return f"- [{label}，作用域：{scope}] {memory.content}"
+    times: list[str] = []
+    if memory.created_at:
+        times.append(f"记录于 {_format_time(memory.created_at)}")
+    if memory.updated_at and memory.updated_at != memory.created_at:
+        times.append(f"更新于 {_format_time(memory.updated_at)}")
+    suffix = f"（{'；'.join(times)}）" if times else ""
+    return f"- [{label}，作用域：{scope}] {memory.content}{suffix}"
 
 
-def _render_knowledge(chunk) -> str:
-    page = f" 第 {chunk.page_number} 页" if chunk.page_number else ""
-    return f"- [片段 #{chunk.id}{page}] {chunk.content}"
+def _render_trajectory(trajectory: LearningTrajectory) -> str:
+    """渲染「过去发生的事实」，与当前理解严格分开。
+
+    这里只使用 Revision / Evidence 原始字段，不生成任何模型总结：
+    版本号、时间、状态、误区原文、来源类型都是持久化数据。内部 id 不进入
+    面向用户的文本，只保留在 `ContextSection.source_ids` 与评测产物里。
+    """
+    label = _STATUS_LABEL.get(
+        trajectory.current_status, trajectory.current_status.value
+    )
+    lines = [
+        f"### {trajectory.concept_name} ｜ 学习轨迹（历史）",
+        f"- 当前状态（来自持久化快照）：{label}",
+    ]
+
+    if trajectory.current_misconceptions:
+        lines.append(
+            "- 当前仍存在的误区：" + "；".join(trajectory.current_misconceptions)
+        )
+
+    historical = historical_misconceptions(trajectory)
+    for text in historical:
+        first = misconception_first_seen(trajectory, text)
+        last_status = misconception_last_status(trajectory, text)
+        first_time = f"，首次记录于 {_format_time(first.created_at)}" if first and first.created_at else ""
+        # 当前快照已没有这条误区，所以无论历史最后是 ACTIVE 还是 PENDING，
+        # 对今天而言都是「已纠正的历史」；PENDING 只说明当时证据已开始反转。
+        detail = "，当时已有反向证据但尚未解除" if last_status is MisconceptionStatus.PENDING else ""
+        lines.append(f"- [已纠正，历史] {text}{first_time}{detail}")
+
+    if trajectory.revisions:
+        lines.append("- 关键版本（按时间）：")
+        for revision in trajectory.revisions:
+            parts = [
+                f"版本 {revision.revision_no}",
+                _format_time(revision.created_at),
+                f"状态：{_STATUS_LABEL.get(revision.status, revision.status.value)}",
+            ]
+            if revision.misconceptions:
+                mistakes = "；".join(
+                    f"「{item.text}」[当时 {'ACTIVE' if item.status is MisconceptionStatus.ACTIVE else 'PENDING（已有反向证据）'}]"
+                    for item in revision.misconceptions
+                )
+                parts.append(f"误区：{mistakes}")
+            lines.append("  - " + " ｜ ".join(part for part in parts if part))
+
+    correction_evidence = [
+        evidence
+        for evidence in trajectory.evidences
+        if evidence.correctness is EvidenceCorrectness.CORRECT
+    ]
+    if correction_evidence:
+        times = "、".join(
+            _format_time(evidence.created_at) or "时间未记录"
+            for evidence in correction_evidence
+        )
+        lines.append(f"- 后续正确证据（{len(correction_evidence)} 条）：{times}")
+
+    if trajectory.evidences:
+        lines.append("- 关联证据（按时间）：")
+        for evidence in trajectory.evidences:
+            lines.append("  - " + _render_trajectory_evidence(evidence))
+
+    lines.append(
+        "- 以上是全部可核对记录；未记录的动机、原因、是否借助外部资料，"
+        "均无法确认，不要补写。"
+    )
+    return "\n".join(lines)
+
+
+def _render_trajectory_evidence(evidence: EvidenceItem) -> str:
+    correctness = _CORRECTNESS_LABEL.get(
+        evidence.correctness, evidence.correctness.value
+    )
+    evidence_type = _EVIDENCE_TYPE_LABEL.get(
+        evidence.evidence_type, evidence.evidence_type.value
+    )
+    # 面向用户的历史来源只用可读的类型与时间，不渲染数据库证据 / 来源 id。
+    # 评测需要的精确 id 仍在 ContextSection.source_ids 与评测产物的 trajectoryFacts 里。
+    sources = "、".join(
+        _SOURCE_TYPE_LABEL.get(source.source_type, source.source_type)
+        for source in evidence.sources
+    )
+    parts = [
+        _format_time(evidence.created_at),
+        f"[{correctness}/{evidence_type}]",
+        f"来源：{sources}" if sources else "",
+        evidence.observation,
+    ]
+    return " ｜ ".join(part for part in parts if part)
+
+
+def _format_time(value: datetime | None) -> str:
+    return value.strftime("%Y-%m-%d %H:%M") if value else ""
+
+
+def _render_knowledge_status(status: str, warning: str | None) -> str:
+    note = _KNOWLEDGE_STATUS_NOTES.get(str(status or ""))
+    if not note:
+        return ""
+    lines = [f"- 状态：{status}", f"- 说明：{note}"]
+    if warning:
+        lines.append(f"- 检索层记录：{warning}")
+    return "\n".join(lines)
+
+
+def _render_knowledge(chunk: KnowledgeChunk) -> str:
+    """可核对的来源标注：优先文档名 + 片段序号，退化时才用内部片段 ID。
+
+    模型只能引用这里实际出现过的标注；不要渲染数据库 chunk_id 当作来源名，
+    那既不可读，也会让模型误以为任意数字都可以被引用。
+    """
+    label = format_source_label(chunk)
+
+    # 章节/页码必须放在方括号**外面**：方括号内是要被模型原样复制的引用标注，
+    # 只能是 `[资料《文件名》#序号]`。把章节塞进去会让模型复制出
+    # `[资料《文件》#0 ｜ 章节：…]`，校验器按精确格式解析时判为 malformed。
+    suffix = ""
+    heading = " > ".join(chunk.heading_path).strip() if chunk.heading_path else ""
+    if heading and not chunk.content.lstrip().startswith(heading):
+        suffix += f" ｜ 章节：{heading}"
+    if chunk.page_number:
+        suffix += f" ｜ 第 {chunk.page_number} 页"
+    return f"- [{label}]{suffix} {chunk.content}"
 
 
 def _render_evidence(evidence) -> str:
     label = _CORRECTNESS_LABEL.get(evidence.correctness, evidence.correctness.value)
-    return f"- [{label}] {evidence.observation}"
+    evidence_type = _EVIDENCE_TYPE_LABEL.get(
+        evidence.evidence_type, evidence.evidence_type.value
+    )
+    when = _format_time(evidence.created_at)
+    prefix = f"{when} ｜ " if when else ""
+    return f"- [{label}/{evidence_type}] {prefix}{evidence.observation}"

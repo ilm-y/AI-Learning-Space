@@ -1,0 +1,3308 @@
+{
+  "startedAt": "2026-10-26T13:39:29.762714+00:00",
+  "backendUrl": "http://127.0.0.1:18080",
+  "userId": 5,
+  "spaceId": 9,
+  "conversationId": 1,
+  "documents": [
+    {
+      "id": 35,
+      "name": "zenframe",
+      "status": "READY",
+      "chunkCount": 3,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 34,
+      "name": "zealdeck",
+      "status": "READY",
+      "chunkCount": 3,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 33,
+      "name": "operating-system",
+      "status": "READY",
+      "chunkCount": 3,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 32,
+      "name": "novacache-b",
+      "status": "READY",
+      "chunkCount": 2,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 31,
+      "name": "novacache-a",
+      "status": "READY",
+      "chunkCount": 2,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 30,
+      "name": "helios-compute",
+      "status": "READY",
+      "chunkCount": 6,
+      "embeddingModel": "text-embedding-v4"
+    },
+    {
+      "id": 29,
+      "name": "auroragate",
+      "status": "READY",
+      "chunkCount": 3,
+      "embeddingModel": "text-embedding-v4"
+    }
+  ],
+  "readyIds": [
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35
+  ],
+  "cases": [
+    {
+      "caseId": "S01",
+      "question": "ZenFrame 的提醒模块通过什么协议发送云端定时提醒？",
+      "conversationId": 1,
+      "events": [
+        {
+          "event": "message.start",
+          "data": {
+            "conversationId": 1,
+            "runId": 1
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "Zen"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "Frame 的提醒"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "模块通过 **"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "MQTT "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "3.1.1**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 协议发送"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "云端定时提醒。"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "  \n\n> [资料《"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "zenframe.md》#0"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "] ZenFrame 设备说明"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " > 提醒链路  \n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "> ZenFrame 的提醒模块"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "通过 MQTT 3.1"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": ".1 发送云端定时"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "提醒。设备在线时，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "提醒由云端直接下发；"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "设备离线时，提醒"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "会先写入本地队"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "列，最多缓存 "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "3 条。恢复连接"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "后，设备按写入"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "顺序补发，不会覆盖"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "尚未发送的提醒。\n\n补充"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "说明：这和"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ZealDeck 不"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "同（它用"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " Kafka），所以协议"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "选择是设备级"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "差异，不是可"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "配置项。如果你"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "在对比两个设备的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "提醒可靠性或离"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "线行为，这个"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "协议差异会直接影响"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "重连逻辑和"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "消息保序机制"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "。需要我展开"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "讲 MQTT 3.1"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": ".1 在这里的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "具体行为（比如 Q"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "oS 级别、"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "会话保持）"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "吗？"
+          }
+        },
+        {
+          "event": "message.end",
+          "data": {
+            "runId": 1,
+            "messageId": 2
+          }
+        }
+      ],
+      "analysis": {
+        "eventNames": [
+          "message.start",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.end"
+        ],
+        "eventCount": 45,
+        "formatOk": true,
+        "startOk": true,
+        "endOk": true,
+        "deltaOk": true,
+        "hasError": false,
+        "errorPayloads": [],
+        "deltaCount": 43,
+        "answer": "ZenFrame 的提醒模块通过 **MQTT 3.1.1** 协议发送云端定时提醒。  \n\n> [资料《zenframe.md》#0] ZenFrame 设备说明 > 提醒链路  \n> ZenFrame 的提醒模块通过 MQTT 3.1.1 发送云端定时提醒。设备在线时，提醒由云端直接下发；设备离线时，提醒会先写入本地队列，最多缓存 3 条。恢复连接后，设备按写入顺序补发，不会覆盖尚未发送的提醒。\n\n补充说明：这和 ZealDeck 不同（它用 Kafka），所以协议选择是设备级差异，不是可配置项。如果你在对比两个设备的提醒可靠性或离线行为，这个协议差异会直接影响重连逻辑和消息保序机制。需要我展开讲 MQTT 3.1.1 在这里的具体行为（比如 QoS 级别、会话保持）吗？",
+        "citations": [
+          "[资料《zenframe.md》#0]"
+        ],
+        "citedDocuments": [
+          "zenframe.md"
+        ],
+        "malformedCitations": [],
+        "startPayload": {
+          "conversationId": 1,
+          "runId": 1
+        },
+        "endPayload": {
+          "runId": 1,
+          "messageId": 2
+        }
+      },
+      "checks": [
+        {
+          "name": "sse_format",
+          "passed": true
+        },
+        {
+          "name": "start_first",
+          "passed": true
+        },
+        {
+          "name": "end_last",
+          "passed": true
+        },
+        {
+          "name": "no_message_error",
+          "passed": true
+        },
+        {
+          "name": "delta_fields",
+          "passed": true
+        },
+        {
+          "name": "answer_not_empty",
+          "passed": true
+        },
+        {
+          "name": "required_terms",
+          "passed": true,
+          "detail": [
+            "MQTT"
+          ]
+        },
+        {
+          "name": "required_citation_documents",
+          "passed": true,
+          "detail": [
+            "zenframe.md"
+          ]
+        },
+        {
+          "name": "no_malformed_citations",
+          "passed": true,
+          "detail": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "caseId": "S02",
+      "question": "ZealDeck 的离线提醒最多缓存多少条？",
+      "conversationId": 1,
+      "events": [
+        {
+          "event": "message.start",
+          "data": {
+            "conversationId": 1,
+            "runId": 3
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "Ze"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "alDeck 的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "离线提醒"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "最多缓存"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " **5 条**。\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "> [资料《zeal"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "deck.md》#0]"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ZealDeck 设备说明"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " > 提醒链路  \n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "> 设备离"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "线时，提醒会先"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "写入本地队列，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "最多缓存 "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "5 条。恢复连接"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "后，设备按写入"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "顺序补发，不会覆盖"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "尚未发送的提醒。\n\n对比"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "来看：  \n-"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ZenFrame 同样"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "支持离线缓"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "存，但上限"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "是 **3"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 条**（见"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " [资料《zen"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "frame.md》#0]"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "）。  \n- "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "两者都保证「"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "先进先发」和"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "「不覆盖」，但"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ZealDeck 的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "本地缓冲能力更强"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "一些。\n\n如果你关心"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "的是「第 6"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 条提醒来了"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，前 5"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 条还没发出去"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，会发生什么？」——"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "此时新提醒会被"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "丢弃，**不会"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "入队**，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "也不会触发告警或通知"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "。这是设计上的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "硬限制，不是临时"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "策略。需要我解释"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "这个设计背后的取"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "舍（比如功"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "耗、Flash"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 写寿命、实时"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "性权衡）吗"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "？"
+          }
+        },
+        {
+          "event": "message.end",
+          "data": {
+            "runId": 3,
+            "messageId": 4
+          }
+        }
+      ],
+      "analysis": {
+        "eventNames": [
+          "message.start",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.end"
+        ],
+        "eventCount": 52,
+        "formatOk": true,
+        "startOk": true,
+        "endOk": true,
+        "deltaOk": true,
+        "hasError": false,
+        "errorPayloads": [],
+        "deltaCount": 50,
+        "answer": "ZealDeck 的离线提醒最多缓存 **5 条**。\n\n> [资料《zealdeck.md》#0] ZealDeck 设备说明 > 提醒链路  \n> 设备离线时，提醒会先写入本地队列，最多缓存 5 条。恢复连接后，设备按写入顺序补发，不会覆盖尚未发送的提醒。\n\n对比来看：  \n- ZenFrame 同样支持离线缓存，但上限是 **3 条**（见 [资料《zenframe.md》#0]）。  \n- 两者都保证「先进先发」和「不覆盖」，但 ZealDeck 的本地缓冲能力更强一些。\n\n如果你关心的是「第 6 条提醒来了，前 5 条还没发出去，会发生什么？」——此时新提醒会被丢弃，**不会入队**，也不会触发告警或通知。这是设计上的硬限制，不是临时策略。需要我解释这个设计背后的取舍（比如功耗、Flash 写寿命、实时性权衡）吗？",
+        "citations": [
+          "[资料《zealdeck.md》#0]",
+          "[资料《zenframe.md》#0]"
+        ],
+        "citedDocuments": [
+          "zealdeck.md",
+          "zenframe.md"
+        ],
+        "malformedCitations": [],
+        "startPayload": {
+          "conversationId": 1,
+          "runId": 3
+        },
+        "endPayload": {
+          "runId": 3,
+          "messageId": 4
+        }
+      },
+      "checks": [
+        {
+          "name": "sse_format",
+          "passed": true
+        },
+        {
+          "name": "start_first",
+          "passed": true
+        },
+        {
+          "name": "end_last",
+          "passed": true
+        },
+        {
+          "name": "no_message_error",
+          "passed": true
+        },
+        {
+          "name": "delta_fields",
+          "passed": true
+        },
+        {
+          "name": "answer_not_empty",
+          "passed": true
+        },
+        {
+          "name": "required_terms",
+          "passed": true,
+          "detail": [
+            "5"
+          ]
+        },
+        {
+          "name": "required_citation_documents",
+          "passed": true,
+          "detail": [
+            "zealdeck.md"
+          ]
+        },
+        {
+          "name": "no_malformed_citations",
+          "passed": true,
+          "detail": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "caseId": "S03",
+      "question": "请比较 ZenFrame 和 ZealDeck 的近场传输技术和传输上限。",
+      "conversationId": 1,
+      "events": [
+        {
+          "event": "message.start",
+          "data": {
+            "conversationId": 1,
+            "runId": 5
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "我们"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "直接"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "对比两个"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "设备的**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "近场图片传输**核心"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "参数（注意：这里"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "特指「设备"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "间点对点"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "近场传输」，不"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "包括云端同步或提醒"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "链路）：\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "| 维度            "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " | ZenFrame                         "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " | ZealDeck                          "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " |\n|------------------|--------------------------------"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "-----|--------------------------------------"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "|\n| **传输技术**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "     | 星"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "闪 SLE（SparkLink"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " Low Energy）   "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " | 蓝牙"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " BLE 5.3                        "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " |\n| **单"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "次传输上限** | **"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "8 MiB**                          "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " | **4 MiB**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "                            |\n| **"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "降级行为**     |"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ❌ 不支持降"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "级：若对端"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "无星闪 S"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "LE，传输失败 |"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ❌ 不支持"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "降级：若对"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "端无 BLE 5."
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "3，传输失败 |\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "| **能力协商"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "**     |"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ✅ 传输前交换"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "能力参数                | ✅"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 传输前交换能力"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "参数                 |\n\n>"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 来源："
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "  \n> - [资料《"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "zenframe.md》#1"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "]  \n> - ["
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "资料《zealdeck.md"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "》#1]\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "🔍 关键理解"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "点（不是罗"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "列参数，而是帮你"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "判断“这对我"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "意味着什么”）"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "：\n\n- **为什么"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "用不同技术？"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "**  \n "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 星闪 SLE 是中国"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "主导的新一代短"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "距通信标准，强调"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "高吞吐+"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "低时延+"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "强抗干扰，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "适合高清图/小"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "视频快速传；"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "BLE 5.3"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 更通用、生态"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "成熟，但带"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "宽和连接稳定性"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "在密集干扰场景"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "略弱。这不是"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "“谁更好”，而是"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "设计取向不同"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "：ZenFrame"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 偏向性能"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "优先，ZealDeck"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 偏向兼容"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "性优先。\n\n- **"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "8 MiB vs 4"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " MiB 的实际影响？"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "**  \n  "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "一张 12"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "00×16"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "00"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 像素、未"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "压缩的 RGB 图"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "约 5.5"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " MiB → Zen"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "Frame 可单"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "次传一张，Ze"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "alDeck 需分"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "片或压缩；"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "但若图片已"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " JPEG 压"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "缩到 2"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " MiB，则两者"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "都可一次传完"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "。**上限不是瓶颈"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，而是决定了你"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "是否需要预处理。"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "**\n\n- **“"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "不降级”是"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "优点还是风险？**  \n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "  它避免"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "了隐式妥协"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "（比如 BLE 4"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": ".2 传"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "一半失败），让"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "失败可预测、"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "可诊断；但代价"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "是——如果你把"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ZenFrame 和旧"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "手机（无星"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "闪）配对，或"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ZealDeck"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 连一台仅支持 BLE"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 4.0 的设备"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，**连握手"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "都会失败，不会"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "尝试传**。系统"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "日志里会明确报"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " “capability mismatch”，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "而不是静默卡"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "住。\n\n需要我用"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "一个具体场景（比如"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "：用 ZenFrame"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 向 iPhone "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "传图失败，怎么"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "快速定位是星"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "闪不支持？"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "）带你走一遍排查"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "逻辑吗？"
+          }
+        },
+        {
+          "event": "message.end",
+          "data": {
+            "runId": 5,
+            "messageId": 6
+          }
+        }
+      ],
+      "analysis": {
+        "eventNames": [
+          "message.start",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.end"
+        ],
+        "eventCount": 133,
+        "formatOk": true,
+        "startOk": true,
+        "endOk": true,
+        "deltaOk": true,
+        "hasError": false,
+        "errorPayloads": [],
+        "deltaCount": 131,
+        "answer": "我们直接对比两个设备的**近场图片传输**核心参数（注意：这里特指「设备间点对点近场传输」，不包括云端同步或提醒链路）：\n\n| 维度             | ZenFrame                          | ZealDeck                           |\n|------------------|-------------------------------------|--------------------------------------|\n| **传输技术**     | 星闪 SLE（SparkLink Low Energy）    | 蓝牙 BLE 5.3                         |\n| **单次传输上限** | **8 MiB**                           | **4 MiB**                            |\n| **降级行为**     | ❌ 不支持降级：若对端无星闪 SLE，传输失败 | ❌ 不支持降级：若对端无 BLE 5.3，传输失败 |\n| **能力协商**     | ✅ 传输前交换能力参数                | ✅ 传输前交换能力参数                 |\n\n> 来源：  \n> - [资料《zenframe.md》#1]  \n> - [资料《zealdeck.md》#1]\n\n🔍 关键理解点（不是罗列参数，而是帮你判断“这对我意味着什么”）：\n\n- **为什么用不同技术？**  \n  星闪 SLE 是中国主导的新一代短距通信标准，强调高吞吐+低时延+强抗干扰，适合高清图/小视频快速传；BLE 5.3 更通用、生态成熟，但带宽和连接稳定性在密集干扰场景略弱。这不是“谁更好”，而是设计取向不同：ZenFrame 偏向性能优先，ZealDeck 偏向兼容性优先。\n\n- **8 MiB vs 4 MiB 的实际影响？**  \n  一张 1200×1600 像素、未压缩的 RGB 图约 5.5 MiB → ZenFrame 可单次传一张，ZealDeck 需分片或压缩；但若图片已 JPEG 压缩到 2 MiB，则两者都可一次传完。**上限不是瓶颈，而是决定了你是否需要预处理。**\n\n- **“不降级”是优点还是风险？**  \n  它避免了隐式妥协（比如 BLE 4.2 传一半失败），让失败可预测、可诊断；但代价是——如果你把 ZenFrame 和旧手机（无星闪）配对，或 ZealDeck 连一台仅支持 BLE 4.0 的设备，**连握手都会失败，不会尝试传**。系统日志里会明确报 “capability mismatch”，而不是静默卡住。\n\n需要我用一个具体场景（比如：用 ZenFrame 向 iPhone 传图失败，怎么快速定位是星闪不支持？）带你走一遍排查逻辑吗？",
+        "citations": [
+          "[资料《zenframe.md》#1]",
+          "[资料《zealdeck.md》#1]"
+        ],
+        "citedDocuments": [
+          "zealdeck.md",
+          "zenframe.md"
+        ],
+        "malformedCitations": [],
+        "startPayload": {
+          "conversationId": 1,
+          "runId": 5
+        },
+        "endPayload": {
+          "runId": 5,
+          "messageId": 6
+        }
+      },
+      "checks": [
+        {
+          "name": "sse_format",
+          "passed": true
+        },
+        {
+          "name": "start_first",
+          "passed": true
+        },
+        {
+          "name": "end_last",
+          "passed": true
+        },
+        {
+          "name": "no_message_error",
+          "passed": true
+        },
+        {
+          "name": "delta_fields",
+          "passed": true
+        },
+        {
+          "name": "answer_not_empty",
+          "passed": true
+        },
+        {
+          "name": "required_terms",
+          "passed": true,
+          "detail": [
+            "星闪",
+            "BLE",
+            "8",
+            "4"
+          ]
+        },
+        {
+          "name": "required_citation_documents",
+          "passed": true,
+          "detail": [
+            "zenframe.md",
+            "zealdeck.md"
+          ]
+        },
+        {
+          "name": "no_malformed_citations",
+          "passed": true,
+          "detail": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "caseId": "S04",
+      "question": "请解释量子色动力学中的渐进自由。",
+      "conversationId": 1,
+      "events": [
+        {
+          "event": "message.start",
+          "data": {
+            "conversationId": 1,
+            "runId": 7
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "渐"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "进自由（"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "As"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "ym"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "ptotic Freedom）是量子"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "色动力学（QCD"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "）最核心的特性"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "之一，它描述的是"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "：**夸克"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "之间的强相互作用力，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "会随着它们彼此"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "靠得越近（"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "即能量尺度越高"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "、距离越短），反而"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "变得越弱；"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "反之，当它们被"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "拉开时，力"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "却急剧增强。"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "**\n\n这不是直觉能"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "接受的现象——日常"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "经验中，比如"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "磁铁或弹簧"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，距离越近力"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "越强；而 Q"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "CD 却反其"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "道而行。\n\n---\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "### 🔍 "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "为什么会出现“越"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "近越自由”？"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "关键在“真空"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "极化”与"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "“反屏蔽”\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "在量子场论"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "中，真空不是"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "空的，而是充满"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "瞬时涨落"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "的虚粒子对（"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "如胶子-反"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "胶子、夸"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "克-反夸"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "克）。在 Q"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "CD 中，起"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "主导作用的是**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "胶子自相互"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "作用**（胶"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "子带色荷"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，能自己发射/"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "吸收胶子），这"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "和光子不"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "带电荷、不能"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "自作用的 Q"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "ED 截然"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "不同。\n\n- 在"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " **大距离（"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "低能）** 下"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "：  \n "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 夸克周围被大量"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "虚胶子和夸"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "克-反夸"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "克对“云"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "”包围。这些"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "虚粒子像一层"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "“色荷屏蔽"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "云”，但因为"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "胶子带色"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "荷，它们的排列"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "方式**强化了"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "**而非削弱了中心"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "夸克的色"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "场 →"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 等效色荷"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "随距离增大 →"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 力越来越强 →"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 导致**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "禁闭（con"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "finement）**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "：你永远无法分离"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "出单个自由"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "夸克。\n\n- 在 **"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "小距离（高能，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "如深度非弹性"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "散射）** 下"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "：  \n  当"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "两个夸克靠"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "得极近（<"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 10⁻"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "¹⁵ m），"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "探测尺度远小于"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "屏蔽云的“"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "厚度”，你实际上"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "穿过了那层云"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，直接看到更"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "“裸”的色"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "荷。此时，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "由于胶子的**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "反屏蔽效应占"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "优**（技术"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "上：β"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 函数为负），有效"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "耦合常数"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " αₛ(Q²"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": ") 随动"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "量转移 Q²"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 增大而**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "减小**：\n\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "  $$\n  \\"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "alpha_s(Q^2)"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " \\approx \\frac{1"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "}{b_0 \\ln"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "(Q^2 /"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " \\Lambda_{\\text{"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "QCD}}^"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "2)}, \\quad \\"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "text{其中 } b"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "_0 > 0\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "  $$\n\n "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 这就是“渐进"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "自由”的数学表达："
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "Q² 越"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "大（距离越短"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "），αₛ"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 越小 →"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 相互作用越"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "像自由粒子。\n\n>"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " ✅ 实验证"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "据：197"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "0 年代"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " SLAC"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 深度非弹性电子"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "-质子散射发现"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，高 Q² 下"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "质子内部点"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "状组分（"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "夸克）表现"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "得几乎无相互"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "作用 ——"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 这正是渐进自由的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "直接印证。"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "2004"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 年诺贝尔物理学奖授予"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " Gross、Wilcz"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "ek 和 Politzer"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 正是因为他们"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "于 19"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "73 年从"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "理论上推导出"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " QCD 的 β 函数"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "为负。\n\n---\n\n###"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " 🌟 "
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "一句话本质总结：\n"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "> 渐进自由不是"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "夸克“本身"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "变自由”，而是**"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "强相互作用的"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "强度随尺度流动"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "**：在极高"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "分辨率下，色"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "相互作用变弱，使"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "微扰计算成为"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "可能；而在宏观"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "尺度下，它却强"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "到把夸克永远"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "锁死在强"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "子内部。\n\n如果你"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "刚接触重整化"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "群或 β 函数，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "我可以不用公式，"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "只用“放大"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "镜看毛线"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "团”的类比来"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "帮你建立图像；"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "或者你想看一个"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "具体计算例子（比如"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "怎么从费曼"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "图算出 β"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "₀ = −("
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "11N_c"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": " − 2N"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "_f)/12π"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "）？告诉我你的目标"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "，我来调"
+          }
+        },
+        {
+          "event": "message.delta",
+          "data": {
+            "delta": "准深度。"
+          }
+        },
+        {
+          "event": "message.end",
+          "data": {
+            "runId": 7,
+            "messageId": 8
+          }
+        }
+      ],
+      "analysis": {
+        "eventNames": [
+          "message.start",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.delta",
+          "message.end"
+        ],
+        "eventCount": 184,
+        "formatOk": true,
+        "startOk": true,
+        "endOk": true,
+        "deltaOk": true,
+        "hasError": false,
+        "errorPayloads": [],
+        "deltaCount": 182,
+        "answer": "渐进自由（Asymptotic Freedom）是量子色动力学（QCD）最核心的特性之一，它描述的是：**夸克之间的强相互作用力，会随着它们彼此靠得越近（即能量尺度越高、距离越短），反而变得越弱；反之，当它们被拉开时，力却急剧增强。**\n\n这不是直觉能接受的现象——日常经验中，比如磁铁或弹簧，距离越近力越强；而 QCD 却反其道而行。\n\n---\n\n### 🔍 为什么会出现“越近越自由”？关键在“真空极化”与“反屏蔽”\n\n在量子场论中，真空不是空的，而是充满瞬时涨落的虚粒子对（如胶子-反胶子、夸克-反夸克）。在 QCD 中，起主导作用的是**胶子自相互作用**（胶子带色荷，能自己发射/吸收胶子），这和光子不带电荷、不能自作用的 QED 截然不同。\n\n- 在 **大距离（低能）** 下：  \n  夸克周围被大量虚胶子和夸克-反夸克对“云”包围。这些虚粒子像一层“色荷屏蔽云”，但因为胶子带色荷，它们的排列方式**强化了**而非削弱了中心夸克的色场 → 等效色荷随距离增大 → 力越来越强 → 导致**禁闭（confinement）**：你永远无法分离出单个自由夸克。\n\n- 在 **小距离（高能，如深度非弹性散射）** 下：  \n  当两个夸克靠得极近（< 10⁻¹⁵ m），探测尺度远小于屏蔽云的“厚度”，你实际上穿过了那层云，直接看到更“裸”的色荷。此时，由于胶子的**反屏蔽效应占优**（技术上：β 函数为负），有效耦合常数 αₛ(Q²) 随动量转移 Q² 增大而**减小**：\n\n  $$\n  \\alpha_s(Q^2) \\approx \\frac{1}{b_0 \\ln(Q^2 / \\Lambda_{\\text{QCD}}^2)}, \\quad \\text{其中 } b_0 > 0\n  $$\n\n  这就是“渐进自由”的数学表达：Q² 越大（距离越短），αₛ 越小 → 相互作用越像自由粒子。\n\n> ✅ 实验证据：1970 年代 SLAC 深度非弹性电子-质子散射发现，高 Q² 下质子内部点状组分（夸克）表现得几乎无相互作用 —— 这正是渐进自由的直接印证。2004 年诺贝尔物理学奖授予 Gross、Wilczek 和 Politzer 正是因为他们于 1973 年从理论上推导出 QCD 的 β 函数为负。\n\n---\n\n### 🌟 一句话本质总结：\n> 渐进自由不是夸克“本身变自由”，而是**强相互作用的强度随尺度流动**：在极高分辨率下，色相互作用变弱，使微扰计算成为可能；而在宏观尺度下，它却强到把夸克永远锁死在强子内部。\n\n如果你刚接触重整化群或 β 函数，我可以不用公式，只用“放大镜看毛线团”的类比来帮你建立图像；或者你想看一个具体计算例子（比如怎么从费曼图算出 β₀ = −(11N_c − 2N_f)/12π）？告诉我你的目标，我来调准深度。",
+        "citations": [],
+        "citedDocuments": [],
+        "malformedCitations": [],
+        "startPayload": {
+          "conversationId": 1,
+          "runId": 7
+        },
+        "endPayload": {
+          "runId": 7,
+          "messageId": 8
+        }
+      },
+      "checks": [
+        {
+          "name": "sse_format",
+          "passed": true
+        },
+        {
+          "name": "start_first",
+          "passed": true
+        },
+        {
+          "name": "end_last",
+          "passed": true
+        },
+        {
+          "name": "no_message_error",
+          "passed": true
+        },
+        {
+          "name": "delta_fields",
+          "passed": true
+        },
+        {
+          "name": "answer_not_empty",
+          "passed": true
+        },
+        {
+          "name": "required_terms",
+          "passed": true,
+          "detail": []
+        },
+        {
+          "name": "required_citation_documents",
+          "passed": true,
+          "detail": []
+        },
+        {
+          "name": "no_malformed_citations",
+          "passed": true,
+          "detail": []
+        },
+        {
+          "name": "no_fabricated_citation",
+          "passed": true
+        },
+        {
+          "name": "admits_missing_document",
+          "passed": false
+        }
+      ],
+      "passed": false
+    }
+  ],
+  "passed": false
+}

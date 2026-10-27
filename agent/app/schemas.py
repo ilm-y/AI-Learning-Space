@@ -363,32 +363,82 @@ class MemoryItem(CamelModel):
     content: str
     status: MemoryStatus = MemoryStatus.ACTIVE
     importance: float | None = None
+    # 时间用于让模型知道「这条记忆可能早于当前理解」，而不是把它当成本轮事实。
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class EvidenceSourceItem(CamelModel):
+    """Evidence 的原始来源（消息 / 批注 / 测试回答）。"""
+
+    source_type: str
+    source_id: int
 
 
 class EvidenceItem(CamelModel):
     id: int
     concept_id: int
     understanding_id: int | None = None
+    evidence_type: EvidenceType = EvidenceType.OBSERVATION
     observation: str
     correctness: EvidenceCorrectness = EvidenceCorrectness.UNKNOWN
     reasoning_quality: float | None = None
     specificity: float | None = None
     ai_confidence: float | None = None
     created_at: datetime | None = None
+    sources: list[EvidenceSourceItem] = Field(default_factory=list)
+
+
+class UnderstandingRevision(CamelModel):
+    """理解快照的一次不可变版本。
+
+    只读；字段与后端 `UnderstandingRevisionResponse` 对齐。`trigger_evidence_id`
+    是这次变化由哪条证据触发的直接关联，复盘时用它精确回查原始证据。
+    """
+
+    id: int
+    # 后端 revisions 接口按 concept 查询，响应本身不带该字段；Fixture 需要它分组。
+    concept_id: int | None = None
+    revision_no: int
+    summary: str | None = None
+    known_parts: list[str] = Field(default_factory=list)
+    misconceptions: list[Misconception] = Field(default_factory=list)
+    uncertain_parts: list[str] = Field(default_factory=list)
+    user_explanation: str | None = None
+    status: UnderstandingStatus = UnderstandingStatus.UNKNOWN
+    trigger_evidence_id: int | None = None
+    created_at: datetime | None = None
+
+
+class LearningTrajectory(CamelModel):
+    """某个概念在复盘时需要的真实历史轨迹。
+
+    它不代表当前状态：`current_status` / `current_misconceptions` 来自本轮的
+    Understanding 快照，`revisions` 与 `evidences` 则是过去的不可变记录。
+    """
+
+    concept_id: int
+    concept_name: str
+    current_status: UnderstandingStatus = UnderstandingStatus.UNKNOWN
+    current_misconceptions: list[str] = Field(default_factory=list)
+    revisions: list[UnderstandingRevision] = Field(default_factory=list)
+    evidences: list[EvidenceItem] = Field(default_factory=list)
 
 
 class KnowledgeChunk(CamelModel):
     """知识片段。
 
-    第一版没有文档解析与向量检索，只有 Fixture 里的样例数据；
-    字段与 `document_chunk` 对齐，接 RAG 时不用改上面的层。
-
-    `concept_id` 是 Agent 侧补的：`document_chunk` 表里没有这一列，
-    第一版靠它把片段挂到 Concept 上做筛选；接向量检索后由相似度与 metadata 取代。
+    真实 RAG 链路会填充文档名、片段序号、文件类型与可选的标题路径，
+    让模型引用的来源可被人核对，而不是只看到内部数据库 ID。
+    Fixture 数据可以只提供旧字段，渲染层会退化到片段 ID。
     """
 
     id: int
     document_id: int | None = None
+    chunk_index: int | None = None
+    document_name: str | None = None
+    file_type: str | None = None
+    heading_path: list[str] = Field(default_factory=list)
     concept_id: int | None = None
     content: str
     page_number: int | None = None

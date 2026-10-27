@@ -1,6 +1,9 @@
 HELP.md
 target/
 
+# 本地文档原文存储（ails.document.storage.root 默认 ./data/documents）
+data/
+
 ### 本机配置（含数据库密码等真实凭据，绝不提交）###
 # 由 application.yml 的 spring.config.import 自动合并，见 README 第九节
 src/main/resources/application-local.yml

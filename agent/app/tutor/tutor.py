@@ -27,7 +27,7 @@ from __future__ import annotations
 from typing import AsyncIterator
 
 from app.context.builder import BuiltContext
-from app.llm.base import LLMAdapter, LLMError
+from app.llm.base import ChatMessage, LLMAdapter, LLMError
 
 # 模型一个字都没吐出来时，宁可明确报错，也不要给用户一条空消息
 EMPTY_REPLY_HINT = "模型没有返回任何内容"
@@ -41,10 +41,27 @@ class Tutor:
     def llm_name(self) -> str:
         return self._llm.name
 
-    async def stream(self, context: BuiltContext) -> AsyncIterator[str]:
+    async def stream(
+        self,
+        context: BuiltContext,
+        *,
+        extra_instruction: str | None = None,
+        temperature: float | None = None,
+    ) -> AsyncIterator[str]:
+        """把上下文交给模型。
+
+        `extra_instruction` 只追加到 system message 尾部，用于显式复盘的一次受限
+        重生成；它不改变消息结构（仍是一条 system + 对话 + 最后一条 user），
+        也不会把上次的错误回答重新喂给模型。
+        """
         messages = self._validated(context.messages)
+        if extra_instruction:
+            messages = [
+                ChatMessage("system", f"{messages[0].content}\n\n{extra_instruction}"),
+                *messages[1:],
+            ]
         produced = False
-        async for delta in self._llm.stream_chat(messages):
+        async for delta in self._llm.stream_chat(messages, temperature=temperature):
             if not delta:
                 continue
             produced = True

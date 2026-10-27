@@ -1,0 +1,7115 @@
+{
+  "summary": {
+    "source": "evaluation\\rag\\reports\\real_20261026_v2_offline",
+    "dataset": "D:\\learningMatiarials\\AI-Learning-Space\\evaluation\\rag\\dataset_v2.jsonl",
+    "note": "离线模拟：只把兜底说明套到已保存回答上，不调用模型。",
+    "before": {
+      "plain": {
+        "autoPass": 11,
+        "runs": 37
+      },
+      "rag": {
+        "autoPass": 30,
+        "runs": 40
+      },
+      "rag+state": {
+        "autoPass": 31,
+        "runs": 41
+      }
+    },
+    "after": {
+      "plain": {
+        "autoPass": 11,
+        "runs": 37
+      },
+      "rag": {
+        "autoPass": 34,
+        "runs": 40
+      },
+      "rag+state": {
+        "autoPass": 32,
+        "runs": 41
+      }
+    },
+    "changes": [
+      {
+        "caseId": "D01",
+        "mode": "rag",
+        "knowledgeStatus": "THRESHOLD_FILTERED",
+        "noticeAdded": true,
+        "notice": "（本轮检索到的文档片段相关度不足，没有检索到可确认的资料依据；以上回答不基于上传资料。）",
+        "before": {
+          "status": "fail",
+          "retrieval": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "context": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "answer": {
+            "applicable": true,
+            "passed": false,
+            "failedChecks": [
+              "admission_evidence"
+            ]
+          },
+          "citation": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          }
+        },
+        "after": {
+          "status": "pass",
+          "retrieval": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "context": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "answer": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "citation": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          }
+        },
+        "flipped": true
+      },
+      {
+        "caseId": "F01",
+        "mode": "rag",
+        "knowledgeStatus": "NO_VALID_DOCUMENTS",
+        "noticeAdded": true,
+        "notice": "（本轮没有可用且已就绪的上传文档，以上回答不基于上传资料。）",
+        "before": {
+          "status": "fail",
+          "retrieval": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "context": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "answer": {
+            "applicable": true,
+            "passed": false,
+            "failedChecks": [
+              "admission_evidence"
+            ]
+          },
+          "citation": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          }
+        },
+        "after": {
+          "status": "pass",
+          "retrieval": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "context": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "answer": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "citation": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          }
+        },
+        "flipped": true
+      },
+      {
+        "caseId": "F02",
+        "mode": "rag",
+        "knowledgeStatus": "THRESHOLD_FILTERED",
+        "noticeAdded": true,
+        "notice": "（本轮检索到的文档片段相关度不足，没有检索到可确认的资料依据；以上回答不基于上传资料。）",
+        "before": {
+          "status": "fail",
+          "retrieval": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "context": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "answer": {
+            "applicable": true,
+            "passed": false,
+            "failedChecks": [
+              "admission_evidence"
+            ]
+          },
+          "citation": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          }
+        },
+        "after": {
+          "status": "pass",
+          "retrieval": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "context": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "answer": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "citation": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          }
+        },
+        "flipped": true
+      },
+      {
+        "caseId": "F02",
+        "mode": "rag+state",
+        "knowledgeStatus": "THRESHOLD_FILTERED",
+        "noticeAdded": true,
+        "notice": "（本轮检索到的文档片段相关度不足，没有检索到可确认的资料依据；以上回答不基于上传资料。）",
+        "before": {
+          "status": "fail",
+          "retrieval": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "context": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "answer": {
+            "applicable": true,
+            "passed": false,
+            "failedChecks": [
+              "admission_evidence"
+            ]
+          },
+          "citation": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          }
+        },
+        "after": {
+          "status": "pass",
+          "retrieval": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "context": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "answer": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "citation": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          }
+        },
+        "flipped": true
+      },
+      {
+        "caseId": "F04",
+        "mode": "rag",
+        "knowledgeStatus": "DEGRADED",
+        "noticeAdded": true,
+        "notice": "（本轮知识检索不可用，无法确认上传资料是否包含答案；以上回答不基于上传资料。）",
+        "before": {
+          "status": "fail",
+          "retrieval": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "context": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "answer": {
+            "applicable": true,
+            "passed": false,
+            "failedChecks": [
+              "admission_evidence"
+            ]
+          },
+          "citation": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          }
+        },
+        "after": {
+          "status": "pass",
+          "retrieval": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "context": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "answer": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          },
+          "citation": {
+            "applicable": true,
+            "passed": true,
+            "failedChecks": []
+          }
+        },
+        "flipped": true
+      }
+    ]
+  },
+  "rows": [
+    {
+      "caseId": "A01",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A01",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A01",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A02",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A02",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A02",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A03",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A03",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A03",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A04",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A04",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A04",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A05",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A05",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A05",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A06",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A06",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A06",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A07",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A07",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A07",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A08",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A08",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A08",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A09",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A09",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A09",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A10",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A10",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A10",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A11",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A11",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A11",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A12",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A12",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "A12",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B01",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B01",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B01",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B02",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B02",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B02",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B03",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B03",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B03",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B04",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B04",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B04",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B05",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B05",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B05",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B06",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B06",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B06",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B07",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B07",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B07",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B08",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B08",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "B08",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C01",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C01",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C01",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C02",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C02",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C02",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C03",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C03",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C03",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C04",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C04",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C04",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C05",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_numbers",
+            "required_phrases_any"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_terms",
+            "required_numbers",
+            "required_phrases_any"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C05",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C05",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C06",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C06",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "C06",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D01",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D01",
+      "mode": "rag",
+      "knowledgeStatus": "THRESHOLD_FILTERED",
+      "noticeAdded": true,
+      "notice": "（本轮检索到的文档片段相关度不足，没有检索到可确认的资料依据；以上回答不基于上传资料。）",
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": true
+    },
+    {
+      "caseId": "D01",
+      "mode": "rag+state",
+      "knowledgeStatus": "THRESHOLD_FILTERED",
+      "noticeAdded": true,
+      "notice": "（本轮检索到的文档片段相关度不足，没有检索到可确认的资料依据；以上回答不基于上传资料。）",
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D02",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D02",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D02",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D03",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D03",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D03",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D04",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D04",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D04",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "forbidden_patterns",
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "forbidden_patterns",
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D05",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D05",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D05",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D06",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D06",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "D06",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "forbidden_documents_not_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "forbidden_documents_not_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E01",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers",
+            "required_phrases_any"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers",
+            "required_phrases_any"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E01",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E01",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E02",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "required_bindings",
+            "required_numbers"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E02",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E02",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E03",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels",
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E03",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E03",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E04",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": [
+            "required_documents_cited"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E04",
+      "mode": "rag",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E04",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "E05",
+      "mode": "rag+state",
+      "knowledgeStatus": "SUCCESS",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "manual",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "manual",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "F01",
+      "mode": "rag",
+      "knowledgeStatus": "NO_VALID_DOCUMENTS",
+      "noticeAdded": true,
+      "notice": "（本轮没有可用且已就绪的上传文档，以上回答不基于上传资料。）",
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": true
+    },
+    {
+      "caseId": "F01",
+      "mode": "rag+state",
+      "knowledgeStatus": "NO_VALID_DOCUMENTS",
+      "noticeAdded": true,
+      "notice": "（本轮没有可用且已就绪的上传文档，以上回答不基于上传资料。）",
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "F02",
+      "mode": "plain",
+      "knowledgeStatus": "NOT_RETRIEVED",
+      "noticeAdded": false,
+      "notice": null,
+      "before": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": false,
+          "passed": null,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "F02",
+      "mode": "rag",
+      "knowledgeStatus": "THRESHOLD_FILTERED",
+      "noticeAdded": true,
+      "notice": "（本轮检索到的文档片段相关度不足，没有检索到可确认的资料依据；以上回答不基于上传资料。）",
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": true
+    },
+    {
+      "caseId": "F02",
+      "mode": "rag+state",
+      "knowledgeStatus": "THRESHOLD_FILTERED",
+      "noticeAdded": true,
+      "notice": "（本轮检索到的文档片段相关度不足，没有检索到可确认的资料依据；以上回答不基于上传资料。）",
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": true
+    },
+    {
+      "caseId": "F03",
+      "mode": "rag",
+      "knowledgeStatus": "DEGRADED",
+      "noticeAdded": true,
+      "notice": "（本轮知识检索不可用，无法确认上传资料是否包含答案；以上回答不基于上传资料。）",
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "F03",
+      "mode": "rag+state",
+      "knowledgeStatus": "DEGRADED",
+      "noticeAdded": true,
+      "notice": "（本轮知识检索不可用，无法确认上传资料是否包含答案；以上回答不基于上传资料。）",
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_malformed_labels"
+          ]
+        }
+      },
+      "flipped": false
+    },
+    {
+      "caseId": "F04",
+      "mode": "rag",
+      "knowledgeStatus": "DEGRADED",
+      "noticeAdded": true,
+      "notice": "（本轮知识检索不可用，无法确认上传资料是否包含答案；以上回答不基于上传资料。）",
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "after": {
+        "status": "pass",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        }
+      },
+      "flipped": true
+    },
+    {
+      "caseId": "F04",
+      "mode": "rag+state",
+      "knowledgeStatus": "DEGRADED",
+      "noticeAdded": true,
+      "notice": "（本轮知识检索不可用，无法确认上传资料是否包含答案；以上回答不基于上传资料。）",
+      "before": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "admission_evidence"
+          ]
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels"
+          ]
+        }
+      },
+      "after": {
+        "status": "fail",
+        "retrieval": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "context": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "answer": {
+          "applicable": true,
+          "passed": true,
+          "failedChecks": []
+        },
+        "citation": {
+          "applicable": true,
+          "passed": false,
+          "failedChecks": [
+            "citation_expectation",
+            "no_illegal_labels"
+          ]
+        }
+      },
+      "flipped": false
+    }
+  ]
+}

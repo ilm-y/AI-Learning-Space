@@ -1,30 +1,28 @@
 # Agent 回归评测报告
 
-- 生成时间：2026-10-21T21:17:23+08:00
-- 代码版本：`34b59b5`
-- 运行模式：`all`
-- 后端：`http://127.0.0.1:8080`
-- Agent：`http://127.0.0.1:8000`
+- 生成时间：2026-10-27T02:12:54+08:00
+- 代码版本：`74d99a1`
+- 运行模式：`offline`
 
 ## 总览
 
 | 指标 | 值 |
 | --- | --- |
-| 用例 | 49 |
-| 通过 / 失败 / 跳过 | 49 / 0 / 0 |
+| 用例 | 40 |
+| 通过 / 失败 / 跳过 | 40 / 0 / 0 |
 | 用例通过率 | 100.0% |
-| 断言 | 194 / 194 通过（100.0%） |
+| 断言 | 124 / 124 通过（100.0%） |
 
 ## 分类
 
 | 类别 | 用例 | 通过 | 失败 | 跳过 | 用例通过率 | 断言通过率 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 跨会话上下文 (`cross_session`) | 6 | 6 | 0 | 0 | 100.0% | 100.0% |
+| 跨会话上下文 (`cross_session`) | 4 | 4 | 0 | 0 | 100.0% | 100.0% |
 | 证据去重 (`evidence_dedup`) | 6 | 6 | 0 | 0 | 100.0% | 100.0% |
-| 记忆作用域 (`memory_scope`) | 8 | 8 | 0 | 0 | 100.0% | 100.0% |
-| 理解演进 (`understanding_revision`) | 8 | 8 | 0 | 0 | 100.0% | 100.0% |
-| 记忆冲突收敛 (`memory_conflict`) | 7 | 7 | 0 | 0 | 100.0% | 100.0% |
-| 验证策略 (`verification`) | 7 | 7 | 0 | 0 | 100.0% | 100.0% |
+| 记忆作用域 (`memory_scope`) | 6 | 6 | 0 | 0 | 100.0% | 100.0% |
+| 理解演进 (`understanding_revision`) | 6 | 6 | 0 | 0 | 100.0% | 100.0% |
+| 记忆冲突收敛 (`memory_conflict`) | 5 | 5 | 0 | 0 | 100.0% | 100.0% |
+| 验证策略 (`verification`) | 6 | 6 | 0 | 0 | 100.0% | 100.0% |
 | 分析输出契约 (`analysis_contract`) | 7 | 7 | 0 | 0 | 100.0% | 100.0% |
 
 ## 失败用例
@@ -72,15 +70,6 @@
 - `verification-recorded-ask-now-preserved` — 模型给出 ASK_NOW 时，题型 / 题干 / 正确答案 / trigger 原样保留
 - `verification-fabricated-concept-skipped` — 验证决策引用未命中的概念时降级为 SKIP：宁可不出题，也不能给别的知识点出题
 - `verification-ask-now-default-question` — ASK_NOW 没给题干时补一个可作答的默认题，而不是静默降级成 SKIP
-- `live-cross-session-attaches` — 对话 A 里写下的自述，会进入对话 B 的 Agent 上下文（跨会话理解检索）
-- `live-cross-session-session-attach` — 同一个学习活动下的第二个对话应 ATTACH 到已有 Session，而不是新建一个
-- `live-memory-identity-conflict` — 同作用域同身份（缺省 key = content 哈希）重复创建返回 409；显式给不同 key 才能并存
-- `live-memory-global-visible-everywhere` — GLOBAL 记忆对任意空间可见，且不会被空间的同名 scope_key 覆盖
-- `live-memory-scopes-visible` — 同一空间 + 概念下检索时，GLOBAL / SPACE / CONCEPT 三种作用域都应可见
-- `live-memory-scope-isolation` — 带别的 spaceId 检索时只能看到 GLOBAL：SPACE / CONCEPT 记忆不能跨空间泄漏
-- `live-revision-question-exposes-concept` — Bad Case BC-001 回归：用户只是提问、Agent 没有形成判断时，状态也必须从 UNKNOWN 推进到 EXPOSED
-- `live-revision-correction-appends` — 用户先自述（CORRECT）再自我纠正（INCORRECT）时，Revision 只追加不覆盖，状态推进到 MISCONCEPTION
-- `live-verification-no-interrupt-on-first-question` — 首次接触概念且用户在提问时，Agent 只记 ASK_LATER，不创建 TestTask（不打断教学）
 
 ## 指标口径
 

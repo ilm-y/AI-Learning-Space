@@ -8,6 +8,9 @@
 --     mysql -uroot -p ails < schema-dev-reset.sql
 --     mysql -uroot -p ails < schema.sql
 --
+-- 已有库升级不要清库：执行同目录下的 schema-migration-document-rag.sql
+-- （手工、幂等；本脚本的 CREATE TABLE IF NOT EXISTS 不会给已有表加列）。
+--
 -- 核心模型（谁是 source of truth）：
 --     Evidence        append-only，认知判断的原子依据，永不修改、不提供删除
 --     Understanding   当前理解快照（可更新）+ 每次真正变化产生 Revision（历史）
@@ -369,20 +372,49 @@ CREATE TABLE IF NOT EXISTS `test_answer` (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- 模块 14：文档
+--
+-- RAG 相关字段说明：
+--   user_id       冗余 owner，由 learning_space.user_id 回填；归属校验仍以 space 为准
+--   content_hash  原始文件 SHA-256；旧数据无原文件时允许 NULL（不伪造 hash）
+--   deleted_at    软删标记；DELETING / DELETED 状态配合删除向量流程使用
+--
+-- active-only 去重：
+--   active_content_hash 是 STORED 生成列：deleted_at IS NULL 时等于 content_hash，
+--   软删后自动变为 NULL。唯一键建在 (learning_space_id, active_content_hash) 上，
+--   因此：
+--     - 同一 Space 的有效文件仍然唯一；
+--     - 软删记录不再占用 hash，可以重新上传相同内容；
+--     - 多条软删记录、以及 content_hash 为 NULL 的旧记录可以共存。
+--   生成列只服务数据库约束，不映射到实体。
 CREATE TABLE IF NOT EXISTS `document` (
     `id`                BIGINT        NOT NULL AUTO_INCREMENT,
     `learning_space_id` BIGINT        NOT NULL,
+    `user_id`           BIGINT        NOT NULL COMMENT '冗余 owner；由 learning_space.user_id 回填',
+    `content_hash`      CHAR(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '原始文件 SHA-256；旧数据无原文件时为 NULL',
     `name`              VARCHAR(255)  NOT NULL,
     `file_name`         VARCHAR(255)  NOT NULL,
     `storage_uri`       VARCHAR(1024) NOT NULL,
     `file_type`         VARCHAR(64)            DEFAULT NULL,
     `size`              BIGINT                 DEFAULT NULL,
-    `status`            ENUM ('UPLOADING', 'PROCESSING', 'READY', 'FAILED') NOT NULL DEFAULT 'UPLOADING',
+    `status`            ENUM ('UPLOADING', 'PROCESSING', 'READY', 'FAILED', 'DELETING', 'DELETED') NOT NULL DEFAULT 'UPLOADING',
     `parser_version`    VARCHAR(64)            DEFAULT NULL,
+    `chunk_count`       INT           NOT NULL DEFAULT 0,
+    `index_attempts`    INT           NOT NULL DEFAULT 0,
+    `index_error`       VARCHAR(1024)          DEFAULT NULL,
+    `embedding_model`   VARCHAR(128)           DEFAULT NULL,
+    `index_version`     INT           NOT NULL DEFAULT 0,
+    `indexed_at`        DATETIME               DEFAULT NULL,
+    `deleted_at`        DATETIME               DEFAULT NULL COMMENT '软删标记，MyBatis-Plus @TableLogic',
+    `active_content_hash` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin
+        GENERATED ALWAYS AS (CASE WHEN `deleted_at` IS NULL THEN `content_hash` ELSE NULL END) STORED
+        COMMENT '仅未软删记录的 content_hash；用于 active-only 唯一约束',
     `created_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_doc_space_active_hash` (`learning_space_id`, `active_content_hash`),
     KEY `idx_doc_space` (`learning_space_id`),
+    KEY `idx_doc_space_status` (`learning_space_id`, `status`),
+    KEY `idx_doc_user` (`user_id`),
     CONSTRAINT `fk_doc_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 

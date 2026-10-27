@@ -13,8 +13,10 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
+from app.retriever.base import KnowledgeQuery, KnowledgeResult, KnowledgeStatus
 from app.schemas import (
     Concept,
     EvidenceItem,
@@ -23,6 +25,7 @@ from app.schemas import (
     MemoryScopeType,
     MemoryStatus,
     Understanding,
+    UnderstandingRevision,
 )
 
 
@@ -37,6 +40,7 @@ class FixtureRetriever:
         self._memories: list[MemoryItem] = []
         self._knowledge: list[KnowledgeChunk] = []
         self._evidences: list[EvidenceItem] = []
+        self._revisions: list[UnderstandingRevision] = []
         self.space_id: int | None = None
         self.space_name: str = ""
 
@@ -81,16 +85,21 @@ class FixtureRetriever:
         ]
         return related[: self._memory_top_k]
 
-    async def get_knowledge(
-        self, space_id: int, concept_ids: list[int], query: str
-    ) -> list[KnowledgeChunk]:
+    async def get_knowledge(self, query: KnowledgeQuery) -> KnowledgeResult:
         self._ensure_loaded()
-        wanted = set(concept_ids)
+        wanted = set(query.concept_ids)
         chunks = [item for item in self._knowledge if item.concept_id in wanted] if wanted else []
-        # 没有 Concept 命中时按关键词给一点兜底，模拟将来的关键词召回
-        if not chunks and query:
-            chunks = [item for item in self._knowledge if _rough_match(item.content, query)]
-        return chunks[: self._knowledge_top_k]
+        # 没有 Concept 命中时按关键词给一点兜底，模拟真实检索里「问题本身也能召回」。
+        if not chunks and query.question:
+            chunks = [
+                item for item in self._knowledge if _rough_match(item.content, query.question)
+            ]
+        limit = min(query.top_k, self._knowledge_top_k)
+        chunks = chunks[:limit]
+        return KnowledgeResult(
+            chunks=chunks,
+            status=KnowledgeStatus.SUCCESS if chunks else KnowledgeStatus.NO_MATCH,
+        )
 
     async def get_evidences(
         self, user_id: int, concept_ids: list[int], limit: int
@@ -101,6 +110,33 @@ class FixtureRetriever:
         wanted = set(concept_ids)
         items = [item for item in self._evidences if item.concept_id in wanted]
         return items[-limit:] if limit > 0 else []
+
+    async def get_revisions(
+        self, user_id: int, concept_ids: list[int]
+    ) -> dict[int, list[UnderstandingRevision]]:
+        self._ensure_loaded()
+        wanted = set(concept_ids)
+        result: dict[int, list[UnderstandingRevision]] = {}
+        for concept_id in concept_ids:
+            if concept_id not in wanted:
+                continue
+            revisions = [item for item in self._revisions if item.concept_id == concept_id]
+            result[concept_id] = sorted(revisions, key=lambda item: item.revision_no)
+        return result
+
+    async def get_evidence_details(
+        self, user_id: int, concept_ids: list[int], evidence_ids: list[int]
+    ) -> list[EvidenceItem]:
+        self._ensure_loaded()
+        wanted = set(concept_ids)
+        by_id = {item.id: item for item in self._evidences}
+        items = [
+            by_id[evidence_id]
+            for evidence_id in evidence_ids
+            if evidence_id in by_id and by_id[evidence_id].concept_id in wanted
+        ]
+        items.sort(key=lambda item: item.created_at or datetime.min)
+        return items
 
     async def aclose(self) -> None:
         return None
@@ -127,6 +163,9 @@ class FixtureRetriever:
         self._memories = [MemoryItem.model_validate(item) for item in raw.get("memories", [])]
         self._knowledge = [KnowledgeChunk.model_validate(item) for item in raw.get("knowledge", [])]
         self._evidences = [EvidenceItem.model_validate(item) for item in raw.get("evidences", [])]
+        self._revisions = [
+            UnderstandingRevision.model_validate(item) for item in raw.get("revisions", [])
+        ]
         self._loaded = True
 
 

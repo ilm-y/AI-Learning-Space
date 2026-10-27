@@ -66,13 +66,22 @@ public class UnderstandingService {
                                 UnderstandingStatus status) {
 
         static SnapshotView of(LearningUnderstanding understanding) {
+            // MySQL 的 JSON 列在读取时会返回规范化后的文本（对象/数组内部带空格），
+            // 而写入时 JsonUtil 产生的是紧凑文本。直接比较两段字符串会把
+            // 「语义完全相同」误判成变化，于是每次无操作的证据演进都多写一条
+            // 内容一模一样的 Revision。这里先按同一套序列化规则归一化再比较。
             return new SnapshotView(
                     understanding.getSummary(),
-                    understanding.getKnownParts(),
-                    understanding.getMisconceptions(),
-                    understanding.getUncertainParts(),
+                    canonicalStringList(understanding.getKnownParts()),
+                    MisconceptionLifecycle.serialize(
+                            MisconceptionLifecycle.parse(understanding.getMisconceptions())),
+                    canonicalStringList(understanding.getUncertainParts()),
                     understanding.getLatestUserExplanation(),
                     understanding.getStatus());
+        }
+
+        private static String canonicalStringList(String json) {
+            return JsonUtil.fromStringList(JsonUtil.toStringList(json));
         }
     }
 
@@ -162,7 +171,13 @@ public class UnderstandingService {
         EvidenceCorrectness correctness = evidence.getCorrectness();
         if (StringUtils.hasText(observation) && correctness != null) {
             switch (correctness) {
-                case CORRECT -> addDistinct(known, observation);
+                case CORRECT -> {
+                    addDistinct(known, observation);
+                    // 同一表述被后续正确证据确认后，旧的「不确定」必须解除。
+                    // 只移除完全相同的文本 —— 语义近似但措辞不同的条目仍保留，
+                    // 不能因为一条正确证据就把所有不确定项清空。
+                    uncertain.removeIf(item -> Objects.equals(normalize(item), observation));
+                }
                 case PARTIAL -> {
                     addDistinct(known, observation);
                     addDistinct(uncertain, observation);
@@ -225,6 +240,9 @@ public class UnderstandingService {
         List<String> uncertain = new ArrayList<>(JsonUtil.toStringList(understanding.getUncertainParts()));
         proposal.knownParts().forEach(item -> addDistinct(known, item));
         proposal.uncertainParts().forEach(item -> addDistinct(uncertain, item));
+        // 已被 knownParts 明确确认的同一表述，不再同时挂在 uncertainParts 上。
+        // 只按完全相同文本解除，避免把语义相近的其他不确定项一并清掉。
+        uncertain.removeIf(known::contains);
 
         List<Misconception> misconceptions =
                 new ArrayList<>(MisconceptionLifecycle.parse(understanding.getMisconceptions()));
@@ -289,17 +307,26 @@ public class UnderstandingService {
      */
     private ApplyResult persistIfChanged(LearningUnderstanding understanding,
                                          SnapshotView before, Long triggerEvidenceId) {
-        boolean changed = !Objects.equals(before.summary(), understanding.getSummary())
-                || !Objects.equals(before.knownParts(), understanding.getKnownParts())
-                || !Objects.equals(before.misconceptions(), understanding.getMisconceptions())
-                || !Objects.equals(before.uncertainParts(), understanding.getUncertainParts())
-                || !Objects.equals(before.latestUserExplanation(),
-                        understanding.getLatestUserExplanation())
-                || before.status() != understanding.getStatus();
+        // 变更后的快照也必须走同一套归一化：understanding 上的 JSON 字段是从 MySQL
+        // 读出来的（对象/数组内部带空格），而 before 已归一化；直接拿原始值与 before
+        // 比较，仍会把「内容没变」误判成变化，写出内容重复的 Revision。
+        SnapshotView after = SnapshotView.of(understanding);
+        boolean changed = !Objects.equals(before.summary(), after.summary())
+                || !Objects.equals(before.knownParts(), after.knownParts())
+                || !Objects.equals(before.misconceptions(), after.misconceptions())
+                || !Objects.equals(before.uncertainParts(), after.uncertainParts())
+                || !Objects.equals(before.latestUserExplanation(), after.latestUserExplanation())
+                || before.status() != after.status();
         if (!changed) {
             return new ApplyResult(understanding, null);
         }
 
+        // MyBatis-Plus 的 strictUpdateFill 只在字段为 null 时填充。这里的 understanding
+        // 是从库里读出来的，updatedAt 非空，自动填充不会覆盖它；必须显式刷新，否则
+        // listBySpace 按 updatedAt 排序时会一直停在创建时间。
+        // 快照更新时间与本次 Revision 的 createdAt 用同一个值，保证两条记录的时序一致。
+        LocalDateTime changedAt = LocalDateTime.now();
+        understanding.setUpdatedAt(changedAt);
         understandingMapper.updateById(understanding);
 
         UnderstandingRevision revision = new UnderstandingRevision();
@@ -312,6 +339,7 @@ public class UnderstandingService {
         revision.setUserExplanation(understanding.getLatestUserExplanation());
         revision.setStatus(understanding.getStatus());
         revision.setTriggerEvidenceId(triggerEvidenceId);
+        revision.setCreatedAt(changedAt);
         revisionMapper.insert(revision);
 
         understanding.setCurrentRevisionId(revision.getId());
