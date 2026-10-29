@@ -35,7 +35,7 @@ LLM 流，通过 `@SpyBean` 在分析入口/持久化入口做可控阻塞与故
 
 | case_id | 场景 | 实际 | 期望 | 真实依赖 vs 替身 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| SSE-2.1-01 | 正常流顺序与“先落库后 end” | `message.start → delta* → message.end`；end 到达时库中已有 2 条消息（1 USER/1 ASSISTANT），run=COMPLETED；分析被阻塞时 Evidence=0，放行后=1 | 顺序正确、先持久化、后分析 | 真实 HTTP/MySQL/Security；Agent 流为可控替身 | PASS |
+| SSE-2.1-01 | 正常流顺序与“先落库后 end” | `message.start → delta* → message.end`；end 到达时库中已有 2 条消息（1 USER/1 ASSISTANT），run=COMPLETED（**Phase 8 修订：此处的 COMPLETED 是 end 之后轮询观测到的，不代表 end 瞬间已终态；见 §2.1 修订说明**）；分析被阻塞时 Evidence=0，放行后=1 | 顺序正确、先持久化、后分析 | 真实 HTTP/MySQL/Security；Agent 流为可控替身 | PASS |
 | SSE-2.1-02 | 助手消息落库并收到 end 后客户端断开 | 关闭响应体后分析仍进入并写入 1 条 Evidence；重连两次 GET 返回相同 2 条消息；Revision=1 | 断开不取消已提交分析；重连不重复 | 真实 HTTP/MySQL；分析入口受阻 | PASS |
 | SSE-2.1-03 | 助手消息持久化失败 | `message.start → delta* → message.error(code=500,"回复保存失败")`；无 ASSISTANT；run=FAILED；Evidence=0；`analysisDispatchService.dispatch(...)` 从未调用 | 未落库禁止分析 | 真实 HTTP/MySQL；持久化入口故障注入 | PASS |
 | SSE-2.1-04 | LLM 空流 | `message.start → message.error(code=502)`，消息含 `empty_stream`；run=FAILED；无助手消息/Evidence | 可识别终态，不伪装成功 | 真实 HTTP/MySQL；Agent 网关返回空流 | PASS |
@@ -70,6 +70,29 @@ LLM 流，通过 `@SpyBean` 在分析入口/持久化入口做可控阻塞与故
   `text/event-stream` 时仍返回 JSON；
 - `ChatSseIntegrationTest.crossUserConversationIsRejectedBeforePersistence`：
   真实 HTTP 下返回 404，且不写入任何消息。
+
+### 2.1 Phase 8 修订说明（2026-10-29，保留原始观测）
+
+原始报告在 SSE-2.1-01 里写的是「end 到达时 … run=COMPLETED」。Phase 8 复核发现，
+该结论来自 `message.end` 之后的等待/轮询断言，**不能证明事件发出瞬间
+`agent_run` 已经终态**。
+
+用真实 Spring 上下文 + 真实 MySQL 的独立探针（`ChatSseOrderingProbeTest`，
+20 轮，日志 `evaluation/reports/phase8-20261029/ordering-probe.log`）实测：
+
+```text
+P8_ORDER_PROBE rounds=20 observed_at_message_end={RUNNING=20}
+```
+
+当前 `ChatService` 的真实顺序是：助手消息落库 → 发送 `message.end` →
+`finishRun(COMPLETED/TRUNCATED)`。因此：
+
+- **保留的原始观测**：消息确实先落库，`message.end` 之后 run 最终会变成 COMPLETED；
+- **已更正的表述**：`message.end` 不保证 `agent_run` 已终态，该瞬间可以稳定读到 RUNNING；
+- **公开协议**：`backend/README.md` 只承诺事件字段，没有承诺 end 时任务已终态；
+- 是否调整顺序尚未决策，见 `docs/testing/phase8-boundary-review.md` §1.4。
+
+本段不修改原始测试结果和数字，只标记口径修订。
 
 ## 3. 真实 RabbitMQ + MySQL + Worker 端到端（46 项检查）
 
