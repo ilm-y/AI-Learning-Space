@@ -119,6 +119,8 @@ def _apply(op: str, expected: Any, actual: Any) -> tuple[bool, str]:
             return _length(actual) >= expected, ""
         if op == "length_lte":
             return _length(actual) <= expected, ""
+        if op == "gt":
+            return actual > expected, ""
         if op == "gte":
             return actual >= expected, ""
         if op == "lte":

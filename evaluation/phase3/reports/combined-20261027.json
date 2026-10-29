@@ -1,0 +1,303 @@
+{
+  "generatedAt": "2026-10-27",
+  "sourceRuns": [
+    "phase3-baseline-20261027",
+    "phase3-repeats-20261027"
+  ],
+  "independentCases": 10,
+  "runs": 22,
+  "counts": {
+    "PASS": 20,
+    "FAIL": 2,
+    "BLOCKED": 0
+  },
+  "validOutputs": 22,
+  "blockedRuns": 0,
+  "judgeBlockedRuns": 0,
+  "totalLlmCalls": 23,
+  "judgeCalls": 22,
+  "truncatedRuns": 2,
+  "finishReasonDistribution": {
+    "stop": 20,
+    "length": 2
+  },
+  "failureTagCounts": {
+    "UNKNOWN": 2
+  },
+  "dimensionDistribution": {
+    "factual_correctness": {
+      "0": 0,
+      "1": 0,
+      "2": 22,
+      "null": 0
+    },
+    "task_completion": {
+      "0": 0,
+      "1": 0,
+      "2": 22,
+      "null": 0
+    },
+    "historical_evidence_use": {
+      "0": 0,
+      "1": 0,
+      "2": 16,
+      "null": 0
+    },
+    "mastery_calibration": {
+      "0": 0,
+      "1": 0,
+      "2": 16,
+      "null": 0
+    },
+    "uncertainty_citation_honesty": {
+      "0": 0,
+      "1": 0,
+      "2": 22,
+      "null": 0
+    },
+    "no_fabricated_personal_history": {
+      "0": 0,
+      "1": 0,
+      "2": 16,
+      "null": 0
+    }
+  },
+  "perCase": {
+    "A01": {
+      "runs": 4,
+      "hard": {
+        "PASS": 4,
+        "FAIL": 0,
+        "BLOCKED": 0
+      },
+      "chars": [
+        711,
+        965,
+        627,
+        881
+      ],
+      "semanticMeans": [
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "finishReasons": [
+        "stop",
+        "stop",
+        "stop",
+        "stop"
+      ]
+    },
+    "A02": {
+      "runs": 1,
+      "hard": {
+        "PASS": 1,
+        "FAIL": 0,
+        "BLOCKED": 0
+      },
+      "chars": [
+        758
+      ],
+      "semanticMeans": [
+        2.0
+      ],
+      "finishReasons": [
+        "stop"
+      ]
+    },
+    "A03": {
+      "runs": 1,
+      "hard": {
+        "PASS": 1,
+        "FAIL": 0,
+        "BLOCKED": 0
+      },
+      "chars": [
+        496
+      ],
+      "semanticMeans": [
+        2.0
+      ],
+      "finishReasons": [
+        "stop"
+      ]
+    },
+    "A08": {
+      "runs": 1,
+      "hard": {
+        "PASS": 1,
+        "FAIL": 0,
+        "BLOCKED": 0
+      },
+      "chars": [
+        335
+      ],
+      "semanticMeans": [
+        2.0
+      ],
+      "finishReasons": [
+        "stop"
+      ]
+    },
+    "B02": {
+      "runs": 4,
+      "hard": {
+        "PASS": 4,
+        "FAIL": 0,
+        "BLOCKED": 0
+      },
+      "chars": [
+        661,
+        852,
+        680,
+        933
+      ],
+      "semanticMeans": [
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "finishReasons": [
+        "stop",
+        "stop",
+        "stop",
+        "stop"
+      ]
+    },
+    "B05": {
+      "runs": 1,
+      "hard": {
+        "PASS": 0,
+        "FAIL": 1,
+        "BLOCKED": 0
+      },
+      "chars": [
+        1826
+      ],
+      "semanticMeans": [
+        2.0
+      ],
+      "finishReasons": [
+        "length"
+      ]
+    },
+    "D01": {
+      "runs": 1,
+      "hard": {
+        "PASS": 1,
+        "FAIL": 0,
+        "BLOCKED": 0
+      },
+      "chars": [
+        1813
+      ],
+      "semanticMeans": [
+        2.0
+      ],
+      "finishReasons": [
+        "stop"
+      ]
+    },
+    "D09": {
+      "runs": 4,
+      "hard": {
+        "PASS": 4,
+        "FAIL": 0,
+        "BLOCKED": 0
+      },
+      "chars": [
+        588,
+        477,
+        436,
+        578
+      ],
+      "semanticMeans": [
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "finishReasons": [
+        "stop",
+        "stop",
+        "stop",
+        "stop"
+      ]
+    },
+    "E01": {
+      "runs": 4,
+      "hard": {
+        "PASS": 3,
+        "FAIL": 1,
+        "BLOCKED": 0
+      },
+      "chars": [
+        1391,
+        1512,
+        1577,
+        2128
+      ],
+      "semanticMeans": [
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "finishReasons": [
+        "stop",
+        "stop",
+        "length",
+        "stop"
+      ]
+    },
+    "E07": {
+      "runs": 1,
+      "hard": {
+        "PASS": 1,
+        "FAIL": 0,
+        "BLOCKED": 0
+      },
+      "chars": [
+        2115
+      ],
+      "semanticMeans": [
+        2.0
+      ],
+      "finishReasons": [
+        "stop"
+      ]
+    }
+  },
+  "artifacts": [
+    "evaluation/phase3/artifacts/phase3-baseline-20261027/A01-r1.json",
+    "evaluation/phase3/artifacts/phase3-baseline-20261027/A02-r1.json",
+    "evaluation/phase3/artifacts/phase3-baseline-20261027/A03-r1.json",
+    "evaluation/phase3/artifacts/phase3-baseline-20261027/A08-r1.json",
+    "evaluation/phase3/artifacts/phase3-baseline-20261027/B02-r1.json",
+    "evaluation/phase3/artifacts/phase3-baseline-20261027/B05-r1.json",
+    "evaluation/phase3/artifacts/phase3-baseline-20261027/D01-r1.json",
+    "evaluation/phase3/artifacts/phase3-baseline-20261027/D09-r1.json",
+    "evaluation/phase3/artifacts/phase3-baseline-20261027/E01-r1.json",
+    "evaluation/phase3/artifacts/phase3-baseline-20261027/E07-r1.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/A01-r1.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/A01-r2.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/A01-r3.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/B02-r1.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/B02-r2.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/B02-r3.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/D09-r1.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/D09-r2.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/D09-r3.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/E01-r1.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/E01-r2.json",
+    "evaluation/phase3/artifacts/phase3-repeats-20261027/E01-r3.json"
+  ],
+  "analyzedFailureTagCounts": {
+    "UNKNOWN": 2,
+    "CONTEXT_BUDGET": 2,
+    "GUARD_FALSE_POSITIVE": 2
+  },
+  "note": "failureTagCounts 来自 LLM Judge；analyzedFailureTagCounts 来自人工/程序失败分析，二者分别统计。"
+}

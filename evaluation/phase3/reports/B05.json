@@ -1,0 +1,3082 @@
+{
+  "phase": "phase3",
+  "runId": "B05",
+  "mode": "baseline",
+  "generatedAt": "2026-10-28T00:12:57.130481+08:00",
+  "python": "3.10.11",
+  "durationMs": 124382,
+  "fixture": {
+    "users": 2,
+    "spaces": 3,
+    "documents": 5,
+    "userIds": [
+      9001,
+      9002
+    ],
+    "spaceIds": [
+      9101,
+      9104,
+      9102
+    ],
+    "documentNames": [
+      "broken.md",
+      "redis.md",
+      "tcp.md",
+      "tlb.md"
+    ],
+    "nodes": [
+      {
+        "userId": 9001,
+        "spaceId": 9101,
+        "concepts": 3,
+        "documents": 3
+      },
+      {
+        "userId": 9001,
+        "spaceId": 9104,
+        "concepts": 1,
+        "documents": 1
+      },
+      {
+        "userId": 9002,
+        "spaceId": 9102,
+        "concepts": 1,
+        "documents": 1
+      }
+    ]
+  },
+  "definitions": {
+    "independentCases": "去重用例 id；重复运行不增加独立案例",
+    "runs": "每个案例每轮的一次真实 AgentRuntime 调用链",
+    "validOutputs": "回答至少 10 个用户可见字符且非 BLOCKED",
+    "caseStatus": "PASS / FAIL / BLOCKED，由硬断言与截断状态决定",
+    "completionStatus": "COMPLETE / TRUNCATED / EMPTY / ERROR / UNKNOWN，独立于语义得分",
+    "hardAssertions": "程序执行；决定 PASS/FAIL/BLOCKED",
+    "semanticScores": "独立评审模型按用例锚点输出 0/1/2；不等于人工确认"
+  },
+  "independentCases": 10,
+  "caseIds": [
+    "A01",
+    "A02",
+    "A03",
+    "A08",
+    "B02",
+    "B05",
+    "D01",
+    "D09",
+    "E01",
+    "E07"
+  ],
+  "runs": 10,
+  "counts": {
+    "PASS": 9,
+    "FAIL": 1,
+    "BLOCKED": 0
+  },
+  "caseStatusCounts": {
+    "PASS": 9,
+    "FAIL": 1,
+    "BLOCKED": 0
+  },
+  "completionStatusCounts": {
+    "COMPLETE": 10
+  },
+  "hardPassRuns": 9,
+  "validOutputs": 10,
+  "blockedRuns": 0,
+  "judgeBlockedRuns": 0,
+  "truncatedRuns": 0,
+  "incompleteRuns": 0,
+  "finishReasonDistribution": {
+    "stop": 10
+  },
+  "totalLlmCalls": 11,
+  "dimensionDistribution": {
+    "factual_correctness": {
+      "0": 0,
+      "1": 0,
+      "2": 10,
+      "null": 0
+    },
+    "task_completion": {
+      "0": 0,
+      "1": 0,
+      "2": 10,
+      "null": 0
+    },
+    "historical_evidence_use": {
+      "0": 0,
+      "1": 0,
+      "2": 7,
+      "null": 0
+    },
+    "mastery_calibration": {
+      "0": 0,
+      "1": 0,
+      "2": 7,
+      "null": 0
+    },
+    "uncertainty_citation_honesty": {
+      "0": 0,
+      "1": 1,
+      "2": 9,
+      "null": 0
+    },
+    "no_fabricated_personal_history": {
+      "0": 0,
+      "1": 0,
+      "2": 7,
+      "null": 0
+    }
+  },
+  "requiresHumanReview": [
+    "D01"
+  ],
+  "results": [
+    {
+      "caseId": "A01",
+      "runIndex": 1,
+      "title": "历史误区被识别为过去，而不是当前状态",
+      "severity": "P0",
+      "profile": "alice_corrected",
+      "hardStatus": "PASS",
+      "hardReason": "全部硬断言通过",
+      "completionStatus": "COMPLETE",
+      "completion": {
+        "status": "COMPLETE",
+        "finishReason": "stop",
+        "chars": 752,
+        "usableChars": true,
+        "callCount": 1,
+        "note": "最后一次调用以 stop 结束。",
+        "evidence": "chars=752,finishReason=stop"
+      },
+      "checks": [
+        {
+          "path": "llm.classification",
+          "op": "eq",
+          "expected": "REAL_LLM",
+          "actual": "REAL_LLM",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.callEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.outputEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.records[0].httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 20,
+          "actual": 752,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.internalIdLeak",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "isolation.violationCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "run.historyReviewRequested",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.trajectoryRevisionNos",
+          "op": "subset",
+          "expected": [
+            1,
+            2,
+            3
+          ],
+          "actual": [
+            1,
+            2,
+            3,
+            1
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.trajectoryEvidenceIds",
+          "op": "subset",
+          "expected": [
+            1701,
+            1702,
+            1703
+          ],
+          "actual": [
+            1701,
+            1702,
+            1703,
+            1704,
+            1706
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.understandingStatuses",
+          "op": "contains",
+          "expected": "DEMONSTRATED",
+          "actual": [
+            "DEMONSTRATED",
+            "PARTIAL"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "已纠正，历史",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "把 TLB Miss 当成缺页异常",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.falseNoHistoryClaim",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "semantics": {
+        "status": "SCORED",
+        "dimensions": [
+          {
+            "id": "factual_correctness",
+            "applicable": true,
+            "score": 2,
+            "reason": "明确区分 TLB Miss 与缺页，并说明旧误区已纠正、当前已能讲清。"
+          },
+          {
+            "id": "task_completion",
+            "applicable": true,
+            "score": 2,
+            "reason": "指出具体误区（把 TLB Miss 当缺页）及纠正后的正确关系，完成复盘。"
+          },
+          {
+            "id": "historical_evidence_use",
+            "applicable": true,
+            "score": 2,
+            "reason": "时间点与证据内容均与轨迹记录一致，并标注为历史记录。"
+          },
+          {
+            "id": "mastery_calibration",
+            "applicable": true,
+            "score": 2,
+            "reason": "称 TLB 已能讲清，限定在已记录范围；缺页仍标为部分理解。"
+          },
+          {
+            "id": "uncertainty_citation_honesty",
+            "applicable": true,
+            "score": 2,
+            "reason": "明确说明改错原因无记录不补写，引用仅指向提供的 tlb.md。"
+          },
+          {
+            "id": "no_fabricated_personal_history",
+            "applicable": true,
+            "score": 2,
+            "reason": "未补写心理过程或外部帮助，仅陈述记录事实。"
+          }
+        ],
+        "applicableCount": 6,
+        "scoredCount": 6,
+        "mean": 2.0,
+        "min": 2,
+        "zeroDimensions": [],
+        "oneDimensions": [],
+        "unresolvedDimensions": [],
+        "failureTags": [],
+        "overallNotes": "回答准确复盘历史误区，区分历史与当前状态，引用合规，未编造个人经历。",
+        "judge": {
+          "status": "SCORED",
+          "model": "deepseek-chat",
+          "settings": {
+            "temperature": 0.0,
+            "maxTokens": 1200,
+            "timeoutSeconds": 120.0,
+            "maxAttempts": 2,
+            "streaming": false
+          },
+          "promptSha256": "0b8a904c0946eb079bca80f48b683bd718c9cd30f2bf2d3530da901bdd31daf7",
+          "promptChars": 9332,
+          "latencyMs": 1879,
+          "rawResponse": "{\"dimensions\":[{\"id\":\"factual_correctness\",\"applicable\":true,\"score\":2,\"reason\":\"明确区分 TLB Miss 与缺页，并说明旧误区已纠正、当前已能讲清。\"},{\"id\":\"task_completion\",\"applicable\":true,\"score\":2,\"reason\":\"指出具体误区（把 TLB Miss 当缺页）及纠正后的正确关系，完成复盘。\"},{\"id\":\"historical_evidence_use\",\"applicable\":true,\"score\":2,\"reason\":\"时间点与证据内容均与轨迹记录一致，并标注为历史记录。\"},{\"id\":\"mastery_calibration\",\"applicable\":true,\"score\":2,\"reason\":\"称 TLB 已能讲清，限定在已记录范围；缺页仍标为部分理解。\"},{\"id\":\"uncertainty_citation_honesty\",\"applicable\":true,\"score\":2,\"reason\":\"明确说明改错原因无记录不补写，引用仅指向提供的 tlb.md。\"},{\"id\":\"no_fabricated_personal_history\",\"applicable\":true,\"score\":2,\"reason\":\"未补写心理过程或外部帮助，仅陈述记录事实。\"}],\"failureTags\":[],\"overallNotes\":\"回答准确复盘历史误区，区分历史与当前状态，引用合规，未编造个人经历。\"}",
+          "parsed": {
+            "dimensions": [
+              {
+                "id": "factual_correctness",
+                "applicable": true,
+                "score": 2,
+                "reason": "明确区分 TLB Miss 与缺页，并说明旧误区已纠正、当前已能讲清。"
+              },
+              {
+                "id": "task_completion",
+                "applicable": true,
+                "score": 2,
+                "reason": "指出具体误区（把 TLB Miss 当缺页）及纠正后的正确关系，完成复盘。"
+              },
+              {
+                "id": "historical_evidence_use",
+                "applicable": true,
+                "score": 2,
+                "reason": "时间点与证据内容均与轨迹记录一致，并标注为历史记录。"
+              },
+              {
+                "id": "mastery_calibration",
+                "applicable": true,
+                "score": 2,
+                "reason": "称 TLB 已能讲清，限定在已记录范围；缺页仍标为部分理解。"
+              },
+              {
+                "id": "uncertainty_citation_honesty",
+                "applicable": true,
+                "score": 2,
+                "reason": "明确说明改错原因无记录不补写，引用仅指向提供的 tlb.md。"
+              },
+              {
+                "id": "no_fabricated_personal_history",
+                "applicable": true,
+                "score": 2,
+                "reason": "未补写心理过程或外部帮助，仅陈述记录事实。"
+              }
+            ],
+            "failureTags": [],
+            "overallNotes": "回答准确复盘历史误区，区分历史与当前状态，引用合规，未编造个人经历。"
+          },
+          "error": null,
+          "httpStatus": 200,
+          "usage": {
+            "prompt_tokens": 4402,
+            "completion_tokens": 278,
+            "total_tokens": 4680,
+            "prompt_tokens_details": {
+              "cached_tokens": 2560
+            },
+            "prompt_cache_hit_tokens": 2560,
+            "prompt_cache_miss_tokens": 1842
+          },
+          "attempts": 1
+        },
+        "requiresHumanReview": false,
+        "thresholds": {
+          "zero": "核心事实错误、编造证据或违反关键限制",
+          "one": "部分正确但有遗漏/过度推断",
+          "two": "正确、完整、无重要越界"
+        }
+      },
+      "durationMs": 8117,
+      "error": null,
+      "llm": {
+        "classification": "REAL_LLM",
+        "provider": "openai",
+        "model": "deepseek-flash",
+        "callCount": 1,
+        "outputEmitted": true,
+        "httpStatuses": [
+          200
+        ],
+        "finishReasons": [
+          "stop"
+        ],
+        "usage": {
+          "prompt_tokens": 3162,
+          "completion_tokens": 896,
+          "total_tokens": 4058,
+          "prompt_tokens_details": {
+            "cached_tokens": 2944
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 449
+          },
+          "prompt_cache_hit_tokens": 2944,
+          "prompt_cache_miss_tokens": 218
+        },
+        "latencyMs": 5958,
+        "errorType": null,
+        "errorMessage": null,
+        "emptyOutputCalls": 0
+      },
+      "cleanup": {
+        "ok": true,
+        "error": null,
+        "retrieverClosed": true,
+        "mode": "进程内 fixture 深拷贝；执行后 aclose，无持久化副作用。"
+      }
+    },
+    {
+      "caseId": "A02",
+      "runIndex": 1,
+      "title": "当前 Understanding 覆盖旧的冲突状态",
+      "severity": "P0",
+      "profile": "alice_corrected",
+      "hardStatus": "PASS",
+      "hardReason": "全部硬断言通过",
+      "completionStatus": "COMPLETE",
+      "completion": {
+        "status": "COMPLETE",
+        "finishReason": "stop",
+        "chars": 705,
+        "usableChars": true,
+        "callCount": 1,
+        "note": "最后一次调用以 stop 结束。",
+        "evidence": "chars=705,finishReason=stop"
+      },
+      "checks": [
+        {
+          "path": "llm.classification",
+          "op": "eq",
+          "expected": "REAL_LLM",
+          "actual": "REAL_LLM",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.callEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.outputEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.records[0].httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 20,
+          "actual": 705,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.internalIdLeak",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "isolation.violationCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.understandingStatuses",
+          "op": "contains",
+          "expected": "DEMONSTRATED",
+          "actual": [
+            "DEMONSTRATED",
+            "PARTIAL"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "已能讲清",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "已纠正，历史",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "not_contains",
+          "expected": "当前仍存在的误区：把 TLB Miss",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.falseNoHistoryClaim",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "semantics": {
+        "status": "SCORED",
+        "dimensions": [
+          {
+            "id": "factual_correctness",
+            "applicable": true,
+            "score": 2,
+            "reason": "明确说明过去把 TLB Miss 当缺页是误区，现已纠正，并给出当前正确关系。"
+          },
+          {
+            "id": "task_completion",
+            "applicable": true,
+            "score": 2,
+            "reason": "同时回答“之前是不是”和“现在呢”，并说明当前 TLB Miss 不等于缺页。"
+          },
+          {
+            "id": "historical_evidence_use",
+            "applicable": true,
+            "score": 2,
+            "reason": "将旧误区标为历史记录，当前状态依据新的 Understanding 与轨迹版本 3。"
+          },
+          {
+            "id": "mastery_calibration",
+            "applicable": true,
+            "score": 2,
+            "reason": "仅称 TLB 已能讲清，并指出缺页处理流程与置换边界仍不确定，未扩大掌握范围。"
+          },
+          {
+            "id": "uncertainty_citation_honesty",
+            "applicable": true,
+            "score": 2,
+            "reason": "时间线与结论均有状态来源，对改变原因明确表示不推测，引用有效。"
+          },
+          {
+            "id": "no_fabricated_personal_history",
+            "applicable": true,
+            "score": 2,
+            "reason": "只陈述误区与纠正结果，未补写用户如何意识到错误的心理过程。"
+          }
+        ],
+        "applicableCount": 6,
+        "scoredCount": 6,
+        "mean": 2.0,
+        "min": 2,
+        "zeroDimensions": [],
+        "oneDimensions": [],
+        "unresolvedDimensions": [],
+        "failureTags": [],
+        "overallNotes": "回答准确区分历史误区与当前状态，两个时间点均作答，引用与不确定性处理得当，无编造。",
+        "judge": {
+          "status": "SCORED",
+          "model": "deepseek-chat",
+          "settings": {
+            "temperature": 0.0,
+            "maxTokens": 1200,
+            "timeoutSeconds": 120.0,
+            "maxAttempts": 2,
+            "streaming": false
+          },
+          "promptSha256": "3a059d2e203d199a54ea3d0421d431d78e12193388fdfdc40c7b5d4ad3b9b982",
+          "promptChars": 9150,
+          "latencyMs": 1975,
+          "rawResponse": "{\"dimensions\":[{\"id\":\"factual_correctness\",\"applicable\":true,\"score\":2,\"reason\":\"明确说明过去把 TLB Miss 当缺页是误区，现已纠正，并给出当前正确关系。\"},{\"id\":\"task_completion\",\"applicable\":true,\"score\":2,\"reason\":\"同时回答“之前是不是”和“现在呢”，并说明当前 TLB Miss 不等于缺页。\"},{\"id\":\"historical_evidence_use\",\"applicable\":true,\"score\":2,\"reason\":\"将旧误区标为历史记录，当前状态依据新的 Understanding 与轨迹版本 3。\"},{\"id\":\"mastery_calibration\",\"applicable\":true,\"score\":2,\"reason\":\"仅称 TLB 已能讲清，并指出缺页处理流程与置换边界仍不确定，未扩大掌握范围。\"},{\"id\":\"uncertainty_citation_honesty\",\"applicable\":true,\"score\":2,\"reason\":\"时间线与结论均有状态来源，对改变原因明确表示不推测，引用有效。\"},{\"id\":\"no_fabricated_personal_history\",\"applicable\":true,\"score\":2,\"reason\":\"只陈述误区与纠正结果，未补写用户如何意识到错误的心理过程。\"}],\"failureTags\":[],\"overallNotes\":\"回答准确区分历史误区与当前状态，两个时间点均作答，引用与不确定性处理得当，无编造。\"}",
+          "parsed": {
+            "dimensions": [
+              {
+                "id": "factual_correctness",
+                "applicable": true,
+                "score": 2,
+                "reason": "明确说明过去把 TLB Miss 当缺页是误区，现已纠正，并给出当前正确关系。"
+              },
+              {
+                "id": "task_completion",
+                "applicable": true,
+                "score": 2,
+                "reason": "同时回答“之前是不是”和“现在呢”，并说明当前 TLB Miss 不等于缺页。"
+              },
+              {
+                "id": "historical_evidence_use",
+                "applicable": true,
+                "score": 2,
+                "reason": "将旧误区标为历史记录，当前状态依据新的 Understanding 与轨迹版本 3。"
+              },
+              {
+                "id": "mastery_calibration",
+                "applicable": true,
+                "score": 2,
+                "reason": "仅称 TLB 已能讲清，并指出缺页处理流程与置换边界仍不确定，未扩大掌握范围。"
+              },
+              {
+                "id": "uncertainty_citation_honesty",
+                "applicable": true,
+                "score": 2,
+                "reason": "时间线与结论均有状态来源，对改变原因明确表示不推测，引用有效。"
+              },
+              {
+                "id": "no_fabricated_personal_history",
+                "applicable": true,
+                "score": 2,
+                "reason": "只陈述误区与纠正结果，未补写用户如何意识到错误的心理过程。"
+              }
+            ],
+            "failureTags": [],
+            "overallNotes": "回答准确区分历史误区与当前状态，两个时间点均作答，引用与不确定性处理得当，无编造。"
+          },
+          "error": null,
+          "httpStatus": 200,
+          "usage": {
+            "prompt_tokens": 4272,
+            "completion_tokens": 291,
+            "total_tokens": 4563,
+            "prompt_tokens_details": {
+              "cached_tokens": 2560
+            },
+            "prompt_cache_hit_tokens": 2560,
+            "prompt_cache_miss_tokens": 1712
+          },
+          "attempts": 1
+        },
+        "requiresHumanReview": false,
+        "thresholds": {
+          "zero": "核心事实错误、编造证据或违反关键限制",
+          "one": "部分正确但有遗漏/过度推断",
+          "two": "正确、完整、无重要越界"
+        }
+      },
+      "durationMs": 8191,
+      "error": null,
+      "llm": {
+        "classification": "REAL_LLM",
+        "provider": "openai",
+        "model": "deepseek-flash",
+        "callCount": 1,
+        "outputEmitted": true,
+        "httpStatuses": [
+          200
+        ],
+        "finishReasons": [
+          "stop"
+        ],
+        "usage": {
+          "prompt_tokens": 3162,
+          "completion_tokens": 1004,
+          "total_tokens": 4166,
+          "prompt_tokens_details": {
+            "cached_tokens": 2944
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 593
+          },
+          "prompt_cache_hit_tokens": 2944,
+          "prompt_cache_miss_tokens": 218
+        },
+        "latencyMs": 6132,
+        "errorType": null,
+        "errorMessage": null,
+        "emptyOutputCalls": 0
+      },
+      "cleanup": {
+        "ok": true,
+        "error": null,
+        "retrieverClosed": true,
+        "mode": "进程内 fixture 深拷贝；执行后 aclose，无持久化副作用。"
+      }
+    },
+    {
+      "caseId": "A03",
+      "runIndex": 1,
+      "title": "旧 Memory 与当前 Understanding 冲突时的提示",
+      "severity": "P1",
+      "profile": "alice_conflict_memory",
+      "hardStatus": "PASS",
+      "hardReason": "全部硬断言通过",
+      "completionStatus": "COMPLETE",
+      "completion": {
+        "status": "COMPLETE",
+        "finishReason": "stop",
+        "chars": 551,
+        "usableChars": true,
+        "callCount": 1,
+        "note": "最后一次调用以 stop 结束。",
+        "evidence": "chars=551,finishReason=stop"
+      },
+      "checks": [
+        {
+          "path": "llm.classification",
+          "op": "eq",
+          "expected": "REAL_LLM",
+          "actual": "REAL_LLM",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.callEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.outputEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.records[0].httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 20,
+          "actual": 551,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.internalIdLeak",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "isolation.violationCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.understandingStatuses",
+          "op": "contains",
+          "expected": "DEMONSTRATED",
+          "actual": [
+            "DEMONSTRATED"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.memoryIds",
+          "op": "contains",
+          "expected": 1407,
+          "actual": [
+            1401,
+            1402,
+            1403,
+            1407
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "学习状态（历史记录）",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "较早的学习状态记录",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "当前状态已不同",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "semantics": {
+        "status": "SCORED",
+        "dimensions": [
+          {
+            "id": "factual_correctness",
+            "applicable": true,
+            "score": 2,
+            "reason": "明确当前为“能讲清”状态，并说明旧记录较早、与当前不同，未用旧记忆否定当前状态。"
+          },
+          {
+            "id": "task_completion",
+            "applicable": true,
+            "score": 2,
+            "reason": "既回答了当前理解状态，也列出两条旧记忆并解释其历史属性。"
+          },
+          {
+            "id": "historical_evidence_use",
+            "applicable": true,
+            "score": 2,
+            "reason": "区分了当前 Understanding 与旧 Memory，指出旧记录是历史记录且当前状态已不同。"
+          },
+          {
+            "id": "mastery_calibration",
+            "applicable": true,
+            "score": 2,
+            "reason": "按当前 Understanding 判断为已能讲清，并限定掌握范围，未升级为完全掌握。"
+          },
+          {
+            "id": "uncertainty_citation_honesty",
+            "applicable": true,
+            "score": 2,
+            "reason": "说明旧记录较早、与当前不同，并明确不补造中间过程，未虚构细节。"
+          },
+          {
+            "id": "no_fabricated_personal_history",
+            "applicable": true,
+            "score": 2,
+            "reason": "只陈述记录中的旧状态，未编造用户如何误解或纠正的过程。"
+          }
+        ],
+        "applicableCount": 6,
+        "scoredCount": 6,
+        "mean": 2.0,
+        "min": 2,
+        "zeroDimensions": [],
+        "oneDimensions": [],
+        "unresolvedDimensions": [],
+        "failureTags": [],
+        "overallNotes": "回答准确区分当前 Understanding 与历史 Memory，完整回答两个问题，未编造个人历史，符合锚点。",
+        "judge": {
+          "status": "SCORED",
+          "model": "deepseek-chat",
+          "settings": {
+            "temperature": 0.0,
+            "maxTokens": 1200,
+            "timeoutSeconds": 120.0,
+            "maxAttempts": 2,
+            "streaming": false
+          },
+          "promptSha256": "74552fe6820d6a45a3037dc1544ba16427351b747a83276f8bb361415f9ac39d",
+          "promptChars": 6120,
+          "latencyMs": 1929,
+          "rawResponse": "{\"dimensions\":[{\"id\":\"factual_correctness\",\"applicable\":true,\"score\":2,\"reason\":\"明确当前为“能讲清”状态，并说明旧记录较早、与当前不同，未用旧记忆否定当前状态。\"},{\"id\":\"task_completion\",\"applicable\":true,\"score\":2,\"reason\":\"既回答了当前理解状态，也列出两条旧记忆并解释其历史属性。\"},{\"id\":\"historical_evidence_use\",\"applicable\":true,\"score\":2,\"reason\":\"区分了当前 Understanding 与旧 Memory，指出旧记录是历史记录且当前状态已不同。\"},{\"id\":\"mastery_calibration\",\"applicable\":true,\"score\":2,\"reason\":\"按当前 Understanding 判断为已能讲清，并限定掌握范围，未升级为完全掌握。\"},{\"id\":\"uncertainty_citation_honesty\",\"applicable\":true,\"score\":2,\"reason\":\"说明旧记录较早、与当前不同，并明确不补造中间过程，未虚构细节。\"},{\"id\":\"no_fabricated_personal_history\",\"applicable\":true,\"score\":2,\"reason\":\"只陈述记录中的旧状态，未编造用户如何误解或纠正的过程。\"}],\"failureTags\":[],\"overallNotes\":\"回答准确区分当前 Understanding 与历史 Memory，完整回答两个问题，未编造个人历史，符合锚点。\"}",
+          "parsed": {
+            "dimensions": [
+              {
+                "id": "factual_correctness",
+                "applicable": true,
+                "score": 2,
+                "reason": "明确当前为“能讲清”状态，并说明旧记录较早、与当前不同，未用旧记忆否定当前状态。"
+              },
+              {
+                "id": "task_completion",
+                "applicable": true,
+                "score": 2,
+                "reason": "既回答了当前理解状态，也列出两条旧记忆并解释其历史属性。"
+              },
+              {
+                "id": "historical_evidence_use",
+                "applicable": true,
+                "score": 2,
+                "reason": "区分了当前 Understanding 与旧 Memory，指出旧记录是历史记录且当前状态已不同。"
+              },
+              {
+                "id": "mastery_calibration",
+                "applicable": true,
+                "score": 2,
+                "reason": "按当前 Understanding 判断为已能讲清，并限定掌握范围，未升级为完全掌握。"
+              },
+              {
+                "id": "uncertainty_citation_honesty",
+                "applicable": true,
+                "score": 2,
+                "reason": "说明旧记录较早、与当前不同，并明确不补造中间过程，未虚构细节。"
+              },
+              {
+                "id": "no_fabricated_personal_history",
+                "applicable": true,
+                "score": 2,
+                "reason": "只陈述记录中的旧状态，未编造用户如何误解或纠正的过程。"
+              }
+            ],
+            "failureTags": [],
+            "overallNotes": "回答准确区分当前 Understanding 与历史 Memory，完整回答两个问题，未编造个人历史，符合锚点。"
+          },
+          "error": null,
+          "httpStatus": 200,
+          "usage": {
+            "prompt_tokens": 2912,
+            "completion_tokens": 290,
+            "total_tokens": 3202,
+            "prompt_tokens_details": {
+              "cached_tokens": 1664
+            },
+            "prompt_cache_hit_tokens": 1664,
+            "prompt_cache_miss_tokens": 1248
+          },
+          "attempts": 1
+        },
+        "requiresHumanReview": false,
+        "thresholds": {
+          "zero": "核心事实错误、编造证据或违反关键限制",
+          "one": "部分正确但有遗漏/过度推断",
+          "two": "正确、完整、无重要越界"
+        }
+      },
+      "durationMs": 9719,
+      "error": null,
+      "llm": {
+        "classification": "REAL_LLM",
+        "provider": "openai",
+        "model": "deepseek-flash",
+        "callCount": 1,
+        "outputEmitted": true,
+        "httpStatuses": [
+          200
+        ],
+        "finishReasons": [
+          "stop"
+        ],
+        "usage": {
+          "prompt_tokens": 2191,
+          "completion_tokens": 1211,
+          "total_tokens": 3402,
+          "prompt_tokens_details": {
+            "cached_tokens": 2048
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 881
+          },
+          "prompt_cache_hit_tokens": 2048,
+          "prompt_cache_miss_tokens": 143
+        },
+        "latencyMs": 7702,
+        "errorType": null,
+        "errorMessage": null,
+        "emptyOutputCalls": 0
+      },
+      "cleanup": {
+        "ok": true,
+        "error": null,
+        "retrieverClosed": true,
+        "mode": "进程内 fixture 深拷贝；执行后 aclose，无持久化副作用。"
+      }
+    },
+    {
+      "caseId": "A08",
+      "runIndex": 1,
+      "title": "空历史时不得编造过去",
+      "severity": "P0",
+      "profile": "alice_empty_history",
+      "hardStatus": "PASS",
+      "hardReason": "全部硬断言通过",
+      "completionStatus": "COMPLETE",
+      "completion": {
+        "status": "COMPLETE",
+        "finishReason": "stop",
+        "chars": 334,
+        "usableChars": true,
+        "callCount": 1,
+        "note": "最后一次调用以 stop 结束。",
+        "evidence": "chars=334,finishReason=stop"
+      },
+      "checks": [
+        {
+          "path": "llm.classification",
+          "op": "eq",
+          "expected": "REAL_LLM",
+          "actual": "REAL_LLM",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.callEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.outputEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.records[0].httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 20,
+          "actual": 334,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.internalIdLeak",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "isolation.violationCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "run.historyReviewRequested",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.trajectoryConcepts",
+          "op": "length",
+          "expected": 0,
+          "actual": [],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.understandingIds",
+          "op": "length",
+          "expected": 0,
+          "actual": [],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.knowledgeStatus",
+          "op": "eq",
+          "expected": "NO_VALID_DOCUMENTS",
+          "actual": "NO_VALID_DOCUMENTS",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "本次没有检索到任何历史认知记录",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.text",
+          "op": "not_contains",
+          "expected": "你以前一直",
+          "actual": "关于「之前是否学过 TLB、哪里搞错了」，这一轮我这边没有看到任何可核对的历史记录：既没有你过去的回答、批注，也没有旧版本或测评轨迹。因此我需要如实说明：\n\n- 我无法确认你以前是否学过 TLB，也无法确认你以前在哪一步出过错；\n- 同样，我不能反过来断言「你没学过」或「你以前没犯过这个错误」——记录为空只代表这次没有…",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "semantics": {
+        "status": "SCORED",
+        "dimensions": [
+          {
+            "id": "factual_correctness",
+            "applicable": true,
+            "score": 2,
+            "reason": "明确说明没有可见历史记录，无法判断过去是否学过或出错，未作任何断言。"
+          },
+          {
+            "id": "task_completion",
+            "applicable": true,
+            "score": 2,
+            "reason": "正面回应两个问题：无法确认是否学过、无法确认哪里出错，并说明记录为空。"
+          },
+          {
+            "id": "historical_evidence_use",
+            "applicable": true,
+            "score": 2,
+            "reason": "以没有回答、批注、旧版本或测评轨迹为依据拒绝推断，符合无历史事实。"
+          },
+          {
+            "id": "mastery_calibration",
+            "applicable": true,
+            "score": 2,
+            "reason": "未推断掌握水平，仅说明无法确认过去学习情况，未下掌握结论。"
+          },
+          {
+            "id": "uncertainty_citation_honesty",
+            "applicable": true,
+            "score": 2,
+            "reason": "清楚区分记录为空与未发生，明确不能反推“没学过”或“没犯错”。"
+          },
+          {
+            "id": "no_fabricated_personal_history",
+            "applicable": true,
+            "score": 2,
+            "reason": "未编造任何学习经历、错误或外部帮助，仅提出可从头讲解。"
+          }
+        ],
+        "applicableCount": 6,
+        "scoredCount": 6,
+        "mean": 2.0,
+        "min": 2,
+        "zeroDimensions": [],
+        "oneDimensions": [],
+        "unresolvedDimensions": [],
+        "failureTags": [],
+        "overallNotes": "回答准确遵循 no-history 路径，明确记录缺失、拒绝推断个人历史，并诚实说明无可用资料，无越界。",
+        "judge": {
+          "status": "SCORED",
+          "model": "deepseek-chat",
+          "settings": {
+            "temperature": 0.0,
+            "maxTokens": 1200,
+            "timeoutSeconds": 120.0,
+            "maxAttempts": 2,
+            "streaming": false
+          },
+          "promptSha256": "11081891650cbadd0cac398cec1d3a51cfbce090ed044043ed6bf024f0c0299a",
+          "promptChars": 4430,
+          "latencyMs": 2328,
+          "rawResponse": "{\"dimensions\":[{\"id\":\"factual_correctness\",\"applicable\":true,\"score\":2,\"reason\":\"明确说明没有可见历史记录，无法判断过去是否学过或出错，未作任何断言。\"},{\"id\":\"task_completion\",\"applicable\":true,\"score\":2,\"reason\":\"正面回应两个问题：无法确认是否学过、无法确认哪里出错，并说明记录为空。\"},{\"id\":\"historical_evidence_use\",\"applicable\":true,\"score\":2,\"reason\":\"以没有回答、批注、旧版本或测评轨迹为依据拒绝推断，符合无历史事实。\"},{\"id\":\"mastery_calibration\",\"applicable\":true,\"score\":2,\"reason\":\"未推断掌握水平，仅说明无法确认过去学习情况，未下掌握结论。\"},{\"id\":\"uncertainty_citation_honesty\",\"applicable\":true,\"score\":2,\"reason\":\"清楚区分记录为空与未发生，明确不能反推“没学过”或“没犯错”。\"},{\"id\":\"no_fabricated_personal_history\",\"applicable\":true,\"score\":2,\"reason\":\"未编造任何学习经历、错误或外部帮助，仅提出可从头讲解。\"}],\"failureTags\":[],\"overallNotes\":\"回答准确遵循 no-history 路径，明确记录缺失、拒绝推断个人历史，并诚实说明无可用资料，无越界。\"}",
+          "parsed": {
+            "dimensions": [
+              {
+                "id": "factual_correctness",
+                "applicable": true,
+                "score": 2,
+                "reason": "明确说明没有可见历史记录，无法判断过去是否学过或出错，未作任何断言。"
+              },
+              {
+                "id": "task_completion",
+                "applicable": true,
+                "score": 2,
+                "reason": "正面回应两个问题：无法确认是否学过、无法确认哪里出错，并说明记录为空。"
+              },
+              {
+                "id": "historical_evidence_use",
+                "applicable": true,
+                "score": 2,
+                "reason": "以没有回答、批注、旧版本或测评轨迹为依据拒绝推断，符合无历史事实。"
+              },
+              {
+                "id": "mastery_calibration",
+                "applicable": true,
+                "score": 2,
+                "reason": "未推断掌握水平，仅说明无法确认过去学习情况，未下掌握结论。"
+              },
+              {
+                "id": "uncertainty_citation_honesty",
+                "applicable": true,
+                "score": 2,
+                "reason": "清楚区分记录为空与未发生，明确不能反推“没学过”或“没犯错”。"
+              },
+              {
+                "id": "no_fabricated_personal_history",
+                "applicable": true,
+                "score": 2,
+                "reason": "未编造任何学习经历、错误或外部帮助，仅提出可从头讲解。"
+              }
+            ],
+            "failureTags": [],
+            "overallNotes": "回答准确遵循 no-history 路径，明确记录缺失、拒绝推断个人历史，并诚实说明无可用资料，无越界。"
+          },
+          "error": null,
+          "httpStatus": 200,
+          "usage": {
+            "prompt_tokens": 2035,
+            "completion_tokens": 286,
+            "total_tokens": 2321,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 1139
+          },
+          "attempts": 1
+        },
+        "requiresHumanReview": false,
+        "thresholds": {
+          "zero": "核心事实错误、编造证据或违反关键限制",
+          "one": "部分正确但有遗漏/过度推断",
+          "two": "正确、完整、无重要越界"
+        }
+      },
+      "durationMs": 5627,
+      "error": null,
+      "llm": {
+        "classification": "REAL_LLM",
+        "provider": "openai",
+        "model": "deepseek-flash",
+        "callCount": 1,
+        "outputEmitted": true,
+        "httpStatuses": [
+          200
+        ],
+        "finishReasons": [
+          "stop"
+        ],
+        "usage": {
+          "prompt_tokens": 1584,
+          "completion_tokens": 343,
+          "total_tokens": 1927,
+          "prompt_tokens_details": {
+            "cached_tokens": 1408
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 152
+          },
+          "prompt_cache_hit_tokens": 1408,
+          "prompt_cache_miss_tokens": 176
+        },
+        "latencyMs": 3219,
+        "errorType": null,
+        "errorMessage": null,
+        "emptyOutputCalls": 0
+      },
+      "cleanup": {
+        "ok": true,
+        "error": null,
+        "retrieverClosed": true,
+        "mode": "进程内 fixture 深拷贝；执行后 aclose，无持久化副作用。"
+      }
+    },
+    {
+      "caseId": "B02",
+      "runIndex": 1,
+      "title": "复盘回答不得补写心理过程，违规时重生成或确定性回退",
+      "severity": "P0",
+      "profile": "alice_corrected",
+      "hardStatus": "PASS",
+      "hardReason": "全部硬断言通过",
+      "completionStatus": "COMPLETE",
+      "completion": {
+        "status": "COMPLETE",
+        "finishReason": "stop",
+        "chars": 625,
+        "usableChars": true,
+        "callCount": 2,
+        "note": "最后一次调用以 stop 结束。",
+        "evidence": "chars=625,finishReason=stop"
+      },
+      "checks": [
+        {
+          "path": "llm.classification",
+          "op": "eq",
+          "expected": "REAL_LLM",
+          "actual": "REAL_LLM",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.callEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.outputEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.records[0].httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 20,
+          "actual": 625,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.internalIdLeak",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "isolation.violationCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.trajectoryEvidenceIds",
+          "op": "subset",
+          "expected": [
+            1701,
+            1702,
+            1703
+          ],
+          "actual": [
+            1701,
+            1702,
+            1703,
+            1704
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "已纠正，历史",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "把 TLB Miss 当成缺页异常",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.text",
+          "op": "not_contains",
+          "expected": "自己推导",
+          "actual": "记录里能核对的部分是这样的：\n\n- **2026-10-01 10:00**：你当时的原话是「我认为 TLB Miss 就是缺页，需要从磁盘换入页面。」这一次记录的状态是「存在误区」，误区内容记为「把 TLB Miss 当成缺页异常」。\n- **2026-10-02 09:00**：同一误区在版本 2 中仍标为存在。同…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.text",
+          "op": "not_contains",
+          "expected": "突然想通",
+          "actual": "记录里能核对的部分是这样的：\n\n- **2026-10-01 10:00**：你当时的原话是「我认为 TLB Miss 就是缺页，需要从磁盘换入页面。」这一次记录的状态是「存在误区」，误区内容记为「把 TLB Miss 当成缺页异常」。\n- **2026-10-02 09:00**：同一误区在版本 2 中仍标为存在。同…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.text",
+          "op": "not_contains",
+          "expected": "独立完成",
+          "actual": "记录里能核对的部分是这样的：\n\n- **2026-10-01 10:00**：你当时的原话是「我认为 TLB Miss 就是缺页，需要从磁盘换入页面。」这一次记录的状态是「存在误区」，误区内容记为「把 TLB Miss 当成缺页异常」。\n- **2026-10-02 09:00**：同一误区在版本 2 中仍标为存在。同…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.text",
+          "op": "matches",
+          "expected": "(?i)TLB",
+          "actual": "记录里能核对的部分是这样的：\n\n- **2026-10-01 10:00**：你当时的原话是「我认为 TLB Miss 就是缺页，需要从磁盘换入页面。」这一次记录的状态是「存在误区」，误区内容记为「把 TLB Miss 当成缺页异常」。\n- **2026-10-02 09:00**：同一误区在版本 2 中仍标为存在。同…",
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "semantics": {
+        "status": "SCORED",
+        "dimensions": [
+          {
+            "id": "factual_correctness",
+            "applicable": true,
+            "score": 2,
+            "reason": "准确指出旧误区为把TLB Miss当缺页，并说明TLB Miss后仍需查页表、页不在内存才缺页，关系完整。"
+          },
+          {
+            "id": "task_completion",
+            "applicable": true,
+            "score": 2,
+            "reason": "按时间线指出具体误区原话，并说明纠正后的正确关系，完成复盘。"
+          },
+          {
+            "id": "historical_evidence_use",
+            "applicable": true,
+            "score": 2,
+            "reason": "复盘内容均对应给定轨迹与证据，未补写记录外细节，并明确说明变化原因无法确认。"
+          },
+          {
+            "id": "mastery_calibration",
+            "applicable": true,
+            "score": 2,
+            "reason": "说明当前状态为已能讲清、误区不再活跃，未夸大或贬低。"
+          },
+          {
+            "id": "uncertainty_citation_honesty",
+            "applicable": true,
+            "score": 2,
+            "reason": "明确区分记录内容与无法确认的部分，引用资料标注有效。"
+          },
+          {
+            "id": "no_fabricated_personal_history",
+            "applicable": true,
+            "score": 2,
+            "reason": "最终回答未出现自己发现、突然想通等未记录心理过程。"
+          }
+        ],
+        "applicableCount": 6,
+        "scoredCount": 6,
+        "mean": 2.0,
+        "min": 2,
+        "zeroDimensions": [],
+        "oneDimensions": [],
+        "unresolvedDimensions": [],
+        "failureTags": [],
+        "overallNotes": "回答事实准确、复盘具体，历史证据使用克制，未补写心理过程，当前掌握状态表述适度。",
+        "judge": {
+          "status": "SCORED",
+          "model": "deepseek-chat",
+          "settings": {
+            "temperature": 0.0,
+            "maxTokens": 1200,
+            "timeoutSeconds": 120.0,
+            "maxAttempts": 2,
+            "streaming": false
+          },
+          "promptSha256": "a489667f21e53c516d5c9685d5bae797f290dfb7bda5793ecb53082962f95b71",
+          "promptChars": 8139,
+          "latencyMs": 2275,
+          "rawResponse": "{\"dimensions\":[{\"id\":\"factual_correctness\",\"applicable\":true,\"score\":2,\"reason\":\"准确指出旧误区为把TLB Miss当缺页，并说明TLB Miss后仍需查页表、页不在内存才缺页，关系完整。\"},{\"id\":\"task_completion\",\"applicable\":true,\"score\":2,\"reason\":\"按时间线指出具体误区原话，并说明纠正后的正确关系，完成复盘。\"},{\"id\":\"historical_evidence_use\",\"applicable\":true,\"score\":2,\"reason\":\"复盘内容均对应给定轨迹与证据，未补写记录外细节，并明确说明变化原因无法确认。\"},{\"id\":\"mastery_calibration\",\"applicable\":true,\"score\":2,\"reason\":\"说明当前状态为已能讲清、误区不再活跃，未夸大或贬低。\"},{\"id\":\"uncertainty_citation_honesty\",\"applicable\":true,\"score\":2,\"reason\":\"明确区分记录内容与无法确认的部分，引用资料标注有效。\"},{\"id\":\"no_fabricated_personal_history\",\"applicable\":true,\"score\":2,\"reason\":\"最终回答未出现自己发现、突然想通等未记录心理过程。\"}],\"failureTags\":[],\"overallNotes\":\"回答事实准确、复盘具体，历史证据使用克制，未补写心理过程，当前掌握状态表述适度。\"}",
+          "parsed": {
+            "dimensions": [
+              {
+                "id": "factual_correctness",
+                "applicable": true,
+                "score": 2,
+                "reason": "准确指出旧误区为把TLB Miss当缺页，并说明TLB Miss后仍需查页表、页不在内存才缺页，关系完整。"
+              },
+              {
+                "id": "task_completion",
+                "applicable": true,
+                "score": 2,
+                "reason": "按时间线指出具体误区原话，并说明纠正后的正确关系，完成复盘。"
+              },
+              {
+                "id": "historical_evidence_use",
+                "applicable": true,
+                "score": 2,
+                "reason": "复盘内容均对应给定轨迹与证据，未补写记录外细节，并明确说明变化原因无法确认。"
+              },
+              {
+                "id": "mastery_calibration",
+                "applicable": true,
+                "score": 2,
+                "reason": "说明当前状态为已能讲清、误区不再活跃，未夸大或贬低。"
+              },
+              {
+                "id": "uncertainty_citation_honesty",
+                "applicable": true,
+                "score": 2,
+                "reason": "明确区分记录内容与无法确认的部分，引用资料标注有效。"
+              },
+              {
+                "id": "no_fabricated_personal_history",
+                "applicable": true,
+                "score": 2,
+                "reason": "最终回答未出现自己发现、突然想通等未记录心理过程。"
+              }
+            ],
+            "failureTags": [],
+            "overallNotes": "回答事实准确、复盘具体，历史证据使用克制，未补写心理过程，当前掌握状态表述适度。"
+          },
+          "error": null,
+          "httpStatus": 200,
+          "usage": {
+            "prompt_tokens": 3768,
+            "completion_tokens": 289,
+            "total_tokens": 4057,
+            "prompt_tokens_details": {
+              "cached_tokens": 2048
+            },
+            "prompt_cache_hit_tokens": 2048,
+            "prompt_cache_miss_tokens": 1720
+          },
+          "attempts": 1
+        },
+        "requiresHumanReview": false,
+        "thresholds": {
+          "zero": "核心事实错误、编造证据或违反关键限制",
+          "one": "部分正确但有遗漏/过度推断",
+          "two": "正确、完整、无重要越界"
+        }
+      },
+      "durationMs": 15209,
+      "error": null,
+      "llm": {
+        "classification": "REAL_LLM",
+        "provider": "openai",
+        "model": "deepseek-flash",
+        "callCount": 2,
+        "outputEmitted": true,
+        "httpStatuses": [
+          200,
+          200
+        ],
+        "finishReasons": [
+          "stop",
+          "stop"
+        ],
+        "usage": {
+          "prompt_tokens": 2777,
+          "completion_tokens": 916,
+          "total_tokens": 3693,
+          "prompt_tokens_details": {
+            "cached_tokens": 2560
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 508
+          },
+          "prompt_cache_hit_tokens": 2560,
+          "prompt_cache_miss_tokens": 217
+        },
+        "latencyMs": 5482,
+        "errorType": null,
+        "errorMessage": null,
+        "emptyOutputCalls": 0
+      },
+      "cleanup": {
+        "ok": true,
+        "error": null,
+        "retrieverClosed": true,
+        "mode": "进程内 fixture 深拷贝；执行后 aclose，无持久化副作用。"
+      }
+    },
+    {
+      "caseId": "B05",
+      "runIndex": 1,
+      "title": "没有知识命中时不得说成「资料中不存在」",
+      "severity": "P0",
+      "profile": "alice_no_match",
+      "hardStatus": "PASS",
+      "hardReason": "全部硬断言通过",
+      "completionStatus": "COMPLETE",
+      "completion": {
+        "status": "COMPLETE",
+        "finishReason": "stop",
+        "chars": 1918,
+        "usableChars": true,
+        "callCount": 1,
+        "note": "最后一次调用以 stop 结束。",
+        "evidence": "chars=1918,finishReason=stop"
+      },
+      "checks": [
+        {
+          "path": "llm.classification",
+          "op": "eq",
+          "expected": "REAL_LLM",
+          "actual": "REAL_LLM",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.callEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.outputEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.records[0].httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 20,
+          "actual": 1918,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.internalIdLeak",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "isolation.violationCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.knowledgeStatus",
+          "op": "eq",
+          "expected": "NO_MATCH",
+          "actual": "NO_MATCH",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.knowledgeChunkCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.text",
+          "op": "not_contains",
+          "expected": "资料中不存在",
+          "actual": "本轮上传资料里没有检索到可以直接支撑这个问题的片段，所以下面讲的是通用知识，不是从你上传的文档里来的。\n\n先把结论摆在前面：**TLB Miss 和缺页要看两个不同的来源**：一个来自缓存查找，一个来自页表内容。你之前说的「TLB Miss 就要去磁盘换页」，问题出在中间少走了一步。\n\n## 你的推理在哪一步出现了偏差…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.text",
+          "op": "not_contains",
+          "expected": "没有这个资料",
+          "actual": "本轮上传资料里没有检索到可以直接支撑这个问题的片段，所以下面讲的是通用知识，不是从你上传的文档里来的。\n\n先把结论摆在前面：**TLB Miss 和缺页要看两个不同的来源**：一个来自缓存查找，一个来自页表内容。你之前说的「TLB Miss 就要去磁盘换页」，问题出在中间少走了一步。\n\n## 你的推理在哪一步出现了偏差…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.evidenceGuard.status",
+          "op": "eq",
+          "expected": "NO_MATCH",
+          "actual": "NO_MATCH",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.evidenceGuard.finalDiscloses",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.evidenceGuard.duplicateNotice",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.evidenceGuard.addedOrDisclosed",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "semantics": {
+        "status": "SCORED",
+        "dimensions": [
+          {
+            "id": "factual_correctness",
+            "applicable": true,
+            "score": 2,
+            "reason": "正确说明 TLB 是页表项缓存、缺页是页不在内存，并明确区分 TLB Miss 与缺页，因果链清晰。"
+          },
+          {
+            "id": "task_completion",
+            "applicable": true,
+            "score": 2,
+            "reason": "给出三层因果链、地址翻译图与缺页处理分支，清楚解释两者区别及必要因果。"
+          },
+          {
+            "id": "historical_evidence_use",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          },
+          {
+            "id": "mastery_calibration",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          },
+          {
+            "id": "uncertainty_citation_honesty",
+            "applicable": true,
+            "score": 2,
+            "reason": "开头明确限定“本轮上传资料里没有检索到”，并声明下面为通用知识，未说资料中不存在。"
+          },
+          {
+            "id": "no_fabricated_personal_history",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          }
+        ],
+        "applicableCount": 3,
+        "scoredCount": 3,
+        "mean": 2.0,
+        "min": 2,
+        "zeroDimensions": [],
+        "oneDimensions": [],
+        "unresolvedDimensions": [],
+        "failureTags": [],
+        "overallNotes": "回答事实正确、区别讲清，且诚实限定本轮未命中资料并区分通用知识，无编造引用。",
+        "judge": {
+          "status": "SCORED",
+          "model": "deepseek-chat",
+          "settings": {
+            "temperature": 0.0,
+            "maxTokens": 1200,
+            "timeoutSeconds": 120.0,
+            "maxAttempts": 2,
+            "streaming": false
+          },
+          "promptSha256": "c51235d2309ec4ce9f80ac5ecaa96c4a6a87ab8e64b8ac03a0791d008c69a407",
+          "promptChars": 7641,
+          "latencyMs": 1672,
+          "rawResponse": "{\"dimensions\":[{\"id\":\"factual_correctness\",\"applicable\":true,\"score\":2,\"reason\":\"正确说明 TLB 是页表项缓存、缺页是页不在内存，并明确区分 TLB Miss 与缺页，因果链清晰。\"},{\"id\":\"task_completion\",\"applicable\":true,\"score\":2,\"reason\":\"给出三层因果链、地址翻译图与缺页处理分支，清楚解释两者区别及必要因果。\"},{\"id\":\"historical_evidence_use\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"},{\"id\":\"mastery_calibration\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"},{\"id\":\"uncertainty_citation_honesty\",\"applicable\":true,\"score\":2,\"reason\":\"开头明确限定“本轮上传资料里没有检索到”，并声明下面为通用知识，未说资料中不存在。\"},{\"id\":\"no_fabricated_personal_history\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"}],\"failureTags\":[],\"overallNotes\":\"回答事实正确、区别讲清，且诚实限定本轮未命中资料并区分通用知识，无编造引用。\"}",
+          "parsed": {
+            "dimensions": [
+              {
+                "id": "factual_correctness",
+                "applicable": true,
+                "score": 2,
+                "reason": "正确说明 TLB 是页表项缓存、缺页是页不在内存，并明确区分 TLB Miss 与缺页，因果链清晰。"
+              },
+              {
+                "id": "task_completion",
+                "applicable": true,
+                "score": 2,
+                "reason": "给出三层因果链、地址翻译图与缺页处理分支，清楚解释两者区别及必要因果。"
+              },
+              {
+                "id": "historical_evidence_use",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              },
+              {
+                "id": "mastery_calibration",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              },
+              {
+                "id": "uncertainty_citation_honesty",
+                "applicable": true,
+                "score": 2,
+                "reason": "开头明确限定“本轮上传资料里没有检索到”，并声明下面为通用知识，未说资料中不存在。"
+              },
+              {
+                "id": "no_fabricated_personal_history",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              }
+            ],
+            "failureTags": [],
+            "overallNotes": "回答事实正确、区别讲清，且诚实限定本轮未命中资料并区分通用知识，无编造引用。"
+          },
+          "error": null,
+          "httpStatus": 200,
+          "usage": {
+            "prompt_tokens": 3806,
+            "completion_tokens": 252,
+            "total_tokens": 4058,
+            "prompt_tokens_details": {
+              "cached_tokens": 1792
+            },
+            "prompt_cache_hit_tokens": 1792,
+            "prompt_cache_miss_tokens": 2014
+          },
+          "attempts": 1
+        },
+        "requiresHumanReview": false,
+        "thresholds": {
+          "zero": "核心事实错误、编造证据或违反关键限制",
+          "one": "部分正确但有遗漏/过度推断",
+          "two": "正确、完整、无重要越界"
+        }
+      },
+      "durationMs": 15575,
+      "error": null,
+      "llm": {
+        "classification": "REAL_LLM",
+        "provider": "openai",
+        "model": "deepseek-flash",
+        "callCount": 1,
+        "outputEmitted": true,
+        "httpStatuses": [
+          200
+        ],
+        "finishReasons": [
+          "stop"
+        ],
+        "usage": {
+          "prompt_tokens": 2418,
+          "completion_tokens": 1993,
+          "total_tokens": 4411,
+          "prompt_tokens_details": {
+            "cached_tokens": 2176
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 911
+          },
+          "prompt_cache_hit_tokens": 2176,
+          "prompt_cache_miss_tokens": 242
+        },
+        "latencyMs": 13820,
+        "errorType": null,
+        "errorMessage": null,
+        "emptyOutputCalls": 0
+      },
+      "cleanup": {
+        "ok": true,
+        "error": null,
+        "retrieverClosed": true,
+        "mode": "进程内 fixture 深拷贝；执行后 aclose，无持久化副作用。"
+      }
+    },
+    {
+      "caseId": "D01",
+      "runIndex": 1,
+      "title": "READY 文档命中后可产生合法引用",
+      "severity": "P0",
+      "profile": "alice_citation",
+      "hardStatus": "FAIL",
+      "hardReason": "未通过：answer.citations.malformedCount eq 0（实际 2）；answer.citations.syntaxValid eq True（实际 False）",
+      "completionStatus": "COMPLETE",
+      "completion": {
+        "status": "COMPLETE",
+        "finishReason": "stop",
+        "chars": 1933,
+        "usableChars": true,
+        "callCount": 1,
+        "note": "最后一次调用以 stop 结束。",
+        "evidence": "chars=1933,finishReason=stop"
+      },
+      "checks": [
+        {
+          "path": "llm.classification",
+          "op": "eq",
+          "expected": "REAL_LLM",
+          "actual": "REAL_LLM",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.callEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.outputEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.records[0].httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 20,
+          "actual": 1933,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.internalIdLeak",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "isolation.violationCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.knowledgeStatus",
+          "op": "eq",
+          "expected": "SUCCESS",
+          "actual": "SUCCESS",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.knowledgeChunkIds",
+          "op": "subset",
+          "expected": [
+            1501,
+            1502
+          ],
+          "actual": [
+            1501,
+            1502
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.citations.valid",
+          "op": "gte",
+          "expected": 1,
+          "actual": 2,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.citations.invalid",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.citations.citations[0].documentName",
+          "op": "eq",
+          "expected": "tlb.md",
+          "actual": "tlb.md",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.citations.citations[0].lexicalSupport",
+          "op": "ne",
+          "expected": "none",
+          "actual": "strong",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.citations.malformedCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 2,
+          "passed": false,
+          "message": ""
+        },
+        {
+          "path": "answer.citations.syntaxValid",
+          "op": "eq",
+          "expected": true,
+          "actual": false,
+          "passed": false,
+          "message": ""
+        }
+      ],
+      "semantics": {
+        "status": "SCORED",
+        "dimensions": [
+          {
+            "id": "factual_correctness",
+            "applicable": true,
+            "score": 2,
+            "reason": "明确说明 TLB Miss 后仍需查页表，只有页表项表明页不在内存才缺页，并给出因果顺序，符合锚点。"
+          },
+          {
+            "id": "task_completion",
+            "applicable": true,
+            "score": 2,
+            "reason": "完整解释区别，并给出两条合法引用，引用标签与提供片段一致。"
+          },
+          {
+            "id": "historical_evidence_use",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          },
+          {
+            "id": "mastery_calibration",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          },
+          {
+            "id": "uncertainty_citation_honesty",
+            "applicable": true,
+            "score": 2,
+            "reason": "引用均来自 tlb.md 实际片段，句子有片段支持，未编造文件或序号。"
+          },
+          {
+            "id": "no_fabricated_personal_history",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          }
+        ],
+        "applicableCount": 3,
+        "scoredCount": 3,
+        "mean": 2.0,
+        "min": 2,
+        "zeroDimensions": [],
+        "oneDimensions": [],
+        "unresolvedDimensions": [],
+        "failureTags": [
+          "UNKNOWN"
+        ],
+        "overallNotes": "回答事实正确、引用合法、任务完成；流程图中的 malformed 标签属格式瑕疵，不影响语义评分。",
+        "judge": {
+          "status": "SCORED",
+          "model": "deepseek-chat",
+          "settings": {
+            "temperature": 0.0,
+            "maxTokens": 1200,
+            "timeoutSeconds": 120.0,
+            "maxAttempts": 2,
+            "streaming": false
+          },
+          "promptSha256": "34f542e0279508e1b17870b06e3ca05ffb45a0ba87d006787d04d164306dcaaa",
+          "promptChars": 9469,
+          "latencyMs": 1688,
+          "rawResponse": "{\"dimensions\":[{\"id\":\"factual_correctness\",\"applicable\":true,\"score\":2,\"reason\":\"明确说明 TLB Miss 后仍需查页表，只有页表项表明页不在内存才缺页，并给出因果顺序，符合锚点。\"},{\"id\":\"task_completion\",\"applicable\":true,\"score\":2,\"reason\":\"完整解释区别，并给出两条合法引用，引用标签与提供片段一致。\"},{\"id\":\"historical_evidence_use\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"},{\"id\":\"mastery_calibration\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"},{\"id\":\"uncertainty_citation_honesty\",\"applicable\":true,\"score\":2,\"reason\":\"引用均来自 tlb.md 实际片段，句子有片段支持，未编造文件或序号。\"},{\"id\":\"no_fabricated_personal_history\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"}],\"failureTags\":[],\"overallNotes\":\"回答事实正确、引用合法、任务完成；流程图中的 malformed 标签属格式瑕疵，不影响语义评分。\"}",
+          "parsed": {
+            "dimensions": [
+              {
+                "id": "factual_correctness",
+                "applicable": true,
+                "score": 2,
+                "reason": "明确说明 TLB Miss 后仍需查页表，只有页表项表明页不在内存才缺页，并给出因果顺序，符合锚点。"
+              },
+              {
+                "id": "task_completion",
+                "applicable": true,
+                "score": 2,
+                "reason": "完整解释区别，并给出两条合法引用，引用标签与提供片段一致。"
+              },
+              {
+                "id": "historical_evidence_use",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              },
+              {
+                "id": "mastery_calibration",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              },
+              {
+                "id": "uncertainty_citation_honesty",
+                "applicable": true,
+                "score": 2,
+                "reason": "引用均来自 tlb.md 实际片段，句子有片段支持，未编造文件或序号。"
+              },
+              {
+                "id": "no_fabricated_personal_history",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              }
+            ],
+            "failureTags": [],
+            "overallNotes": "回答事实正确、引用合法、任务完成；流程图中的 malformed 标签属格式瑕疵，不影响语义评分。"
+          },
+          "error": null,
+          "httpStatus": 200,
+          "usage": {
+            "prompt_tokens": 4153,
+            "completion_tokens": 243,
+            "total_tokens": 4396,
+            "prompt_tokens_details": {
+              "cached_tokens": 1920
+            },
+            "prompt_cache_hit_tokens": 1920,
+            "prompt_cache_miss_tokens": 2233
+          },
+          "attempts": 1
+        },
+        "requiresHumanReview": true,
+        "thresholds": {
+          "zero": "核心事实错误、编造证据或违反关键限制",
+          "one": "部分正确但有遗漏/过度推断",
+          "two": "正确、完整、无重要越界"
+        }
+      },
+      "durationMs": 15848,
+      "error": null,
+      "llm": {
+        "classification": "REAL_LLM",
+        "provider": "openai",
+        "model": "deepseek-flash",
+        "callCount": 1,
+        "outputEmitted": true,
+        "httpStatuses": [
+          200
+        ],
+        "finishReasons": [
+          "stop"
+        ],
+        "usage": {
+          "prompt_tokens": 2425,
+          "completion_tokens": 2171,
+          "total_tokens": 4596,
+          "prompt_tokens_details": {
+            "cached_tokens": 2176
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 1338
+          },
+          "prompt_cache_hit_tokens": 2176,
+          "prompt_cache_miss_tokens": 249
+        },
+        "latencyMs": 14076,
+        "errorType": null,
+        "errorMessage": null,
+        "emptyOutputCalls": 0
+      },
+      "cleanup": {
+        "ok": true,
+        "error": null,
+        "retrieverClosed": true,
+        "mode": "进程内 fixture 深拷贝；执行后 aclose，无持久化副作用。"
+      }
+    },
+    {
+      "caseId": "E01",
+      "runIndex": 1,
+      "title": "PARTIAL 状态不得被说成已掌握",
+      "severity": "P1",
+      "profile": "alice_partial",
+      "hardStatus": "PASS",
+      "hardReason": "全部硬断言通过",
+      "completionStatus": "COMPLETE",
+      "completion": {
+        "status": "COMPLETE",
+        "finishReason": "stop",
+        "chars": 1698,
+        "usableChars": true,
+        "callCount": 1,
+        "note": "最后一次调用以 stop 结束。",
+        "evidence": "chars=1698,finishReason=stop"
+      },
+      "checks": [
+        {
+          "path": "llm.classification",
+          "op": "eq",
+          "expected": "REAL_LLM",
+          "actual": "REAL_LLM",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.callEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.outputEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.records[0].httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 20,
+          "actual": 1698,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.internalIdLeak",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "isolation.violationCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.understandingStatuses",
+          "op": "contains",
+          "expected": "PARTIAL",
+          "actual": [
+            "PARTIAL"
+          ],
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "部分理解",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.systemInstruction",
+          "op": "contains",
+          "expected": "只有「已经理解」明确列出的内容才算已掌握",
+          "actual": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的记录」。它的用途是决定**从哪里讲起**：\n\n- 他已经理解的部分：不要重新解释一遍，最多一句话带过，把篇幅留给他真正卡住的地方。\n- 他仍然存在的误区：要针对…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.sectionTexts.understanding:9202",
+          "op": "contains",
+          "expected": "部分理解",
+          "actual": "### Page Fault ｜ 状态：部分理解\n- 当前理解：知道缺页的基本含义，但对处理流程与置换边界不确定。\n- 已经理解（只有这个列表里的内容可以称为已掌握）：缺页是访问的页不在内存\n- 这个列表之外的相关知识，即使本轮讲解提到，也不能说成用户已经掌握。\n- 还不确定（本次可以重点补）：缺页处理与页面置换的边界…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "context.sectionTexts.understanding:9202",
+          "op": "not_contains",
+          "expected": "已能讲清",
+          "actual": "### Page Fault ｜ 状态：部分理解\n- 当前理解：知道缺页的基本含义，但对处理流程与置换边界不确定。\n- 已经理解（只有这个列表里的内容可以称为已掌握）：缺页是访问的页不在内存\n- 这个列表之外的相关知识，即使本轮讲解提到，也不能说成用户已经掌握。\n- 还不确定（本次可以重点补）：缺页处理与页面置换的边界…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.masteryClaim.affirmativeCurrent",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "semantics": {
+        "status": "SCORED",
+        "dimensions": [
+          {
+            "id": "factual_correctness",
+            "applicable": true,
+            "score": 2,
+            "reason": "缺页处理流程解释正确，并明确当前只掌握“缺页是访问的页不在内存”，未说成完全掌握。"
+          },
+          {
+            "id": "task_completion",
+            "applicable": true,
+            "score": 2,
+            "reason": "既讲解了缺页处理流程，又回答不算完全掌握，并指出处理流程与置换边界是缺口。"
+          },
+          {
+            "id": "historical_evidence_use",
+            "applicable": true,
+            "score": 2,
+            "reason": "引用了Understanding中已掌握条目与不确定项（处理流程、置换边界），具体而非泛泛。"
+          },
+          {
+            "id": "mastery_calibration",
+            "applicable": true,
+            "score": 2,
+            "reason": "明确表述为部分理解，列出已掌握一条与未掌握部分，未升级为完全掌握。"
+          },
+          {
+            "id": "uncertainty_citation_honesty",
+            "applicable": true,
+            "score": 2,
+            "reason": "明确指出处理流程与置换边界不确定，并说明无检索依据、为通用知识。"
+          },
+          {
+            "id": "no_fabricated_personal_history",
+            "applicable": true,
+            "score": 2,
+            "reason": "仅引用Understanding中用户原话，未编造学习经历或外部帮助。"
+          }
+        ],
+        "applicableCount": 6,
+        "scoredCount": 6,
+        "mean": 2.0,
+        "min": 2,
+        "zeroDimensions": [],
+        "oneDimensions": [],
+        "unresolvedDimensions": [],
+        "failureTags": [],
+        "overallNotes": "回答正确区分PARTIAL与完全掌握，讲解准确，引用当前理解缺口，未编造历史，符合全部锚点。",
+        "judge": {
+          "status": "SCORED",
+          "model": "deepseek-chat",
+          "settings": {
+            "temperature": 0.0,
+            "maxTokens": 1200,
+            "timeoutSeconds": 120.0,
+            "maxAttempts": 2,
+            "streaming": false
+          },
+          "promptSha256": "494eafabd52c7d1cfd787be5bf1ee6470f17c940276a9738cdbd646fb5817879",
+          "promptChars": 6591,
+          "latencyMs": 1909,
+          "rawResponse": "{\"dimensions\":[{\"id\":\"factual_correctness\",\"applicable\":true,\"score\":2,\"reason\":\"缺页处理流程解释正确，并明确当前只掌握“缺页是访问的页不在内存”，未说成完全掌握。\"},{\"id\":\"task_completion\",\"applicable\":true,\"score\":2,\"reason\":\"既讲解了缺页处理流程，又回答不算完全掌握，并指出处理流程与置换边界是缺口。\"},{\"id\":\"historical_evidence_use\",\"applicable\":true,\"score\":2,\"reason\":\"引用了Understanding中已掌握条目与不确定项（处理流程、置换边界），具体而非泛泛。\"},{\"id\":\"mastery_calibration\",\"applicable\":true,\"score\":2,\"reason\":\"明确表述为部分理解，列出已掌握一条与未掌握部分，未升级为完全掌握。\"},{\"id\":\"uncertainty_citation_honesty\",\"applicable\":true,\"score\":2,\"reason\":\"明确指出处理流程与置换边界不确定，并说明无检索依据、为通用知识。\"},{\"id\":\"no_fabricated_personal_history\",\"applicable\":true,\"score\":2,\"reason\":\"仅引用Understanding中用户原话，未编造学习经历或外部帮助。\"}],\"failureTags\":[],\"overallNotes\":\"回答正确区分PARTIAL与完全掌握，讲解准确，引用当前理解缺口，未编造历史，符合全部锚点。\"}",
+          "parsed": {
+            "dimensions": [
+              {
+                "id": "factual_correctness",
+                "applicable": true,
+                "score": 2,
+                "reason": "缺页处理流程解释正确，并明确当前只掌握“缺页是访问的页不在内存”，未说成完全掌握。"
+              },
+              {
+                "id": "task_completion",
+                "applicable": true,
+                "score": 2,
+                "reason": "既讲解了缺页处理流程，又回答不算完全掌握，并指出处理流程与置换边界是缺口。"
+              },
+              {
+                "id": "historical_evidence_use",
+                "applicable": true,
+                "score": 2,
+                "reason": "引用了Understanding中已掌握条目与不确定项（处理流程、置换边界），具体而非泛泛。"
+              },
+              {
+                "id": "mastery_calibration",
+                "applicable": true,
+                "score": 2,
+                "reason": "明确表述为部分理解，列出已掌握一条与未掌握部分，未升级为完全掌握。"
+              },
+              {
+                "id": "uncertainty_citation_honesty",
+                "applicable": true,
+                "score": 2,
+                "reason": "明确指出处理流程与置换边界不确定，并说明无检索依据、为通用知识。"
+              },
+              {
+                "id": "no_fabricated_personal_history",
+                "applicable": true,
+                "score": 2,
+                "reason": "仅引用Understanding中用户原话，未编造学习经历或外部帮助。"
+              }
+            ],
+            "failureTags": [],
+            "overallNotes": "回答正确区分PARTIAL与完全掌握，讲解准确，引用当前理解缺口，未编造历史，符合全部锚点。"
+          },
+          "error": null,
+          "httpStatus": 200,
+          "usage": {
+            "prompt_tokens": 3255,
+            "completion_tokens": 295,
+            "total_tokens": 3550,
+            "prompt_tokens_details": {
+              "cached_tokens": 1280
+            },
+            "prompt_cache_hit_tokens": 1280,
+            "prompt_cache_miss_tokens": 1975
+          },
+          "attempts": 1
+        },
+        "requiresHumanReview": false,
+        "thresholds": {
+          "zero": "核心事实错误、编造证据或违反关键限制",
+          "one": "部分正确但有遗漏/过度推断",
+          "two": "正确、完整、无重要越界"
+        }
+      },
+      "durationMs": 16343,
+      "error": null,
+      "llm": {
+        "classification": "REAL_LLM",
+        "provider": "openai",
+        "model": "deepseek-flash",
+        "callCount": 1,
+        "outputEmitted": true,
+        "httpStatuses": [
+          200
+        ],
+        "finishReasons": [
+          "stop"
+        ],
+        "usage": {
+          "prompt_tokens": 2055,
+          "completion_tokens": 2154,
+          "total_tokens": 4209,
+          "prompt_tokens_details": {
+            "cached_tokens": 1920
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 1188
+          },
+          "prompt_cache_hit_tokens": 1920,
+          "prompt_cache_miss_tokens": 135
+        },
+        "latencyMs": 14351,
+        "errorType": null,
+        "errorMessage": null,
+        "emptyOutputCalls": 0
+      },
+      "cleanup": {
+        "ok": true,
+        "error": null,
+        "retrieverClosed": true,
+        "mode": "进程内 fixture 深拷贝；执行后 aclose，无持久化副作用。"
+      }
+    },
+    {
+      "caseId": "E07",
+      "runIndex": 1,
+      "title": "真实模型教学冒烟",
+      "severity": "P1",
+      "profile": "alice_corrected",
+      "hardStatus": "PASS",
+      "hardReason": "全部硬断言通过",
+      "completionStatus": "COMPLETE",
+      "completion": {
+        "status": "COMPLETE",
+        "finishReason": "stop",
+        "chars": 2376,
+        "usableChars": true,
+        "callCount": 1,
+        "note": "最后一次调用以 stop 结束。",
+        "evidence": "chars=2376,finishReason=stop"
+      },
+      "checks": [
+        {
+          "path": "llm.classification",
+          "op": "eq",
+          "expected": "REAL_LLM",
+          "actual": "REAL_LLM",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.callEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.outputEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.records[0].httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 20,
+          "actual": 2376,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.internalIdLeak",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "isolation.violationCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.knowledgeStatus",
+          "op": "eq",
+          "expected": "SUCCESS",
+          "actual": "SUCCESS",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 50,
+          "actual": 2376,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.text",
+          "op": "matches",
+          "expected": "(?i)TLB",
+          "actual": "## 先确定这两件事在因果链上的位置\n\n你自己那句「未命中还要查页表」已经指出了关键的分岔：**TLB Miss 说明没有可用的捷径，缺页说明要访问的东西不在内存**。把两者放到一条地址翻译链上就很清楚：\n\n```\n         虚拟地址\n            │\n            ▼\n   ┌──────…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.text",
+          "op": "contains",
+          "expected": "缺页",
+          "actual": "## 先确定这两件事在因果链上的位置\n\n你自己那句「未命中还要查页表」已经指出了关键的分岔：**TLB Miss 说明没有可用的捷径，缺页说明要访问的东西不在内存**。把两者放到一条地址翻译链上就很清楚：\n\n```\n         虚拟地址\n            │\n            ▼\n   ┌──────…",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.citations.invalid",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "semantics": {
+        "status": "SCORED",
+        "dimensions": [
+          {
+            "id": "factual_correctness",
+            "applicable": true,
+            "score": 2,
+            "reason": "正确区分TLB Miss（缓存未命中，仍需查页表）与缺页（页不在内存），并说明二者可先后发生但无因果，核心事实无误。"
+          },
+          {
+            "id": "task_completion",
+            "applicable": true,
+            "score": 2,
+            "reason": "直接进入区别与因果链，用地址翻译图承接用户已有认知，未从零解释TLB。"
+          },
+          {
+            "id": "historical_evidence_use",
+            "applicable": true,
+            "score": 2,
+            "reason": "引用用户原话“未命中还要查页表”，承接已学内容，仅在缺页处理与置换边界处补充。"
+          },
+          {
+            "id": "mastery_calibration",
+            "applicable": true,
+            "score": 2,
+            "reason": "按已学基础讲解，未宣称全部掌握，并指出缺页处理与置换为待补边界。"
+          },
+          {
+            "id": "uncertainty_citation_honesty",
+            "applicable": true,
+            "score": 1,
+            "reason": "引用标签合法，但部分引用与claim支持弱（如“重试这条指令”无词面支持），且明确声明缺页流程非文档事实，整体诚实但引用支持偏弱。"
+          },
+          {
+            "id": "no_fabricated_personal_history",
+            "applicable": true,
+            "score": 2,
+            "reason": "未补写用户过去如何学会，仅引用提供的原话与状态。"
+          }
+        ],
+        "applicableCount": 6,
+        "scoredCount": 6,
+        "mean": 1.833,
+        "min": 1,
+        "zeroDimensions": [],
+        "oneDimensions": [
+          "uncertainty_citation_honesty"
+        ],
+        "unresolvedDimensions": [],
+        "failureTags": [],
+        "overallNotes": "回答准确区分TLB Miss与缺页，承接已有认知，引用合法且诚实标注非文档内容；仅个别引用支持偏弱。",
+        "judge": {
+          "status": "SCORED",
+          "model": "deepseek-chat",
+          "settings": {
+            "temperature": 0.0,
+            "maxTokens": 1200,
+            "timeoutSeconds": 120.0,
+            "maxAttempts": 2,
+            "streaming": false
+          },
+          "promptSha256": "23cb105e6e59fcdc881e5d3e245ea20576f4048950c33985595001305ec8d62a",
+          "promptChars": 10095,
+          "latencyMs": 2235,
+          "rawResponse": "{\"dimensions\":[{\"id\":\"factual_correctness\",\"applicable\":true,\"score\":2,\"reason\":\"正确区分TLB Miss（缓存未命中，仍需查页表）与缺页（页不在内存），并说明二者可先后发生但无因果，核心事实无误。\"},{\"id\":\"task_completion\",\"applicable\":true,\"score\":2,\"reason\":\"直接进入区别与因果链，用地址翻译图承接用户已有认知，未从零解释TLB。\"},{\"id\":\"historical_evidence_use\",\"applicable\":true,\"score\":2,\"reason\":\"引用用户原话“未命中还要查页表”，承接已学内容，仅在缺页处理与置换边界处补充。\"},{\"id\":\"mastery_calibration\",\"applicable\":true,\"score\":2,\"reason\":\"按已学基础讲解，未宣称全部掌握，并指出缺页处理与置换为待补边界。\"},{\"id\":\"uncertainty_citation_honesty\",\"applicable\":true,\"score\":1,\"reason\":\"引用标签合法，但部分引用与claim支持弱（如“重试这条指令”无词面支持），且明确声明缺页流程非文档事实，整体诚实但引用支持偏弱。\"},{\"id\":\"no_fabricated_personal_history\",\"applicable\":true,\"score\":2,\"reason\":\"未补写用户过去如何学会，仅引用提供的原话与状态。\"}],\"failureTags\":[],\"overallNotes\":\"回答准确区分TLB Miss与缺页，承接已有认知，引用合法且诚实标注非文档内容；仅个别引用支持偏弱。\"}",
+          "parsed": {
+            "dimensions": [
+              {
+                "id": "factual_correctness",
+                "applicable": true,
+                "score": 2,
+                "reason": "正确区分TLB Miss（缓存未命中，仍需查页表）与缺页（页不在内存），并说明二者可先后发生但无因果，核心事实无误。"
+              },
+              {
+                "id": "task_completion",
+                "applicable": true,
+                "score": 2,
+                "reason": "直接进入区别与因果链，用地址翻译图承接用户已有认知，未从零解释TLB。"
+              },
+              {
+                "id": "historical_evidence_use",
+                "applicable": true,
+                "score": 2,
+                "reason": "引用用户原话“未命中还要查页表”，承接已学内容，仅在缺页处理与置换边界处补充。"
+              },
+              {
+                "id": "mastery_calibration",
+                "applicable": true,
+                "score": 2,
+                "reason": "按已学基础讲解，未宣称全部掌握，并指出缺页处理与置换为待补边界。"
+              },
+              {
+                "id": "uncertainty_citation_honesty",
+                "applicable": true,
+                "score": 1,
+                "reason": "引用标签合法，但部分引用与claim支持弱（如“重试这条指令”无词面支持），且明确声明缺页流程非文档事实，整体诚实但引用支持偏弱。"
+              },
+              {
+                "id": "no_fabricated_personal_history",
+                "applicable": true,
+                "score": 2,
+                "reason": "未补写用户过去如何学会，仅引用提供的原话与状态。"
+              }
+            ],
+            "failureTags": [],
+            "overallNotes": "回答准确区分TLB Miss与缺页，承接已有认知，引用合法且诚实标注非文档内容；仅个别引用支持偏弱。"
+          },
+          "error": null,
+          "httpStatus": 200,
+          "usage": {
+            "prompt_tokens": 4620,
+            "completion_tokens": 337,
+            "total_tokens": 4957,
+            "prompt_tokens_details": {
+              "cached_tokens": 1920
+            },
+            "prompt_cache_hit_tokens": 1920,
+            "prompt_cache_miss_tokens": 2700
+          },
+          "attempts": 1
+        },
+        "requiresHumanReview": false,
+        "thresholds": {
+          "zero": "核心事实错误、编造证据或违反关键限制",
+          "one": "部分正确但有遗漏/过度推断",
+          "two": "正确、完整、无重要越界"
+        }
+      },
+      "durationMs": 23071,
+      "error": null,
+      "llm": {
+        "classification": "REAL_LLM",
+        "provider": "openai",
+        "model": "deepseek-flash",
+        "callCount": 1,
+        "outputEmitted": true,
+        "httpStatuses": [
+          200
+        ],
+        "finishReasons": [
+          "stop"
+        ],
+        "usage": {
+          "prompt_tokens": 2430,
+          "completion_tokens": 3214,
+          "total_tokens": 5644,
+          "prompt_tokens_details": {
+            "cached_tokens": 2176
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 2081
+          },
+          "prompt_cache_hit_tokens": 2176,
+          "prompt_cache_miss_tokens": 254
+        },
+        "latencyMs": 20748,
+        "errorType": null,
+        "errorMessage": null,
+        "emptyOutputCalls": 0
+      },
+      "cleanup": {
+        "ok": true,
+        "error": null,
+        "retrieverClosed": true,
+        "mode": "进程内 fixture 深拷贝；执行后 aclose，无持久化副作用。"
+      }
+    },
+    {
+      "caseId": "D09",
+      "runIndex": 1,
+      "title": "文档已召回但无法回答时必须承认边界",
+      "severity": "P1",
+      "profile": "alice_citation",
+      "hardStatus": "PASS",
+      "hardReason": "全部硬断言通过",
+      "completionStatus": "COMPLETE",
+      "completion": {
+        "status": "COMPLETE",
+        "finishReason": "stop",
+        "chars": 686,
+        "usableChars": true,
+        "callCount": 1,
+        "note": "最后一次调用以 stop 结束。",
+        "evidence": "chars=686,finishReason=stop"
+      },
+      "checks": [
+        {
+          "path": "llm.classification",
+          "op": "eq",
+          "expected": "REAL_LLM",
+          "actual": "REAL_LLM",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.callEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.outputEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.records[0].httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 20,
+          "actual": 686,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.internalIdLeak",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "isolation.violationCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.knowledgeStatus",
+          "op": "eq",
+          "expected": "SUCCESS",
+          "actual": "SUCCESS",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.knowledgeChunkCount",
+          "op": "gte",
+          "expected": 1,
+          "actual": 2,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.citations.invalid",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "semantics": {
+        "status": "SCORED",
+        "dimensions": [
+          {
+            "id": "factual_correctness",
+            "applicable": true,
+            "score": 2,
+            "reason": "明确说明两个片段均未提及替换算法，无法据此判断LRU/FIFO，并将后续内容标注为通用知识而非tlb.md内容。"
+          },
+          {
+            "id": "task_completion",
+            "applicable": true,
+            "score": 2,
+            "reason": "直接回答资料未覆盖替换算法、无法二选一，并说明只是本次未检索到相关片段。"
+          },
+          {
+            "id": "historical_evidence_use",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          },
+          {
+            "id": "mastery_calibration",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          },
+          {
+            "id": "uncertainty_citation_honesty",
+            "applicable": true,
+            "score": 2,
+            "reason": "区分了已召回片段与可回答范围，引用#0/#1合法，通用知识明确标注来源边界，未编造引用。"
+          },
+          {
+            "id": "no_fabricated_personal_history",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          }
+        ],
+        "applicableCount": 3,
+        "scoredCount": 3,
+        "mean": 2.0,
+        "min": 2,
+        "zeroDimensions": [],
+        "oneDimensions": [],
+        "unresolvedDimensions": [],
+        "failureTags": [],
+        "overallNotes": "回答准确承认资料边界，未编造引用，通用知识标注清晰，符合全部适用锚点。",
+        "judge": {
+          "status": "SCORED",
+          "model": "deepseek-chat",
+          "settings": {
+            "temperature": 0.0,
+            "maxTokens": 1200,
+            "timeoutSeconds": 120.0,
+            "maxAttempts": 2,
+            "streaming": false
+          },
+          "promptSha256": "2f4a60e44c4d29598ebc68ea551825216913020dfb7c001b61d11eaf4fd39bc6",
+          "promptChars": 6226,
+          "latencyMs": 2015,
+          "rawResponse": "{\"dimensions\":[{\"id\":\"factual_correctness\",\"applicable\":true,\"score\":2,\"reason\":\"明确说明两个片段均未提及替换算法，无法据此判断LRU/FIFO，并将后续内容标注为通用知识而非tlb.md内容。\"},{\"id\":\"task_completion\",\"applicable\":true,\"score\":2,\"reason\":\"直接回答资料未覆盖替换算法、无法二选一，并说明只是本次未检索到相关片段。\"},{\"id\":\"historical_evidence_use\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"},{\"id\":\"mastery_calibration\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"},{\"id\":\"uncertainty_citation_honesty\",\"applicable\":true,\"score\":2,\"reason\":\"区分了已召回片段与可回答范围，引用#0/#1合法，通用知识明确标注来源边界，未编造引用。\"},{\"id\":\"no_fabricated_personal_history\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"}],\"failureTags\":[],\"overallNotes\":\"回答准确承认资料边界，未编造引用，通用知识标注清晰，符合全部适用锚点。\"}",
+          "parsed": {
+            "dimensions": [
+              {
+                "id": "factual_correctness",
+                "applicable": true,
+                "score": 2,
+                "reason": "明确说明两个片段均未提及替换算法，无法据此判断LRU/FIFO，并将后续内容标注为通用知识而非tlb.md内容。"
+              },
+              {
+                "id": "task_completion",
+                "applicable": true,
+                "score": 2,
+                "reason": "直接回答资料未覆盖替换算法、无法二选一，并说明只是本次未检索到相关片段。"
+              },
+              {
+                "id": "historical_evidence_use",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              },
+              {
+                "id": "mastery_calibration",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              },
+              {
+                "id": "uncertainty_citation_honesty",
+                "applicable": true,
+                "score": 2,
+                "reason": "区分了已召回片段与可回答范围，引用#0/#1合法，通用知识明确标注来源边界，未编造引用。"
+              },
+              {
+                "id": "no_fabricated_personal_history",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              }
+            ],
+            "failureTags": [],
+            "overallNotes": "回答准确承认资料边界，未编造引用，通用知识标注清晰，符合全部适用锚点。"
+          },
+          "error": null,
+          "httpStatus": 200,
+          "usage": {
+            "prompt_tokens": 3003,
+            "completion_tokens": 253,
+            "total_tokens": 3256,
+            "prompt_tokens_details": {
+              "cached_tokens": 1664
+            },
+            "prompt_cache_hit_tokens": 1664,
+            "prompt_cache_miss_tokens": 1339
+          },
+          "attempts": 1
+        },
+        "requiresHumanReview": false,
+        "thresholds": {
+          "zero": "核心事实错误、编造证据或违反关键限制",
+          "one": "部分正确但有遗漏/过度推断",
+          "two": "正确、完整、无重要越界"
+        }
+      },
+      "durationMs": 6643,
+      "error": null,
+      "llm": {
+        "classification": "REAL_LLM",
+        "provider": "openai",
+        "model": "deepseek-flash",
+        "callCount": 1,
+        "outputEmitted": true,
+        "httpStatuses": [
+          200
+        ],
+        "finishReasons": [
+          "stop"
+        ],
+        "usage": {
+          "prompt_tokens": 2196,
+          "completion_tokens": 649,
+          "total_tokens": 2845,
+          "prompt_tokens_details": {
+            "cached_tokens": 2048
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 246
+          },
+          "prompt_cache_hit_tokens": 2048,
+          "prompt_cache_miss_tokens": 148
+        },
+        "latencyMs": 4537,
+        "errorType": null,
+        "errorMessage": null,
+        "emptyOutputCalls": 0
+      },
+      "cleanup": {
+        "ok": true,
+        "error": null,
+        "retrieverClosed": true,
+        "mode": "进程内 fixture 深拷贝；执行后 aclose，无持久化副作用。"
+      }
+    }
+  ]
+}

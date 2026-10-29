@@ -1,0 +1,341 @@
+{
+  "phase": "phase3",
+  "runId": "phase3-smoke-d09",
+  "mode": "baseline",
+  "generatedAt": "2026-10-27T23:06:03.743405+08:00",
+  "python": "3.10.11",
+  "durationMs": 9796,
+  "fixture": {
+    "users": 2,
+    "spaces": 3,
+    "documents": 5,
+    "userIds": [
+      9001,
+      9002
+    ],
+    "spaceIds": [
+      9101,
+      9104,
+      9102
+    ],
+    "documentNames": [
+      "broken.md",
+      "redis.md",
+      "tcp.md",
+      "tlb.md"
+    ],
+    "nodes": [
+      {
+        "userId": 9001,
+        "spaceId": 9101,
+        "concepts": 3,
+        "documents": 3
+      },
+      {
+        "userId": 9001,
+        "spaceId": 9104,
+        "concepts": 1,
+        "documents": 1
+      },
+      {
+        "userId": 9002,
+        "spaceId": 9102,
+        "concepts": 1,
+        "documents": 1
+      }
+    ]
+  },
+  "definitions": {
+    "independentCases": "去重用例 id；重复运行不增加独立案例",
+    "runs": "每个案例每轮的一次真实 AgentRuntime 调用链",
+    "validOutputs": "回答至少 10 个用户可见字符且非 BLOCKED",
+    "hardAssertions": "程序执行；决定 PASS/FAIL/BLOCKED",
+    "semanticScores": "独立评审模型按用例锚点输出 0/1/2；不等于人工确认"
+  },
+  "independentCases": 1,
+  "caseIds": [
+    "D09"
+  ],
+  "runs": 1,
+  "counts": {
+    "PASS": 1,
+    "FAIL": 0,
+    "BLOCKED": 0
+  },
+  "hardPassRuns": 1,
+  "validOutputs": 1,
+  "blockedRuns": 0,
+  "judgeBlockedRuns": 0,
+  "totalLlmCalls": 1,
+  "dimensionDistribution": {
+    "factual_correctness": {
+      "0": 0,
+      "1": 0,
+      "2": 1,
+      "null": 0
+    },
+    "task_completion": {
+      "0": 0,
+      "1": 0,
+      "2": 1,
+      "null": 0
+    },
+    "uncertainty_citation_honesty": {
+      "0": 0,
+      "1": 0,
+      "2": 1,
+      "null": 0
+    }
+  },
+  "requiresHumanReview": [],
+  "results": [
+    {
+      "caseId": "D09",
+      "runIndex": 1,
+      "title": "文档已召回但无法回答时必须承认边界",
+      "severity": "P1",
+      "profile": "alice_citation",
+      "hardStatus": "PASS",
+      "hardReason": "全部硬断言通过",
+      "checks": [
+        {
+          "path": "llm.classification",
+          "op": "eq",
+          "expected": "REAL_LLM",
+          "actual": "REAL_LLM",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.callEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.outputEmitted",
+          "op": "eq",
+          "expected": true,
+          "actual": true,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "llm.records[0].httpStatus",
+          "op": "eq",
+          "expected": 200,
+          "actual": 200,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.length",
+          "op": "gte",
+          "expected": 20,
+          "actual": 632,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.internalIdLeak",
+          "op": "eq",
+          "expected": false,
+          "actual": false,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "isolation.violationCount",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.knowledgeStatus",
+          "op": "eq",
+          "expected": "SUCCESS",
+          "actual": "SUCCESS",
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "retrieval.knowledgeChunkCount",
+          "op": "gte",
+          "expected": 1,
+          "actual": 2,
+          "passed": true,
+          "message": ""
+        },
+        {
+          "path": "answer.citations.invalid",
+          "op": "eq",
+          "expected": 0,
+          "actual": 0,
+          "passed": true,
+          "message": ""
+        }
+      ],
+      "semantics": {
+        "status": "SCORED",
+        "dimensions": [
+          {
+            "id": "factual_correctness",
+            "applicable": true,
+            "score": 2,
+            "reason": "明确说明两段资料均未提及替换策略，仅凭 tlb.md 无法确认 LRU/FIFO；通用知识单独标注为“不是源自这份资料”，符合锚点。"
+          },
+          {
+            "id": "task_completion",
+            "applicable": true,
+            "score": 2,
+            "reason": "直接回答资料未覆盖、无法据此二选一，并补充通用知识说明问题本身无跨架构答案，任务完成。"
+          },
+          {
+            "id": "historical_evidence_use",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          },
+          {
+            "id": "mastery_calibration",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          },
+          {
+            "id": "uncertainty_citation_honesty",
+            "applicable": true,
+            "score": 2,
+            "reason": "区分了已召回片段与资料能回答的范围，引用两条合法片段且未编造引用，并提示其他部分可能存在但未检索到。"
+          },
+          {
+            "id": "no_fabricated_personal_history",
+            "applicable": false,
+            "score": null,
+            "reason": "不适用"
+          }
+        ],
+        "applicableCount": 3,
+        "scoredCount": 3,
+        "mean": 2.0,
+        "min": 2,
+        "zeroDimensions": [],
+        "oneDimensions": [],
+        "unresolvedDimensions": [],
+        "failureTags": [],
+        "overallNotes": "回答准确承认资料边界，通用知识明确标注来源，引用合法无编造，符合全部适用锚点。",
+        "judge": {
+          "status": "SCORED",
+          "model": "deepseek-chat",
+          "promptSha256": "4fca38c32438aee3a0aa32cfdcd0f35fadb8ee91476fd6205d2b447b360e1f00",
+          "promptChars": 7367,
+          "latencyMs": 1962,
+          "rawResponse": "{\"dimensions\":[{\"id\":\"factual_correctness\",\"applicable\":true,\"score\":2,\"reason\":\"明确说明两段资料均未提及替换策略，仅凭 tlb.md 无法确认 LRU/FIFO；通用知识单独标注为“不是源自这份资料”，符合锚点。\"},{\"id\":\"task_completion\",\"applicable\":true,\"score\":2,\"reason\":\"直接回答资料未覆盖、无法据此二选一，并补充通用知识说明问题本身无跨架构答案，任务完成。\"},{\"id\":\"historical_evidence_use\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"},{\"id\":\"mastery_calibration\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"},{\"id\":\"uncertainty_citation_honesty\",\"applicable\":true,\"score\":2,\"reason\":\"区分了已召回片段与资料能回答的范围，引用两条合法片段且未编造引用，并提示其他部分可能存在但未检索到。\"},{\"id\":\"no_fabricated_personal_history\",\"applicable\":false,\"score\":null,\"reason\":\"不适用\"}],\"failureTags\":[],\"overallNotes\":\"回答准确承认资料边界，通用知识明确标注来源，引用合法无编造，符合全部适用锚点。\"}",
+          "parsed": {
+            "dimensions": [
+              {
+                "id": "factual_correctness",
+                "applicable": true,
+                "score": 2,
+                "reason": "明确说明两段资料均未提及替换策略，仅凭 tlb.md 无法确认 LRU/FIFO；通用知识单独标注为“不是源自这份资料”，符合锚点。"
+              },
+              {
+                "id": "task_completion",
+                "applicable": true,
+                "score": 2,
+                "reason": "直接回答资料未覆盖、无法据此二选一，并补充通用知识说明问题本身无跨架构答案，任务完成。"
+              },
+              {
+                "id": "historical_evidence_use",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              },
+              {
+                "id": "mastery_calibration",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              },
+              {
+                "id": "uncertainty_citation_honesty",
+                "applicable": true,
+                "score": 2,
+                "reason": "区分了已召回片段与资料能回答的范围，引用两条合法片段且未编造引用，并提示其他部分可能存在但未检索到。"
+              },
+              {
+                "id": "no_fabricated_personal_history",
+                "applicable": false,
+                "score": null,
+                "reason": "不适用"
+              }
+            ],
+            "failureTags": [],
+            "overallNotes": "回答准确承认资料边界，通用知识明确标注来源，引用合法无编造，符合全部适用锚点。"
+          },
+          "error": null,
+          "httpStatus": 200,
+          "usage": {
+            "prompt_tokens": 3373,
+            "completion_tokens": 269,
+            "total_tokens": 3642,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "prompt_cache_hit_tokens": 0,
+            "prompt_cache_miss_tokens": 3373
+          },
+          "attempts": 1
+        },
+        "requiresHumanReview": false,
+        "thresholds": {
+          "zero": "核心事实错误、编造证据或违反关键限制",
+          "one": "部分正确但有遗漏/过度推断",
+          "two": "正确、完整、无重要越界"
+        }
+      },
+      "durationMs": 9793,
+      "error": null,
+      "llm": {
+        "classification": "REAL_LLM",
+        "provider": "openai",
+        "model": "deepseek-flash",
+        "callCount": 1,
+        "outputEmitted": true,
+        "httpStatuses": [
+          200
+        ],
+        "finishReasons": [
+          "stop"
+        ],
+        "usage": {
+          "prompt_tokens": 2196,
+          "completion_tokens": 933,
+          "total_tokens": 3129,
+          "prompt_tokens_details": {
+            "cached_tokens": 1920
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 565
+          },
+          "prompt_cache_hit_tokens": 1920,
+          "prompt_cache_miss_tokens": 276
+        },
+        "latencyMs": 7605,
+        "errorType": null,
+        "errorMessage": null,
+        "emptyOutputCalls": 0
+      },
+      "cleanup": {
+        "ok": true,
+        "error": null,
+        "retrieverClosed": true,
+        "mode": "进程内 fixture 深拷贝；执行后 aclose，无持久化副作用。"
+      }
+    }
+  ]
+}
