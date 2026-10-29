@@ -1,0 +1,114 @@
+{
+  "phase": 4,
+  "stamp": "20261027_172112",
+  "backend_url": "http://127.0.0.1:8081",
+  "agent_url": "http://127.0.0.1:8000",
+  "qdrant_url": "http://127.0.0.1:6333",
+  "collection": "ails_phase4_e2e_text-embedding-v4_1024",
+  "embedding_provider": "openai",
+  "embedding_model": "text-embedding-v4",
+  "embedding_dimension": 1024,
+  "embedding_batch_size": 10,
+  "llm_provider": "openai",
+  "llm_model": "deepseek-flash",
+  "knowledge_top_k": 5,
+  "knowledge_min_score": 0.35,
+  "max_context_tokens": 3000,
+  "users": {
+    "A": 3,
+    "B": 4
+  },
+  "spaces": {
+    "A1": 3,
+    "A2": 4,
+    "B1": 5
+  },
+  "documents": {
+    "target": {
+      "document_id": 4,
+      "name": "orbit_current_20261027_172112",
+      "file_name": "orbit_current_20261027_172112.md",
+      "status": "READY",
+      "chunk_count": 1,
+      "indexed_at": "2026-10-28T01:21:14",
+      "embedding_model": "text-embedding-v4",
+      "index_version": 1
+    },
+    "distractor": {
+      "document_id": 5,
+      "name": "orbit_legacy_20261027_172112",
+      "file_name": "orbit_legacy_20261027_172112.md",
+      "status": "READY",
+      "chunk_count": 1,
+      "indexed_at": "2026-10-28T01:21:16",
+      "embedding_model": "text-embedding-v4",
+      "index_version": 1
+    },
+    "other_space": {
+      "document_id": 6,
+      "name": "orbit_archive_20261027_172112",
+      "file_name": "orbit_archive_20261027_172112.md",
+      "status": "READY",
+      "chunk_count": 1,
+      "indexed_at": "2026-10-28T01:21:18",
+      "embedding_model": "text-embedding-v4",
+      "index_version": 1
+    },
+    "other_user": {
+      "document_id": 7,
+      "name": "orbit_shared_20261027_172112",
+      "file_name": "orbit_shared_20261027_172112.md",
+      "status": "READY",
+      "chunk_count": 1,
+      "indexed_at": "2026-10-28T01:21:20",
+      "embedding_model": "text-embedding-v4",
+      "index_version": 1
+    },
+    "failed_fixture": {
+      "document_id": 2,
+      "user_id": 3,
+      "space_id": 3,
+      "name": "phase4_failed_20261028_011700",
+      "file_name": "phase4_failed_20261028_011700.md",
+      "status": "FAILED",
+      "chunk_count": 0,
+      "index_attempts": 1,
+      "index_error": "Agent 服务未启动或无法连接",
+      "embedding_model": "NULL",
+      "indexed_at": "NULL",
+      "index_version": 0
+    },
+    "processing_fixture": {
+      "document_id": 3,
+      "user_id": 3,
+      "space_id": 3,
+      "name": "phase4_processing",
+      "file_name": "phase4_processing.md",
+      "status": "PROCESSING",
+      "chunk_count": 0,
+      "index_attempts": 1,
+      "index_error": "NULL",
+      "embedding_model": "NULL",
+      "indexed_at": "NULL",
+      "index_version": 0
+    }
+  },
+  "ready_ids": {
+    "A1": [
+      4,
+      5
+    ],
+    "A2": [
+      6
+    ],
+    "B1": [
+      7
+    ]
+  },
+  "labeled_chunks": {
+    "target": 2,
+    "distractor": 3,
+    "other_space": 4,
+    "other_user": 5
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "index_checks_total": 7,
+  "index_checks_passed": 1,
+  "retrieval_labeled_queries": 5,
+  "retrieval_k": 5,
+  "recall_at_k": 1.0,
+  "mrr": 0.9,
+  "retrieval_labeling": "one synthetic chunk per labeled query, identified by unique marker",
+  "context_checks": 3,
+  "budget_pressure_knowledge_all_dropped": true,
+  "budget_pressure_status_section_present": false,
+  "real_model_cases": 5,
+  "real_model_hard_pass": 5,
+  "real_model_hard_fail": 0,
+  "semantic_quality": "UNREVIEWED_NO_HUMAN_SCORES"
+}

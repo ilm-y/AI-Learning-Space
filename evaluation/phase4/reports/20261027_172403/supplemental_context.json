@@ -1,0 +1,107 @@
+[
+  {
+    "space": "A1",
+    "injected_chunk_ids": [
+      18,
+      19
+    ],
+    "expected_chunk_ids": [
+      18,
+      19
+    ],
+    "matches_expected": true,
+    "knowledge_section_names": [
+      "knowledge:19",
+      "knowledge:18"
+    ],
+    "system_instruction_knowledge_lines": [
+      "   `[资料《文件名》#非负整数]`：一次标注只写一个文件名和一个片段序号，",
+      "- [资料《orbit_legacy_20261027_172403.md》#0] ORBIT-4721 历史迁移记录",
+      "- [资料《orbit_current_20261027_172403.md》#0] ORBIT-4721 当前调度规范"
+    ]
+  },
+  {
+    "space": "A2",
+    "injected_chunk_ids": [
+      20
+    ],
+    "expected_chunk_ids": [
+      20
+    ],
+    "matches_expected": true,
+    "knowledge_section_names": [
+      "knowledge:20"
+    ],
+    "system_instruction_knowledge_lines": [
+      "   `[资料《文件名》#非负整数]`：一次标注只写一个文件名和一个片段序号，",
+      "- [资料《orbit_archive_20261027_172403.md》#0] ORBIT-4721 归档副本"
+    ]
+  },
+  {
+    "space": "B1",
+    "injected_chunk_ids": [
+      21
+    ],
+    "expected_chunk_ids": [
+      21
+    ],
+    "matches_expected": true,
+    "knowledge_section_names": [
+      "knowledge:21"
+    ],
+    "system_instruction_knowledge_lines": [
+      "   `[资料《文件名》#非负整数]`：一次标注只写一个文件名和一个片段序号，",
+      "- [资料《orbit_shared_20261027_172403.md》#0] ORBIT-4721 共享笔记"
+    ]
+  },
+  {
+    "space": "history_and_priorities",
+    "section_priorities": {
+      "user_input": 100,
+      "history:2": 90,
+      "history:1": 89,
+      "knowledge:19": 40,
+      "knowledge:18": 40
+    },
+    "message_roles_and_contents": [
+      {
+        "role": "system",
+        "content": "你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，而是让眼前这个具体的人真正理解。\n\n你会收到一份「系统对这个学习者当前认知的"
+      },
+      {
+        "role": "user",
+        "content": "历史问题：先记下 ORBIT-4721。"
+      },
+      {
+        "role": "assistant",
+        "content": "历史回答：已记下。"
+      },
+      {
+        "role": "user",
+        "content": "ORBIT-4721 当前重试窗口是多少？"
+      }
+    ],
+    "last_message_is_question": true,
+    "history_order_preserved": true
+  },
+  {
+    "space": "label_mapping",
+    "expected_labels": {
+      "资料《orbit_legacy_20261027_172403.md》#0": 19,
+      "资料《orbit_current_20261027_172403.md》#0": 18
+    },
+    "labels_present_in_prompt": [
+      "资料《orbit_legacy_20261027_172403.md》#0",
+      "资料《orbit_current_20261027_172403.md》#0"
+    ],
+    "all_labels_present": true,
+    "label_chunk_ids": [
+      18,
+      19
+    ],
+    "injected_chunk_ids": [
+      18,
+      19
+    ]
+  }
+]
