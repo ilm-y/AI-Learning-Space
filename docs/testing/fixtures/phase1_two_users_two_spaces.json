@@ -1,0 +1,634 @@
+{
+  "fixtureVersion": "phase1-v1",
+  "description": "Phase 1 隔离评测数据。两个用户、三个学习空间，文档与认知记录互不重叠。所有 id 均为评测专用号段（9000+），不对应任何真实用户。",
+  "users": [
+    {
+      "userId": 9001,
+      "username": "phase1_alice",
+      "spaces": [
+        {
+          "spaceId": 9101,
+          "name": "操作系统（评测）",
+          "concepts": [
+            {
+              "id": 9201,
+              "canonicalName": "TLB",
+              "displayName": "TLB（快表）",
+              "description": "页表项的高速缓存",
+              "difficultyLevel": 2
+            },
+            {
+              "id": 9202,
+              "canonicalName": "Page Fault",
+              "displayName": "缺页异常",
+              "description": "访问的页不在物理内存",
+              "difficultyLevel": 2
+            },
+            {
+              "id": 9203,
+              "canonicalName": "Page Table",
+              "displayName": "页表",
+              "description": "虚拟页号到物理页框号的映射",
+              "difficultyLevel": 2
+            }
+          ],
+          "understandings": [
+            {
+              "id": 1201,
+              "conceptId": 9201,
+              "conceptName": "TLB",
+              "summary": "知道 TLB 是页表项缓存，但把 TLB Miss 与缺页混为一谈。",
+              "knownParts": [
+                "TLB 是页表项的缓存"
+              ],
+              "misconceptions": [
+                {
+                  "text": "把 TLB Miss 当成缺页异常",
+                  "status": "ACTIVE",
+                  "firstDetectedAt": "2026-10-01T10:00:00",
+                  "lastEvidenceAt": "2026-10-02T09:00:00",
+                  "reversalEvidenceIds": [1703, 1704]
+                }
+              ],
+              "uncertainParts": [
+                "TLB Miss 之后是否一定触发缺页"
+              ],
+              "latestUserExplanation": "TLB Miss 就要去磁盘换页。",
+              "status": "MISCONCEPTION",
+              "currentRevisionId": 1302,
+              "updatedAt": "2026-10-02T09:00:00"
+            },
+            {
+              "id": 1202,
+              "conceptId": 9202,
+              "conceptName": "Page Fault",
+              "summary": "知道缺页的基本含义，但对处理流程与置换边界不确定。",
+              "knownParts": [
+                "缺页是访问的页不在内存"
+              ],
+              "misconceptions": [],
+              "uncertainParts": [
+                "缺页处理与页面置换的边界"
+              ],
+              "latestUserExplanation": "缺页就是要去磁盘把页读进来。",
+              "status": "PARTIAL",
+              "currentRevisionId": 1312,
+              "updatedAt": "2026-10-02T11:00:00"
+            },
+            {
+              "id": 1203,
+              "conceptId": 9203,
+              "conceptName": "Page Table",
+              "summary": "能说明多级页表的映射过程。",
+              "knownParts": [
+                "页表把虚拟页号映射到物理页框号",
+                "多级页表按需分配"
+              ],
+              "misconceptions": [],
+              "uncertainParts": [],
+              "latestUserExplanation": "页表就是一张从虚拟页号查到物理页框号的表。",
+              "status": "DEMONSTRATED",
+              "currentRevisionId": 1313,
+              "updatedAt": "2026-10-02T12:00:00"
+            }
+          ],
+          "memories": [
+            {
+              "id": 1401,
+              "scopeType": "GLOBAL",
+              "learningSpaceId": null,
+              "conceptId": null,
+              "memoryType": "USER",
+              "memoryKey": "learning-style",
+              "content": "用户是计算机专业学生，喜欢从硬件实际发生的因果链理解操作系统概念。",
+              "status": "ACTIVE",
+              "importance": 0.8,
+              "createdAt": "2026-09-20T08:00:00",
+              "updatedAt": "2026-09-20T08:00:00"
+            },
+            {
+              "id": 1402,
+              "scopeType": "SPACE",
+              "learningSpaceId": 9101,
+              "conceptId": null,
+              "memoryType": "PREFERENCE",
+              "memoryKey": "os-diagram",
+              "content": "操作系统课希望多画地址翻译图，少用抽象定义。",
+              "status": "ACTIVE",
+              "importance": 0.7,
+              "createdAt": "2026-09-21T08:00:00",
+              "updatedAt": "2026-09-21T08:00:00"
+            },
+            {
+              "id": 1403,
+              "scopeType": "CONCEPT",
+              "learningSpaceId": 9101,
+              "conceptId": 9201,
+              "memoryType": "LEARNING",
+              "memoryKey": "tlb-basics-known",
+              "content": "用户已经知道 TLB 是页表项缓存，不需要从零解释。",
+              "status": "ACTIVE",
+              "importance": 0.6,
+              "createdAt": "2026-09-25T08:00:00",
+              "updatedAt": "2026-09-25T08:00:00"
+            },
+            {
+              "id": 1404,
+              "scopeType": "CONCEPT",
+              "learningSpaceId": 9101,
+              "conceptId": 9202,
+              "memoryType": "LEARNING",
+              "memoryKey": "page-fault-basics-known",
+              "content": "缺页异常已经学过，可以直接讲处理流程。",
+              "status": "ACTIVE",
+              "importance": 0.6,
+              "createdAt": "2026-09-26T08:00:00",
+              "updatedAt": "2026-09-26T08:00:00"
+            },
+            {
+              "id": 1407,
+              "scopeType": "CONCEPT",
+              "learningSpaceId": 9101,
+              "conceptId": 9201,
+              "memoryType": "LEARNING",
+              "memoryKey": "tlb-old-misconception",
+              "content": "用户曾把 TLB Miss 当成缺页（2026-10-01 的早期记录，后来已纠正）。",
+              "status": "ACTIVE",
+              "importance": 0.5,
+              "createdAt": "2026-10-01T10:00:00",
+              "updatedAt": "2026-10-01T10:00:00"
+            }
+          ],
+          "knowledge": [
+            {
+              "id": 1501,
+              "documentId": 1601,
+              "chunkIndex": 0,
+              "documentName": "tlb.md",
+              "fileType": "md",
+              "headingPath": ["TLB 基础"],
+              "conceptId": 9201,
+              "content": "TLB（Translation Lookaside Buffer，快表）缓存最近的页表项。TLB 命中时，CPU 直接用缓存中的物理页框号完成地址转换，不需要访问内存中的页表。",
+              "score": 0.92
+            },
+            {
+              "id": 1502,
+              "documentId": 1601,
+              "chunkIndex": 1,
+              "documentName": "tlb.md",
+              "fileType": "md",
+              "headingPath": ["TLB Miss"],
+              "conceptId": 9201,
+              "content": "TLB 未命中时，CPU 仍需查询页表；只有页表项表明该页不在内存时，才会触发缺页异常。因此 TLB Miss 不等于缺页。",
+              "score": 0.9
+            },
+            {
+              "id": 1503,
+              "documentId": 1603,
+              "chunkIndex": 0,
+              "documentName": "redis.md",
+              "fileType": "md",
+              "headingPath": ["Redis 概览"],
+              "conceptId": null,
+              "content": "Redis 是内存数据库，常用于缓存与会话存储。",
+              "score": 0.41
+            }
+          ],
+          "documents": [
+            {
+              "id": 1601,
+              "name": "tlb.md",
+              "status": "READY",
+              "chunkIds": [1501, 1502]
+            },
+            {
+              "id": 1602,
+              "name": "broken.md",
+              "status": "FAILED",
+              "chunkIds": []
+            },
+            {
+              "id": 1603,
+              "name": "redis.md",
+              "status": "READY",
+              "chunkIds": [1503]
+            }
+          ],
+          "evidences": [
+            {
+              "id": 1701,
+              "conceptId": 9201,
+              "understandingId": 1201,
+              "evidenceType": "USER_EXPLANATION",
+              "observation": "我认为 TLB Miss 就是缺页，需要从磁盘换入页面。",
+              "correctness": "INCORRECT",
+              "reasoningQuality": 0.2,
+              "specificity": 0.7,
+              "aiConfidence": 0.9,
+              "createdAt": "2026-10-01T10:00:00",
+              "sources": [{"sourceType": "MESSAGE", "sourceId": 7001}]
+            },
+            {
+              "id": 1702,
+              "conceptId": 9201,
+              "understandingId": 1201,
+              "evidenceType": "USER_CORRECTION",
+              "observation": "我纠正一下：TLB Miss 只是快表没命中，还要查页表，不等于缺页。",
+              "correctness": "CORRECT",
+              "reasoningQuality": 0.8,
+              "specificity": 0.8,
+              "aiConfidence": 0.9,
+              "createdAt": "2026-10-02T09:00:00",
+              "sources": [{"sourceType": "MESSAGE", "sourceId": 7002}]
+            },
+            {
+              "id": 1703,
+              "conceptId": 9201,
+              "understandingId": 1201,
+              "evidenceType": "HIGHLIGHT_SIGNAL",
+              "observation": "用户批注：TLB miss 不等于 page fault，缺页是页不在内存。",
+              "correctness": "CORRECT",
+              "reasoningQuality": 0.8,
+              "specificity": 0.9,
+              "aiConfidence": 0.9,
+              "createdAt": "2026-10-02T09:10:00",
+              "sources": [{"sourceType": "HIGHLIGHT", "sourceId": 7101}]
+            },
+            {
+              "id": 1704,
+              "conceptId": 9201,
+              "understandingId": 1201,
+              "evidenceType": "TEST_RESULT",
+              "observation": "测试回答正确区分 TLB Miss 与 page fault。",
+              "correctness": "CORRECT",
+              "reasoningQuality": 0.9,
+              "specificity": 0.9,
+              "aiConfidence": 0.95,
+              "createdAt": "2026-10-03T20:00:00",
+              "sources": [{"sourceType": "TEST_ANSWER", "sourceId": 7201}]
+            },
+            {
+              "id": 1705,
+              "conceptId": 9201,
+              "understandingId": 1201,
+              "evidenceType": "USER_EXPLANATION",
+              "observation": "TLB 是页表项的缓存，未命中还要查页表。",
+              "correctness": "CORRECT",
+              "reasoningQuality": 0.8,
+              "specificity": 0.8,
+              "aiConfidence": 0.9,
+              "createdAt": "2026-10-03T20:05:00",
+              "sources": [{"sourceType": "MESSAGE", "sourceId": 7003}]
+            },
+            {
+              "id": 1706,
+              "conceptId": 9202,
+              "understandingId": 1202,
+              "evidenceType": "OBSERVATION",
+              "observation": "用户能说出缺页的基本含义，但对处理流程还不确定。",
+              "correctness": "PARTIAL",
+              "reasoningQuality": 0.5,
+              "specificity": 0.5,
+              "aiConfidence": 0.7,
+              "createdAt": "2026-10-02T11:00:00",
+              "sources": [{"sourceType": "MESSAGE", "sourceId": 7004}]
+            },
+            {
+              "id": 1707,
+              "conceptId": 9201,
+              "understandingId": 1201,
+              "evidenceType": "USER_EXPLANATION",
+              "observation": "用户自己发现：TLB Miss 只是快表未命中，还要继续查页表。",
+              "correctness": "CORRECT",
+              "reasoningQuality": 0.8,
+              "specificity": 0.8,
+              "aiConfidence": 0.9,
+              "createdAt": "2026-10-03T20:10:00",
+              "sources": [{"sourceType": "MESSAGE", "sourceId": 7005}]
+            }
+          ],
+          "revisions": [
+            {
+              "id": 1301,
+              "conceptId": 9201,
+              "revisionNo": 1,
+              "summary": "初次解释 TLB，把 TLB Miss 当成缺页。",
+              "knownParts": [],
+              "misconceptions": [
+                {
+                  "text": "把 TLB Miss 当成缺页异常",
+                  "status": "ACTIVE"
+                }
+              ],
+              "uncertainParts": [],
+              "userExplanation": "TLB Miss 就要去磁盘换页。",
+              "status": "MISCONCEPTION",
+              "triggerEvidenceId": 1701,
+              "createdAt": "2026-10-01T10:00:00"
+            },
+            {
+              "id": 1302,
+              "conceptId": 9201,
+              "revisionNo": 2,
+              "summary": "知道 TLB 是页表项缓存，但仍未区分 TLB Miss 与缺页。",
+              "knownParts": [
+                "TLB 是页表项的缓存"
+              ],
+              "misconceptions": [
+                {
+                  "text": "把 TLB Miss 当成缺页异常",
+                  "status": "ACTIVE",
+                  "reversalEvidenceIds": [1702, 1703]
+                }
+              ],
+              "uncertainParts": [
+                "TLB Miss 之后是否一定触发缺页"
+              ],
+              "userExplanation": "我纠正一下：TLB Miss 只是快表没命中，还要查页表，不等于缺页。",
+              "status": "MISCONCEPTION",
+              "triggerEvidenceId": 1702,
+              "createdAt": "2026-10-02T09:00:00"
+            },
+            {
+              "id": 1303,
+              "conceptId": 9201,
+              "revisionNo": 3,
+              "summary": "能区分 TLB Miss 与缺页，并说明 TLB Miss 后仍需查页表。",
+              "knownParts": [
+                "TLB 是页表项的缓存",
+                "TLB Miss 后仍需查页表",
+                "缺页是页不在内存"
+              ],
+              "misconceptions": [],
+              "uncertainParts": [],
+              "userExplanation": "TLB 是页表项的缓存，未命中还要查页表。",
+              "status": "DEMONSTRATED",
+              "triggerEvidenceId": 1704,
+              "createdAt": "2026-10-03T20:00:00"
+            },
+            {
+              "id": 1312,
+              "conceptId": 9202,
+              "revisionNo": 1,
+              "summary": "缺页含义已接触，处理流程待补。",
+              "knownParts": [
+                "缺页是访问的页不在内存"
+              ],
+              "misconceptions": [],
+              "uncertainParts": [
+                "缺页处理与页面置换的边界"
+              ],
+              "userExplanation": "缺页就是要去磁盘把页读进来。",
+              "status": "PARTIAL",
+              "triggerEvidenceId": 1706,
+              "createdAt": "2026-10-02T11:00:00"
+            },
+            {
+              "id": 1313,
+              "conceptId": 9203,
+              "revisionNo": 1,
+              "summary": "能说明多级页表的映射过程。",
+              "knownParts": [
+                "页表把虚拟页号映射到物理页框号",
+                "多级页表按需分配"
+              ],
+              "misconceptions": [],
+              "uncertainParts": [],
+              "userExplanation": "页表就是一张从虚拟页号查到物理页框号的表。",
+              "status": "DEMONSTRATED",
+              "triggerEvidenceId": 1706,
+              "createdAt": "2026-10-02T12:00:00"
+            }
+          ]
+        },
+        {
+          "spaceId": 9104,
+          "name": "数据库（评测）",
+          "concepts": [
+            {
+              "id": 9204,
+              "canonicalName": "Redis",
+              "displayName": "Redis",
+              "description": "内存数据库",
+              "difficultyLevel": 1
+            }
+          ],
+          "understandings": [
+            {
+              "id": 1221,
+              "conceptId": 9204,
+              "conceptName": "Redis",
+              "summary": "知道 Redis 是内存数据库，但还不熟悉持久化。",
+              "knownParts": [
+                "Redis 是内存数据库"
+              ],
+              "misconceptions": [],
+              "uncertainParts": [
+                "RDB 与 AOF 的区别"
+              ],
+              "latestUserExplanation": "Redis 就是把数据放内存里。",
+              "status": "PARTIAL",
+              "currentRevisionId": 1321,
+              "updatedAt": "2026-10-05T09:00:00"
+            }
+          ],
+          "memories": [
+            {
+              "id": 1405,
+              "scopeType": "SPACE",
+              "learningSpaceId": 9104,
+              "conceptId": null,
+              "memoryType": "PREFERENCE",
+              "memoryKey": "db-data-structure-first",
+              "content": "数据库课喜欢先看数据结构再讲命令。",
+              "status": "ACTIVE",
+              "importance": 0.7,
+              "createdAt": "2026-10-05T08:00:00",
+              "updatedAt": "2026-10-05T08:00:00"
+            }
+          ],
+          "knowledge": [
+            {
+              "id": 1521,
+              "documentId": 1621,
+              "chunkIndex": 0,
+              "documentName": "redis.md",
+              "fileType": "md",
+              "headingPath": ["Redis 持久化"],
+              "conceptId": 9204,
+              "content": "Redis 提供 RDB 快照与 AOF 日志两种持久化方式。",
+              "score": 0.88
+            }
+          ],
+          "documents": [
+            {
+              "id": 1621,
+              "name": "redis.md",
+              "status": "READY",
+              "chunkIds": [1521]
+            }
+          ],
+          "evidences": [
+            {
+              "id": 1721,
+              "conceptId": 9204,
+              "understandingId": 1221,
+              "evidenceType": "USER_EXPLANATION",
+              "observation": "Redis 是把数据放内存里，所以读写快。",
+              "correctness": "PARTIAL",
+              "createdAt": "2026-10-05T09:00:00",
+              "sources": [{"sourceType": "MESSAGE", "sourceId": 7021}]
+            }
+          ],
+          "revisions": [
+            {
+              "id": 1321,
+              "conceptId": 9204,
+              "revisionNo": 1,
+              "summary": "知道内存数据库，但持久化未展开。",
+              "knownParts": [
+                "Redis 是内存数据库"
+              ],
+              "misconceptions": [],
+              "uncertainParts": [
+                "RDB 与 AOF 的区别"
+              ],
+              "userExplanation": "Redis 就是把数据放内存里。",
+              "status": "PARTIAL",
+              "triggerEvidenceId": 1721,
+              "createdAt": "2026-10-05T09:00:00"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "userId": 9002,
+      "username": "phase1_bob",
+      "spaces": [
+        {
+          "spaceId": 9102,
+          "name": "计算机网络（评测）",
+          "concepts": [
+            {
+              "id": 9301,
+              "canonicalName": "TCP",
+              "displayName": "TCP",
+              "description": "传输控制协议",
+              "difficultyLevel": 2
+            }
+          ],
+          "understandings": [
+            {
+              "id": 1211,
+              "conceptId": 9301,
+              "conceptName": "TCP",
+              "summary": "知道三次握手，但把四次挥手与三次握手混在一起。",
+              "knownParts": [
+                "TCP 建立连接需要三次握手"
+              ],
+              "misconceptions": [
+                {
+                  "text": "把四次挥手说成四次握手",
+                  "status": "ACTIVE"
+                }
+              ],
+              "uncertainParts": [
+                "TIME_WAIT 的作用"
+              ],
+              "latestUserExplanation": "TCP 用四次握手断开连接。",
+              "status": "MISCONCEPTION",
+              "currentRevisionId": 1331,
+              "updatedAt": "2026-10-06T09:00:00"
+            }
+          ],
+          "memories": [
+            {
+              "id": 1411,
+              "scopeType": "GLOBAL",
+              "learningSpaceId": null,
+              "conceptId": null,
+              "memoryType": "USER",
+              "memoryKey": "bob-learning-style",
+              "content": "Bob 喜欢先看协议栈分层，再看具体报文。",
+              "status": "ACTIVE",
+              "importance": 0.8,
+              "createdAt": "2026-09-30T08:00:00",
+              "updatedAt": "2026-09-30T08:00:00"
+            },
+            {
+              "id": 1412,
+              "scopeType": "SPACE",
+              "learningSpaceId": 9102,
+              "conceptId": null,
+              "memoryType": "PREFERENCE",
+              "memoryKey": "network-sequence-diagram",
+              "content": "计算机网络课希望多画时序图。",
+              "status": "ACTIVE",
+              "importance": 0.7,
+              "createdAt": "2026-09-30T08:00:00",
+              "updatedAt": "2026-09-30T08:00:00"
+            }
+          ],
+          "knowledge": [
+            {
+              "id": 1511,
+              "documentId": 1611,
+              "chunkIndex": 0,
+              "documentName": "tcp.md",
+              "fileType": "md",
+              "headingPath": ["连接建立"],
+              "conceptId": 9301,
+              "content": "TCP 通过三次握手建立连接：SYN、SYN-ACK、ACK。",
+              "score": 0.91
+            }
+          ],
+          "documents": [
+            {
+              "id": 1611,
+              "name": "tcp.md",
+              "status": "READY",
+              "chunkIds": [1511]
+            }
+          ],
+          "evidences": [
+            {
+              "id": 1711,
+              "conceptId": 9301,
+              "understandingId": 1211,
+              "evidenceType": "USER_EXPLANATION",
+              "observation": "TCP 用四次握手断开连接。",
+              "correctness": "INCORRECT",
+              "createdAt": "2026-10-06T09:00:00",
+              "sources": [{"sourceType": "MESSAGE", "sourceId": 7011}]
+            }
+          ],
+          "revisions": [
+            {
+              "id": 1331,
+              "conceptId": 9301,
+              "revisionNo": 1,
+              "summary": "把四次挥手与三次握手混在一起。",
+              "knownParts": [
+                "TCP 建立连接需要三次握手"
+              ],
+              "misconceptions": [
+                {
+                  "text": "把四次挥手说成四次握手",
+                  "status": "ACTIVE"
+                }
+              ],
+              "uncertainParts": [
+                "TIME_WAIT 的作用"
+              ],
+              "userExplanation": "TCP 用四次握手断开连接。",
+              "status": "MISCONCEPTION",
+              "triggerEvidenceId": 1711,
+              "createdAt": "2026-10-06T09:00:00"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
