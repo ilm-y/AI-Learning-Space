@@ -1,0 +1,19 @@
+........................................................................ [ 19%]
+........................................................................ [ 39%]
+...............................s........................................ [ 59%]
+.................................................ss..................... [ 78%]
+..xx....................................................ss.............. [ 98%]
+.....                                                                    [100%]
+============================== warnings summary ===============================
+E:\app\Python\python\lib\site-packages\starlette\formparsers.py:12
+  E:\app\Python\python\lib\site-packages\starlette\formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_knowledge_e2e.py:209: 设置 AILS_KNOWLEDGE_E2E=true 才运行真实链路 E2E
+SKIPPED [1] tests\test_qdrant_integration.py:37: 设置 AILS_QDRANT_IT=true 才运行真实 Qdrant 集成测试
+SKIPPED [1] tests\test_qdrant_integration.py:120: 设置 AILS_QDRANT_IT=true 才运行真实 Qdrant 集成测试
+SKIPPED [1] tests\test_worker_broker.py:110: 未设置 AILS_TEST_RABBITMQ_URL；真实 Broker 测试未执行（跳过 ≠ 通过）
+SKIPPED [1] tests\test_worker_broker.py:139: 未设置 AILS_TEST_RABBITMQ_URL；真实 Broker 测试未执行（跳过 ≠ 通过）
+358 passed, 5 skipped, 2 xfailed, 1 warning in 10.80s

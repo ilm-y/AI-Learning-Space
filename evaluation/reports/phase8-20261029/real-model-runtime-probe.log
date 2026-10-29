@@ -1,0 +1,10 @@
+provider=openai
+base_url=https://api.deepseek.com/v1
+model=deepseek-flash
+retriever_mode=fixture
+max_tokens=1024
+events=['meta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'done']
+done.finishReason='length'
+done.truncated=True
+done.responseChars=None
+RESULT: PASS —— runtime 的 done 事件携带 finishReason=length / truncated=true

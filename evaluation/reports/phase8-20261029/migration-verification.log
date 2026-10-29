@@ -1,0 +1,23 @@
+== 0. 用 Phase 7 之前的 schema 建库（模拟线上老库）==
+   old schema loaded: 22 tables
+== 1. 写入老数据（迁移前就已存在的消息 / 运行记录）==
+== 2. 未迁移，直接执行当前 schema.sql（Spring 启动会做的事）==
+   message.truncated 缺失（schema.sql 的 CREATE IF NOT EXISTS 不会补列）
+   agent_run.status 已由 schema.sql 末尾的幂等 ALTER 补上 TRUNCATED
+   复现 ERROR 1054: ERROR 1054 (42S22) at line 1: Unknown column 'truncated' in 'field list'
+== 3. 执行迁移脚本（连续两次，验证幂等）==
+COLUMN_NAME	COLUMN_TYPE	IS_NULLABLE	COLUMN_DEFAULT
+truncated	tinyint(1)	NO	0
+agent_run_status
+enum('PENDING','STALE','RUNNING','COMPLETED','TRUNCATED','SUCCEEDED','FAILED')
+   migration applied twice
+== 4. 五项验收 ==
+   [1] 旧消息仍可读取: 2 / 2
+   [2] 旧消息 truncated 默认 0: 2 / 2
+   [3] 正常新消息持久化: ok（truncated=0）
+   [4] 截断消息持久化: ok（truncated=1）
+   [5] agent_run.status 接受 TRUNCATED: ok
+   [5b] 旧 agent_run 状态保持 COMPLETED: ok
+   [5c] 未知状态仍被数据库约束拒绝: ok
+
+ALL MIGRATION CHECKS PASSED (ails_p8_migration)

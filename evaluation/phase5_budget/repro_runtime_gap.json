@@ -1,0 +1,64 @@
+{
+  "kind": "constructed_boundary_deterministic",
+  "notModelBehavior": true,
+  "question": "ORBIT-4721 新部署在失败后等待多久再重试？",
+  "modelOutput": "本轮没有检索到任何相关资料，因此无法确认 ORBIT-4721 的重试窗口。[资料《orbit_current_p5.md》#0]",
+  "deliveredOutput": "本轮没有检索到任何相关资料，因此无法确认 ORBIT-4721 的重试窗口。[资料《orbit_current_p5.md》#0]",
+  "deliveredEqualsModelOutput": true,
+  "context": {
+    "knowledgeStatus": "SUCCESS",
+    "knowledgeState": "SUCCESS_BUT_DROPPED",
+    "injectedChunkIds": [],
+    "droppedChunkIds": [
+      701
+    ],
+    "budgetTokens": 80,
+    "contextTokens": 252,
+    "providedLabels": []
+  },
+  "guard": {
+    "status": "SUCCESS_BUT_DROPPED",
+    "statusInGuardStatuses": false,
+    "retrievedChunksNonEmpty": true,
+    "noticeAdded": false,
+    "reason": "generate() 只在 knowledge_state 属于 GUARD_STATUSES 时追加说明；SUCCESS_PARTIAL / SUCCESS_BUT_DROPPED 的说明只在 Prompt 里，运行时不会纠正模型对检索状态的误述。"
+  },
+  "citations": {
+    "providedLabels": [],
+    "total": 1,
+    "valid": 0,
+    "invalid": 1,
+    "illegalRate": 1.0,
+    "invalidLabels": [
+      "[资料《orbit_current_p5.md》#0]"
+    ],
+    "malformedLabels": [],
+    "malformedCount": 0,
+    "syntaxValid": true,
+    "unsupportedCount": 0,
+    "numericConflictCount": 0,
+    "duplicateLabels": [],
+    "citedDocuments": [],
+    "citations": [
+      {
+        "raw": "[资料《orbit_current_p5.md》#0]",
+        "documentName": "orbit_current_p5.md",
+        "chunkIndex": 0,
+        "valid": false,
+        "chunkId": null,
+        "documentId": null,
+        "claim": "本轮没有检索到任何相关资料，因此无法确认 ORBIT-4721 的重试窗口",
+        "sourceExcerpt": null,
+        "lexicalSupport": "none",
+        "overlapTerms": [],
+        "numericConflict": false
+      }
+    ]
+  },
+  "conclusion": {
+    "statusMisstatementReachedUser": true,
+    "droppedChunkCitationReachedUser": true,
+    "citationValidationObservedOnly": true
+  },
+  "semanticReview": "NOT_APPLICABLE_DETERMINISTIC"
+}

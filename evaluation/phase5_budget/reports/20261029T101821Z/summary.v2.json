@@ -1,0 +1,192 @@
+{
+  "generatedAt": "2026-10-29T10:22:38.043488+00:00",
+  "phase": "phase5_budget",
+  "dryRun": false,
+  "config": {
+    "gitHead": "6d05486",
+    "model": "deepseek-flash",
+    "provider": "openai",
+    "temperature": 0.0,
+    "maxTokens": 1200,
+    "maxContextTokens": 3000,
+    "embeddingModel": "text-embedding-v4",
+    "embeddingDimension": 1024,
+    "collection": "ails_phase42_real_e2e_text-embedding-v4_1024",
+    "collectionPrefix": "ails_phase42_real_e2e",
+    "userIds": [
+      14
+    ],
+    "spaceIds": [
+      22
+    ],
+    "allowedDocumentIds": [
+      85,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91
+    ],
+    "promptSha256": "542dc2d8b05126e8",
+    "corpus": {
+      "88": {
+        "name": "novacache-b.md",
+        "chunks": 2
+      },
+      "89": {
+        "name": "operating-system.md",
+        "chunks": 3
+      },
+      "87": {
+        "name": "novacache-a.md",
+        "chunks": 2
+      },
+      "85": {
+        "name": "auroragate.md",
+        "chunks": 3
+      },
+      "86": {
+        "name": "helios-compute.md",
+        "chunks": 6
+      },
+      "90": {
+        "name": "zealdeck.md",
+        "chunks": 3
+      },
+      "91": {
+        "name": "zenframe.md",
+        "chunks": 3
+      }
+    },
+    "queryFile": "D:\\learningMatiarials\\AI-Learning-Space\\evaluation\\phase5_budget\\queries.jsonl"
+  },
+  "aggregate": {
+    "runsTotal": 46,
+    "eligibleBudgetRuns": 20,
+    "targetErrorRuns": 0,
+    "targetErrorRate": 0.0,
+    "statusMisstatementRuns": 0,
+    "statusMisstatementRate": 0.0,
+    "citationOobRuns": 0,
+    "citationOobRate": 0.0,
+    "contentAbsenceClaimRuns": 0,
+    "contentAbsenceClaimRate": 0.0,
+    "disclosesBudgetRuns": 19,
+    "disclosesBudgetRate": 0.95,
+    "expectedDocsRetrievedRuns": 20,
+    "expectedDocsRetrievedRate": 1.0,
+    "expectedDocsInjectedRuns": 1,
+    "expectedDocsInjectedRate": 0.05,
+    "ineligible": [
+      {
+        "runKey": "P5-01::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-02::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-03::normal",
+        "reason": "finish_reason_length"
+      },
+      {
+        "runKey": "P5-04::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-05::normal",
+        "reason": "finish_reason_length"
+      },
+      {
+        "runKey": "P5-05::budget",
+        "reason": "finish_reason_length"
+      },
+      {
+        "runKey": "P5-06::normal",
+        "reason": "finish_reason_length"
+      },
+      {
+        "runKey": "P5-07::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-08::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-09::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-10::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-11::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-12::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-13::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-14::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-15::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-16::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-17::normal",
+        "reason": "model_error: LLMError: 模型返回空内容（reason=reasoning_exhausted_budget, finish_reason=length, status=200）"
+      },
+      {
+        "runKey": "P5-18::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-19::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-20::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-21::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-22::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-23::normal",
+        "reason": "not_a_budget_scenario"
+      },
+      {
+        "runKey": "P5-24::normal",
+        "reason": "finish_reason_length"
+      },
+      {
+        "runKey": "P5-24::budget",
+        "reason": "finish_reason_length"
+      }
+    ],
+    "errors": [],
+    "softAbsenceClaims": []
+  },
+  "screeningVersion": 2,
+  "screeningNote": "v2 硬口径只统计「没有检索到资料」类检索状态陈述；「资料中没有提到 X」作为软口径单独报告，不计入指标。"
+}

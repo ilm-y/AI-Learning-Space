@@ -1,0 +1,375 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------------< com.ails:backend >--------------------------
+[INFO] Building backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ backend ---
+[INFO] Copying 2 resources from src\main\resources to target\classes
+[INFO] Copying 4 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ backend ---
+[INFO] skip non existing resourceDirectory D:\learningMatiarials\AI-Learning-Space\backend\backend\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ backend ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.ails.backend.mq.Phase2MqProcessorIntegrationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.3.5)
+
+2026-10-29T19:42:30.961+08:00  INFO 21240 --- [backend] [           main] c.a.b.m.Phase2MqProcessorIntegrationTest : Starting Phase2MqProcessorIntegrationTest using Java 17.0.12 with PID 21240 (started by yangsy in D:\learningMatiarials\AI-Learning-Space\backend\backend)
+2026-10-29T19:42:30.963+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.m.Phase2MqProcessorIntegrationTest : Running with Spring Boot v3.3.5, Spring v6.1.14
+2026-10-29T19:42:30.965+08:00  INFO 21240 --- [backend] [           main] c.a.b.m.Phase2MqProcessorIntegrationTest : No active profile set, falling back to 1 default profile: "default"
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+2026-10-29T19:42:33.355+08:00  INFO 21240 --- [backend] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-10-29T19:42:33.552+08:00  INFO 21240 --- [backend] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@1e471884
+2026-10-29T19:42:33.554+08:00  INFO 21240 --- [backend] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-10-29T19:42:34.818+08:00  INFO 21240 --- [backend] [           main] c.a.b.m.Phase2MqProcessorIntegrationTest : Started Phase2MqProcessorIntegrationTest in 4.248 seconds (process running for 5.106)
+2026-10-29T19:42:34.988+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:42:35.000+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 99(Long), 45(Long), ANALYSIS(String), PENDING(String), phase2(String), 0123456789abcdef0123456789abcdef(String), 2026-10-29T19:42:34.983291200(LocalDateTime)
+2026-10-29T19:42:35.007+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:42:35.050+08:00 DEBUG 21240 --- [backend] [pool-4-thread-2] c.a.b.mapper.AgentRunMapper.update       : ==>  Preparing: UPDATE agent_run SET status=? WHERE (id = ? AND status IN (?,?))
+2026-10-29T19:42:35.050+08:00 DEBUG 21240 --- [backend] [pool-4-thread-1] c.a.b.mapper.AgentRunMapper.update       : ==>  Preparing: UPDATE agent_run SET status=? WHERE (id = ? AND status IN (?,?))
+2026-10-29T19:42:35.054+08:00 DEBUG 21240 --- [backend] [pool-4-thread-1] c.a.b.mapper.AgentRunMapper.update       : ==> Parameters: RUNNING(String), 45(Long), PENDING(String), STALE(String)
+2026-10-29T19:42:35.054+08:00 DEBUG 21240 --- [backend] [pool-4-thread-2] c.a.b.mapper.AgentRunMapper.update       : ==> Parameters: RUNNING(String), 45(Long), PENDING(String), STALE(String)
+2026-10-29T19:42:35.056+08:00 DEBUG 21240 --- [backend] [pool-4-thread-1] c.a.b.mapper.AgentRunMapper.update       : <==    Updates: 1
+2026-10-29T19:42:35.064+08:00 DEBUG 21240 --- [backend] [pool-4-thread-1] c.a.b.mapper.AgentRunMapper.selectList   : ==>  Preparing: SELECT id,user_id,conversation_id,session_id,run_type,status,input_summary,output_summary,duration_ms,trace_id,error_message,created_at,finished_at FROM agent_run WHERE (id = ?) FOR UPDATE
+2026-10-29T19:42:35.066+08:00 DEBUG 21240 --- [backend] [pool-4-thread-1] c.a.b.mapper.AgentRunMapper.selectList   : ==> Parameters: 45(Long)
+2026-10-29T19:42:35.084+08:00 DEBUG 21240 --- [backend] [pool-4-thread-1] c.a.b.mapper.AgentRunMapper.selectList   : <==      Total: 1
+2026-10-29T19:42:35.089+08:00 DEBUG 21240 --- [backend] [pool-4-thread-1] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:42:35.089+08:00 DEBUG 21240 --- [backend] [pool-4-thread-1] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 45(Long)
+2026-10-29T19:42:35.091+08:00 DEBUG 21240 --- [backend] [pool-4-thread-1] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:42:35.091+08:00 DEBUG 21240 --- [backend] [pool-4-thread-1] c.a.b.mapper.MessageMapper.selectById    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:42:35.092+08:00 DEBUG 21240 --- [backend] [pool-4-thread-1] c.a.b.mapper.MessageMapper.selectById    : ==> Parameters: 45(Long)
+2026-10-29T19:42:35.222+08:00 DEBUG 21240 --- [backend] [pool-4-thread-2] c.a.b.mapper.AgentRunMapper.update       : <==    Updates: 1
+2026-10-29T19:42:35.223+08:00 DEBUG 21240 --- [backend] [pool-4-thread-2] c.a.b.mapper.AgentRunMapper.selectList   : ==>  Preparing: SELECT id,user_id,conversation_id,session_id,run_type,status,input_summary,output_summary,duration_ms,trace_id,error_message,created_at,finished_at FROM agent_run WHERE (id = ?) FOR UPDATE
+2026-10-29T19:42:35.224+08:00 DEBUG 21240 --- [backend] [pool-4-thread-2] c.a.b.mapper.AgentRunMapper.selectList   : ==> Parameters: 45(Long)
+2026-10-29T19:42:35.226+08:00 DEBUG 21240 --- [backend] [pool-4-thread-2] c.a.b.mapper.AgentRunMapper.selectList   : <==      Total: 1
+2026-10-29T19:42:35.226+08:00 DEBUG 21240 --- [backend] [pool-4-thread-2] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:42:35.227+08:00 DEBUG 21240 --- [backend] [pool-4-thread-2] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 45(Long)
+2026-10-29T19:42:35.230+08:00 DEBUG 21240 --- [backend] [pool-4-thread-2] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:42:35.231+08:00 DEBUG 21240 --- [backend] [pool-4-thread-2] c.a.b.mapper.MessageMapper.selectById    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:42:35.231+08:00 DEBUG 21240 --- [backend] [pool-4-thread-2] c.a.b.mapper.MessageMapper.selectById    : ==> Parameters: 45(Long)
+2026-10-29T19:42:35.290+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:42:35.291+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 100(Long), 46(Long), ANALYSIS(String), PENDING(String), phase2(String), 0123456789abcdef0123456789abcdef(String), 2026-10-29T19:42:35.290240100(LocalDateTime)
+2026-10-29T19:42:35.294+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:42:35.296+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==>  Preparing: UPDATE agent_run SET status=? WHERE (id = ? AND status IN (?,?))
+2026-10-29T19:42:35.300+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==> Parameters: RUNNING(String), 46(Long), PENDING(String), STALE(String)
+2026-10-29T19:42:35.301+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : <==    Updates: 1
+2026-10-29T19:42:35.302+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : ==>  Preparing: SELECT id,user_id,conversation_id,session_id,run_type,status,input_summary,output_summary,duration_ms,trace_id,error_message,created_at,finished_at FROM agent_run WHERE (id = ?) FOR UPDATE
+2026-10-29T19:42:35.303+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : ==> Parameters: 46(Long)
+2026-10-29T19:42:35.303+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : <==      Total: 1
+2026-10-29T19:42:35.311+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==>  Preparing: UPDATE agent_run SET status=?, duration_ms=?, error_message=?, finished_at=? WHERE (id = ? AND status IN (?,?,?))
+2026-10-29T19:42:35.313+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==> Parameters: FAILED(String), 305(Integer), Agent 分析失败[LLM_UNAVAILABLE] model down(String), 2026-10-29T19:42:35.305242800(LocalDateTime), 46(Long), PENDING(String), STALE(String), RUNNING(String)
+2026-10-29T19:42:35.314+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : <==    Updates: 1
+2026-10-29T19:42:35.314+08:00  WARN 21240 --- [backend] [           main] c.a.backend.mq.AnalysisResultProcessor   : 分析任务失败, taskId=46, traceId=0123456789abcdef0123456789abcdef: Agent 分析失败[LLM_UNAVAILABLE] model down
+2026-10-29T19:42:35.427+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:42:35.428+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 101(Long), 47(Long), ANALYSIS(String), PENDING(String), phase2(String), 0123456789abcdef0123456789abcdef(String), 2026-10-29T19:42:35.427540400(LocalDateTime)
+2026-10-29T19:42:35.432+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:42:35.456+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==>  Preparing: UPDATE agent_run SET status=? WHERE (id = ? AND status IN (?,?))
+2026-10-29T19:42:35.457+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==> Parameters: RUNNING(String), 47(Long), PENDING(String), STALE(String)
+2026-10-29T19:42:35.457+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : <==    Updates: 1
+2026-10-29T19:42:35.459+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : ==>  Preparing: SELECT id,user_id,conversation_id,session_id,run_type,status,input_summary,output_summary,duration_ms,trace_id,error_message,created_at,finished_at FROM agent_run WHERE (id = ?) FOR UPDATE
+2026-10-29T19:42:35.459+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : ==> Parameters: 47(Long)
+2026-10-29T19:42:35.461+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : <==      Total: 1
+2026-10-29T19:42:35.462+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:42:35.462+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 47(Long)
+2026-10-29T19:42:35.463+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:42:35.463+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.MessageMapper.selectById    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:42:35.463+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.MessageMapper.selectById    : ==> Parameters: 47(Long)
+2026-10-29T19:42:35.510+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:42:35.510+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 102(Long), 48(Long), ANALYSIS(String), PENDING(String), phase2(String), 0123456789abcdef0123456789abcdef(String), 2026-10-29T19:42:35.510680600(LocalDateTime)
+2026-10-29T19:42:35.514+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:42:35.515+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==>  Preparing: UPDATE agent_run SET status=? WHERE (id = ? AND status IN (?,?))
+2026-10-29T19:42:35.516+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==> Parameters: RUNNING(String), 48(Long), PENDING(String), STALE(String)
+2026-10-29T19:42:35.517+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : <==    Updates: 1
+2026-10-29T19:42:35.518+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : ==>  Preparing: SELECT id,user_id,conversation_id,session_id,run_type,status,input_summary,output_summary,duration_ms,trace_id,error_message,created_at,finished_at FROM agent_run WHERE (id = ?) FOR UPDATE
+2026-10-29T19:42:35.518+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : ==> Parameters: 48(Long)
+2026-10-29T19:42:35.520+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : <==      Total: 1
+2026-10-29T19:42:35.520+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:42:35.520+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 48(Long)
+2026-10-29T19:42:35.521+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:42:35.522+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.MessageMapper.selectById    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:42:35.522+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.MessageMapper.selectById    : ==> Parameters: 48(Long)
+2026-10-29T19:42:35.563+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:42:35.565+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 103(Long), 49(Long), ANALYSIS(String), PENDING(String), phase2(String), 0123456789abcdef0123456789abcdef(String), 2026-10-29T19:42:35.563906300(LocalDateTime)
+2026-10-29T19:42:35.568+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:42:35.569+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==>  Preparing: UPDATE agent_run SET status=? WHERE (id = ? AND status IN (?,?))
+2026-10-29T19:42:35.569+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==> Parameters: RUNNING(String), 49(Long), PENDING(String), STALE(String)
+2026-10-29T19:42:35.570+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : <==    Updates: 1
+2026-10-29T19:42:35.571+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : ==>  Preparing: SELECT id,user_id,conversation_id,session_id,run_type,status,input_summary,output_summary,duration_ms,trace_id,error_message,created_at,finished_at FROM agent_run WHERE (id = ?) FOR UPDATE
+2026-10-29T19:42:35.571+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : ==> Parameters: 49(Long)
+2026-10-29T19:42:35.572+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.selectList   : <==      Total: 1
+2026-10-29T19:42:35.573+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==>  Preparing: UPDATE agent_run SET status=?, duration_ms=?, error_message=?, finished_at=? WHERE (id = ? AND status IN (?,?,?))
+2026-10-29T19:42:35.574+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : ==> Parameters: FAILED(String), -426(Integer), 结果消息 traceId 与任务不一致：task=0123456789abcdef0123456789abcdef, message=ffffffffffffffffffffffffffffffff(String), 2026-10-29T19:42:35.573909300(LocalDateTime), 49(Long), PENDING(String), STALE(String), RUNNING(String)
+2026-10-29T19:42:35.576+08:00 DEBUG 21240 --- [backend] [           main] c.a.b.mapper.AgentRunMapper.update       : <==    Updates: 1
+2026-10-29T19:42:35.576+08:00  WARN 21240 --- [backend] [           main] c.a.backend.mq.AnalysisResultProcessor   : 分析任务失败, taskId=49, traceId=0123456789abcdef0123456789abcdef: 结果消息 traceId 与任务不一致：task=0123456789abcdef0123456789abcdef, message=ffffffffffffffffffffffffffffffff
+[ERROR] Tests run: 5, Failures: 1, Errors: 2, Skipped: 0, Time elapsed: 5.360 s <<< FAILURE! -- in com.ails.backend.mq.Phase2MqProcessorIntegrationTest
+[ERROR] com.ails.backend.mq.Phase2MqProcessorIntegrationTest.concurrentDuplicateDeliveryDoesNotDuplicateBusinessRows -- Time elapsed: 0.415 s <<< ERROR!
+java.util.concurrent.ExecutionException: 
+org.springframework.jdbc.BadSqlGrammarException: 
+### Error querying database.  Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+### The error may exist in com/ails/backend/mapper/MessageMapper.java (best guess)
+### The error may involve defaultParameterMap
+### The error occurred while setting parameters
+### SQL: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE id=? AND deleted_at IS NULL
+### Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+; bad SQL grammar []
+	at java.base/java.util.concurrent.FutureTask.report(FutureTask.java:122)
+	at java.base/java.util.concurrent.FutureTask.get(FutureTask.java:205)
+	at com.ails.backend.mq.Phase2MqProcessorIntegrationTest.concurrentDuplicateDeliveryDoesNotDuplicateBusinessRows(Phase2MqProcessorIntegrationTest.java:185)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+Caused by: org.springframework.jdbc.BadSqlGrammarException: 
+### Error querying database.  Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+### The error may exist in com/ails/backend/mapper/MessageMapper.java (best guess)
+### The error may involve defaultParameterMap
+### The error occurred while setting parameters
+### SQL: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE id=? AND deleted_at IS NULL
+### Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+; bad SQL grammar []
+	at org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator.doTranslate(SQLErrorCodeSQLExceptionTranslator.java:246)
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:107)
+	at org.mybatis.spring.MyBatisExceptionTranslator.translateExceptionIfPossible(MyBatisExceptionTranslator.java:92)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:439)
+	at jdk.proxy2/jdk.proxy2.$Proxy121.selectOne(Unknown Source)
+	at org.mybatis.spring.SqlSessionTemplate.selectOne(SqlSessionTemplate.java:160)
+	at com.baomidou.mybatisplus.core.override.MybatisMapperMethod.execute(MybatisMapperMethod.java:87)
+	at com.baomidou.mybatisplus.core.override.MybatisMapperProxy$PlainMethodInvoker.invoke(MybatisMapperProxy.java:152)
+	at com.baomidou.mybatisplus.core.override.MybatisMapperProxy.invoke(MybatisMapperProxy.java:89)
+	at jdk.proxy2/jdk.proxy2.$Proxy130.selectById(Unknown Source)
+	at com.ails.backend.mq.AnalysisResultProcessor.process(AnalysisResultProcessor.java:125)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.invokeJoinpoint(ReflectiveMethodInvocation.java:196)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:163)
+	at org.springframework.aop.framework.CglibAopProxy$CglibMethodInvocation.proceed(CglibAopProxy.java:768)
+	at org.springframework.transaction.interceptor.TransactionAspectSupport.invokeWithinTransaction(TransactionAspectSupport.java:379)
+	at org.springframework.transaction.interceptor.TransactionInterceptor.invoke(TransactionInterceptor.java:119)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.aop.framework.CglibAopProxy$CglibMethodInvocation.proceed(CglibAopProxy.java:768)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:720)
+	at com.ails.backend.mq.AnalysisResultProcessor$$SpringCGLIB$$0.process(<generated>)
+	at com.ails.backend.mq.Phase2MqProcessorIntegrationTest.lambda$concurrentDuplicateDeliveryDoesNotDuplicateBusinessRows$3(Phase2MqProcessorIntegrationTest.java:180)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:842)
+Caused by: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:121)
+	at com.mysql.cj.jdbc.exceptions.SQLExceptionsMapping.translateException(SQLExceptionsMapping.java:122)
+	at com.mysql.cj.jdbc.ClientPreparedStatement.executeInternal(ClientPreparedStatement.java:912)
+	at com.mysql.cj.jdbc.ClientPreparedStatement.execute(ClientPreparedStatement.java:354)
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.execute(ProxyPreparedStatement.java:44)
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.execute(HikariProxyPreparedStatement.java)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.apache.ibatis.logging.jdbc.PreparedStatementLogger.invoke(PreparedStatementLogger.java:58)
+	at jdk.proxy3/jdk.proxy3.$Proxy160.execute(Unknown Source)
+	at org.apache.ibatis.executor.statement.PreparedStatementHandler.query(PreparedStatementHandler.java:65)
+	at org.apache.ibatis.executor.statement.RoutingStatementHandler.query(RoutingStatementHandler.java:80)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.apache.ibatis.plugin.Plugin.invoke(Plugin.java:61)
+	at jdk.proxy2/jdk.proxy2.$Proxy159.query(Unknown Source)
+	at org.apache.ibatis.executor.SimpleExecutor.doQuery(SimpleExecutor.java:65)
+	at org.apache.ibatis.executor.BaseExecutor.queryFromDatabase(BaseExecutor.java:336)
+	at org.apache.ibatis.executor.BaseExecutor.query(BaseExecutor.java:158)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:110)
+	at com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor.intercept(MybatisPlusInterceptor.java:81)
+	at org.apache.ibatis.plugin.Plugin.invoke(Plugin.java:59)
+	at jdk.proxy2/jdk.proxy2.$Proxy158.query(Unknown Source)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:154)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:147)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:142)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectOne(DefaultSqlSession.java:75)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:425)
+	... 26 more
+
+[ERROR] com.ails.backend.mq.Phase2MqProcessorIntegrationTest.writeFailureRollsBackEvidenceAndClaim -- Time elapsed: 0.088 s <<< FAILURE!
+java.lang.AssertionError: 
+
+Expecting actual throwable to be an instance of:
+  java.lang.IllegalStateException
+but was:
+  org.springframework.jdbc.BadSqlGrammarException: 
+### Error querying database.  Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+### The error may exist in com/ails/backend/mapper/MessageMapper.java (best guess)
+### The error may involve defaultParameterMap
+### The error occurred while setting parameters
+### SQL: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE id=? AND deleted_at IS NULL
+### Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+; bad SQL grammar []
+	at org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator.doTranslate(SQLErrorCodeSQLExceptionTranslator.java:246)
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:107)
+	at org.mybatis.spring.MyBatisExceptionTranslator.translateExceptionIfPossible(MyBatisExceptionTranslator.java:92)
+	...(99 remaining lines not displayed - this can be changed with Assertions.setMaxStackTraceElementsDisplayed)
+	at com.ails.backend.mq.Phase2MqProcessorIntegrationTest.writeFailureRollsBackEvidenceAndClaim(Phase2MqProcessorIntegrationTest.java:236)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+
+[ERROR] com.ails.backend.mq.Phase2MqProcessorIntegrationTest.duplicateDeliveryIsAckedWithoutDuplicateRows -- Time elapsed: 0.050 s <<< ERROR!
+org.springframework.jdbc.BadSqlGrammarException: 
+
+### Error querying database.  Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+### The error may exist in com/ails/backend/mapper/MessageMapper.java (best guess)
+### The error may involve defaultParameterMap
+### The error occurred while setting parameters
+### SQL: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE id=? AND deleted_at IS NULL
+### Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+; bad SQL grammar []
+	at org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator.doTranslate(SQLErrorCodeSQLExceptionTranslator.java:246)
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:107)
+	at org.mybatis.spring.MyBatisExceptionTranslator.translateExceptionIfPossible(MyBatisExceptionTranslator.java:92)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:439)
+	at jdk.proxy2/jdk.proxy2.$Proxy121.selectOne(Unknown Source)
+	at org.mybatis.spring.SqlSessionTemplate.selectOne(SqlSessionTemplate.java:160)
+	at com.baomidou.mybatisplus.core.override.MybatisMapperMethod.execute(MybatisMapperMethod.java:87)
+	at com.baomidou.mybatisplus.core.override.MybatisMapperProxy$PlainMethodInvoker.invoke(MybatisMapperProxy.java:152)
+	at com.baomidou.mybatisplus.core.override.MybatisMapperProxy.invoke(MybatisMapperProxy.java:89)
+	at jdk.proxy2/jdk.proxy2.$Proxy130.selectById(Unknown Source)
+	at com.ails.backend.mq.AnalysisResultProcessor.process(AnalysisResultProcessor.java:125)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.invokeJoinpoint(ReflectiveMethodInvocation.java:196)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:163)
+	at org.springframework.aop.framework.CglibAopProxy$CglibMethodInvocation.proceed(CglibAopProxy.java:768)
+	at org.springframework.transaction.interceptor.TransactionAspectSupport.invokeWithinTransaction(TransactionAspectSupport.java:379)
+	at org.springframework.transaction.interceptor.TransactionInterceptor.invoke(TransactionInterceptor.java:119)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.aop.framework.CglibAopProxy$CglibMethodInvocation.proceed(CglibAopProxy.java:768)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:720)
+	at com.ails.backend.mq.AnalysisResultProcessor$$SpringCGLIB$$0.process(<generated>)
+	at com.ails.backend.mq.Phase2MqProcessorIntegrationTest.duplicateDeliveryIsAckedWithoutDuplicateRows(Phase2MqProcessorIntegrationTest.java:159)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+Caused by: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:121)
+	at com.mysql.cj.jdbc.exceptions.SQLExceptionsMapping.translateException(SQLExceptionsMapping.java:122)
+	at com.mysql.cj.jdbc.ClientPreparedStatement.executeInternal(ClientPreparedStatement.java:912)
+	at com.mysql.cj.jdbc.ClientPreparedStatement.execute(ClientPreparedStatement.java:354)
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.execute(ProxyPreparedStatement.java:44)
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.execute(HikariProxyPreparedStatement.java)
+	at jdk.internal.reflect.GeneratedMethodAccessor29.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.apache.ibatis.logging.jdbc.PreparedStatementLogger.invoke(PreparedStatementLogger.java:58)
+	at jdk.proxy3/jdk.proxy3.$Proxy160.execute(Unknown Source)
+	at org.apache.ibatis.executor.statement.PreparedStatementHandler.query(PreparedStatementHandler.java:65)
+	at org.apache.ibatis.executor.statement.RoutingStatementHandler.query(RoutingStatementHandler.java:80)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.apache.ibatis.plugin.Plugin.invoke(Plugin.java:61)
+	at jdk.proxy2/jdk.proxy2.$Proxy159.query(Unknown Source)
+	at org.apache.ibatis.executor.SimpleExecutor.doQuery(SimpleExecutor.java:65)
+	at org.apache.ibatis.executor.BaseExecutor.queryFromDatabase(BaseExecutor.java:336)
+	at org.apache.ibatis.executor.BaseExecutor.query(BaseExecutor.java:158)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:110)
+	at com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor.intercept(MybatisPlusInterceptor.java:81)
+	at org.apache.ibatis.plugin.Plugin.invoke(Plugin.java:59)
+	at jdk.proxy2/jdk.proxy2.$Proxy158.query(Unknown Source)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:154)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:147)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:142)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectOne(DefaultSqlSession.java:75)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:425)
+	... 25 more
+
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   Phase2MqProcessorIntegrationTest.writeFailureRollsBackEvidenceAndClaim:236 
+Expecting actual throwable to be an instance of:
+  java.lang.IllegalStateException
+but was:
+  org.springframework.jdbc.BadSqlGrammarException: 
+### Error querying database.  Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+### The error may exist in com/ails/backend/mapper/MessageMapper.java (best guess)
+### The error may involve defaultParameterMap
+### The error occurred while setting parameters
+### SQL: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE id=? AND deleted_at IS NULL
+### Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+; bad SQL grammar []
+	at org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator.doTranslate(SQLErrorCodeSQLExceptionTranslator.java:246)
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:107)
+	at org.mybatis.spring.MyBatisExceptionTranslator.translateExceptionIfPossible(MyBatisExceptionTranslator.java:92)
+	...(99 remaining lines not displayed - this can be changed with Assertions.setMaxStackTraceElementsDisplayed)
+[ERROR] Errors: 
+[ERROR]   Phase2MqProcessorIntegrationTest.concurrentDuplicateDeliveryDoesNotDuplicateBusinessRows:185 » Execution org.springframework.jdbc.BadSqlGrammarException: 
+### Error querying database.  Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+### The error may exist in com/ails/backend/mapper/MessageMapper.java (best guess)
+### The error may involve defaultParameterMap
+### The error occurred while setting parameters
+### SQL: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE id=? AND deleted_at IS NULL
+### Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+; bad SQL grammar []
+[ERROR]   Phase2MqProcessorIntegrationTest.duplicateDeliveryIsAckedWithoutDuplicateRows:159 » BadSqlGrammar 
+### Error querying database.  Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+### The error may exist in com/ails/backend/mapper/MessageMapper.java (best guess)
+### The error may involve defaultParameterMap
+### The error occurred while setting parameters
+### SQL: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE id=? AND deleted_at IS NULL
+### Cause: java.sql.SQLSyntaxErrorException: Unknown column 'truncated' in 'field list'
+; bad SQL grammar []
+[INFO] 
+[ERROR] Tests run: 5, Failures: 1, Errors: 2, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  7.987 s
+[INFO] Finished at: 2026-10-29T19:42:35+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test (default-test) on project backend: There are test failures.
+[ERROR] 
+[ERROR] Please refer to D:\learningMatiarials\AI-Learning-Space\backend\backend\target\surefire-reports for the individual test results.
+[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

@@ -1,0 +1,19 @@
+report files: 39
+tests(total, including skipped): 255
+executed: 182
+passed: 182
+skipped: 73
+failures: 0
+errors: 0
+fully-skipped classes:
+  com.ails.backend.BackendApplicationTests: 1
+  com.ails.backend.mq.Phase2MqProcessorIntegrationTest: 5
+  com.ails.backend.mq.Phase2RabbitMqBrokerTest: 5
+  com.ails.backend.security.InternalIdentityHttpIntegrationTest: 5
+  com.ails.backend.security.SecurityContextIntegrationTest: 19
+  com.ails.backend.service.ChatSseIntegrationTest: 8
+  com.ails.backend.service.ChatSseOrderingProbeTest: 1
+  com.ails.backend.service.DocumentIndexE2EIntegrationTest: 1
+  com.ails.backend.service.DocumentIndexServiceIntegrationTest: 15
+  com.ails.backend.service.DocumentServiceIntegrationTest: 7
+  com.ails.backend.service.Phase2RealStateIntegrationTest: 6
