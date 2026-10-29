@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS `message` (
     `message_type`    ENUM ('TEXT', 'TEST', 'EVENT') NOT NULL DEFAULT 'TEXT',
     `content`         LONGTEXT    NOT NULL COMMENT 'Markdown 格式',
     `tokens`          INT                  DEFAULT NULL,
+    `truncated`       TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '助手回复是否因 Token 上限被截断',
     `sequence_no`     INT         NOT NULL COMMENT '对话内顺序，从 1 开始',
     `deleted_at`      DATETIME             DEFAULT NULL COMMENT '软删标记',
     `created_at`      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -159,6 +160,11 @@ CREATE TABLE IF NOT EXISTS `message` (
     UNIQUE KEY `uk_msg_conv_seq` (`conversation_id`, `sequence_no`),
     CONSTRAINT `fk_msg_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `conversation` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- Phase 7 新增 message.truncated（标记助手回复因 Token 上限不完整）。
+-- CREATE TABLE IF NOT EXISTS 不会给已存在的表补列；已有库需手工执行一次：
+--   mysql -uroot -p ails < schema-migration-phase7-truncation.sql
+-- 或按 README 用 schema-dev-reset.sql 清库重建。新库由上面的 CREATE 直接带上。
 
 -- 模块 5：批注
 CREATE TABLE IF NOT EXISTS `highlight` (
@@ -479,7 +485,7 @@ CREATE TABLE IF NOT EXISTS `agent_run` (
     `conversation_id` BIGINT            DEFAULT NULL,
     `session_id`      BIGINT            DEFAULT NULL,
     `run_type`        ENUM ('CHAT', 'ANALYSIS', 'TEST', 'MEMORY') NOT NULL,
-    `status`          ENUM ('PENDING', 'STALE', 'RUNNING', 'COMPLETED', 'SUCCEEDED', 'FAILED') NOT NULL DEFAULT 'RUNNING',
+    `status`          ENUM ('PENDING', 'STALE', 'RUNNING', 'COMPLETED', 'TRUNCATED', 'SUCCEEDED', 'FAILED') NOT NULL DEFAULT 'RUNNING',
     -- 两跳链路（Postman → 后端 → Agent）里唯一能跨进程把两半日志对上的键
     `trace_id`        CHAR(32)           DEFAULT NULL COMMENT '由后端生成并透传给 Agent',
     `input_summary`   TEXT,
@@ -502,7 +508,8 @@ CREATE TABLE IF NOT EXISTS `agent_run` (
 -- CREATE TABLE IF NOT EXISTS 不会修改已存在的表，所以这里补一条幂等的 ALTER。
 -- 必须放在上面的 CREATE 之后：新库先建表，老库表已存在，两种情况下都成立。
 -- STALE 表示「可能遗留」，不是终态：结果消费者仍允许把 STALE 抢占为 RUNNING。
+-- TRUNCATED 表示同步对话因 Token 上限提前停止：内容可展示，但不是完整回答。
 ALTER TABLE `agent_run`
     MODIFY COLUMN `status`
-        ENUM ('PENDING', 'STALE', 'RUNNING', 'COMPLETED', 'SUCCEEDED', 'FAILED')
+        ENUM ('PENDING', 'STALE', 'RUNNING', 'COMPLETED', 'TRUNCATED', 'SUCCEEDED', 'FAILED')
         NOT NULL DEFAULT 'RUNNING';

@@ -2,6 +2,7 @@ package com.ails.backend.service;
 
 import com.ails.backend.agent.AgentGateway;
 import com.ails.backend.agent.AgentStreamHandler;
+import com.ails.backend.agent.StreamCompletion;
 import com.ails.backend.dto.agent.ChatAgentRequest;
 import com.ails.backend.entity.Conversation;
 import com.ails.backend.entity.Message;
@@ -189,7 +190,9 @@ class ChatSseIntegrationTest {
                     });
             assertThat(assistant.getId()).isEqualTo(end.get("messageId").asLong());
             assertThat(assistant.getContent()).isEqualTo(ANSWER_PART_1 + ANSWER_PART_2);
-            assertThat(runStatus()).isEqualTo("COMPLETED");
+            // message.end 在 finishRun 之前发送，两者之间有一个很短的窗口：
+            // 客户端收到 end 时 run 可能仍是 RUNNING。断言的是最终收敛状态，不是同一瞬间。
+            await("run 正常终态", () -> "COMPLETED".equals(runStatus()));
 
             // 分析被卡在入口：end 之后、证据写入之前，库里还没有 Evidence。
             assertThat(analysisEntered.await(10, TimeUnit.SECONDS)).isTrue();
@@ -310,6 +313,48 @@ class ChatSseIntegrationTest {
         assertThat(countMessages("ASSISTANT")).isZero();
         await("模型错误终态写入", () -> "FAILED".equals(runStatus()));
         assertThat(count("learning_evidence")).isZero();
+    }
+
+    // ===================== 4.1 Token 上限截断 =====================
+
+    @Test
+    @DisplayName("截断流：保留部分内容并标记 truncated，run=TRUNCATED，不触发分析")
+    void truncatedStreamPersistsPartialContentAndSkipsAnalysis() throws Exception {
+        agentGateway.truncated();
+
+        List<SseEvent> events = readTerminalEvents();
+
+        assertThat(events).extracting(SseEvent::name)
+                .contains("message.end")
+                .doesNotContain("message.error");
+        JsonNode end = objectMapper.readTree(
+                events.get(events.size() - 1).data());
+        assertThat(end.get("truncated").asBoolean()).isTrue();
+        assertThat(end.get("finishReason").asText()).isEqualTo("length");
+        assertThat(end.get("messageId").asLong()).isPositive();
+
+        // 部分回答保留，用户仍能看到已经生成的内容；但持久化状态与消息本身都标记不完整。
+        assertThat(countMessages("ASSISTANT")).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT content FROM message WHERE role = 'ASSISTANT'", String.class))
+                .isEqualTo(ANSWER_PART_1);
+        assertThat(jdbc.queryForObject(
+                "SELECT truncated FROM message WHERE role = 'ASSISTANT'", Boolean.class))
+                .isTrue();
+        await("截断终态写入", () -> "TRUNCATED".equals(runStatus()));
+
+        // 截断回答不作为完整学习证据继续分析。
+        assertThat(count("learning_evidence")).isZero();
+        verify(analysisDispatchService, never()).dispatch(
+                any(Conversation.class), any(Message.class), anyString(), anyLong(),
+                anyString(), any(LearningAnalysisService.TurnOpening.class));
+
+        // 重新加载消息列表也能区分「部分内容」和「完整回答」。
+        JsonNode assistant = listMessages().stream()
+                .filter(node -> "ASSISTANT".equals(node.get("role").asText()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(assistant.get("truncated").asBoolean()).isTrue();
     }
 
     // ===================== 5. 重复请求 / 越权 =====================
@@ -548,6 +593,10 @@ class ChatSseIntegrationTest {
             mode = Mode.MODEL_ERROR;
         }
 
+        void truncated() {
+            mode = Mode.TRUNCATED;
+        }
+
         @Override
         public void streamReply(ChatAgentRequest request, AgentStreamHandler handler) {
             switch (mode) {
@@ -559,11 +608,15 @@ class ChatSseIntegrationTest {
                     handler.onDelta(ANSWER_PART_2);
                     handler.onComplete();
                 }
+                case TRUNCATED -> {
+                    handler.onDelta(ANSWER_PART_1);
+                    handler.onComplete(new StreamCompletion("length", true));
+                }
             }
         }
 
         private enum Mode {
-            NORMAL, EMPTY_STREAM, MODEL_ERROR
+            NORMAL, EMPTY_STREAM, MODEL_ERROR, TRUNCATED
         }
     }
 

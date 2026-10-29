@@ -37,6 +37,14 @@ public class Message {
     /** 粗略 token 计数 */
     private Integer tokens;
 
+    /**
+     * 助手回复是否因模型 Token 上限被截断。
+     * <p>
+     * 截断时内容仍保留展示，但这个标记让重新加载消息列表的客户端也能区分
+     * 「部分内容」和「完整回答」。用户消息、历史消息始终为 false。
+     */
+    private Boolean truncated;
+
     /** 对话内顺序，从 1 开始 */
     private Integer sequenceNo;
 

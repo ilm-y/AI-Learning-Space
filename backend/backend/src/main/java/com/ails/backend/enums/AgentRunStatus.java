@@ -3,7 +3,7 @@ package com.ails.backend.enums;
 /**
  * Agent 执行状态（agent_run.status）
  * <p>
- * 对话 run 仍然走 {@code RUNNING → COMPLETED / FAILED}；
+ * 对话 run 走 {@code RUNNING → COMPLETED / TRUNCATED / FAILED}；
  * 异步分析 run 走 {@code PENDING → RUNNING → SUCCEEDED / FAILED}：
  * <ul>
  *   <li>{@code PENDING} —— 任务已建、请求消息已投递，等待 Agent Worker 消费；</li>
@@ -13,7 +13,8 @@ package com.ails.backend.enums;
  *   <li>{@code SUCCEEDED} —— 结果已校验并写入数据库；</li>
  *   <li>{@code FAILED} —— 分析失败、投递失败或重试耗尽。</li>
  * </ul>
- * {@code COMPLETED} 保留给同步对话路径，语义是「这次生成正常结束」，不要混用。
+ * {@code COMPLETED} 保留给同步对话路径，语义是「这次生成正常结束」；
+ * {@code TRUNCATED} 表示生成因 Token 上限提前停止，内容不完整，不能当作正常完成。
  * <p>
  * 把「可能遗留」和「确认失败」分成两个状态，是为了避免补偿扫描把仍在执行的任务判死，
  * 从而让随后到达的合法结果被当作 DUPLICATE 丢弃。
@@ -23,6 +24,8 @@ public enum AgentRunStatus {
     STALE,
     RUNNING,
     COMPLETED,
+    /** 回答因模型 Token 上限被截断：部分内容可展示，但不是完整回答。 */
+    TRUNCATED,
     SUCCEEDED,
     FAILED
 }

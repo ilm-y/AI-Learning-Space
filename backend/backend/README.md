@@ -424,11 +424,16 @@ knownParts 非空                → PARTIAL
 ```text
 message.start   { runId, conversationId }
 message.delta   { delta }
-message.end     { messageId, runId }
+message.end     { messageId, runId, truncated?, finishReason? }
 message.error   { runId, code, message }
 ```
 
-- **`runId` 从第一个事件起就存在** —— 它是一条 `agent_run`（`run_type = CHAT`）的主键，状态走 `RUNNING → COMPLETED / FAILED`。前端拿到 `runId` 就能追溯这次请求。
+- **`runId` 从第一个事件起就存在** —— 它是一条 `agent_run`（`run_type = CHAT`）的主键，状态走 `RUNNING → COMPLETED / TRUNCATED / FAILED`。前端拿到 `runId` 就能追溯这次请求。
+- **`finishReason=length` 不等于正常完成。** 此时已经生成的部分内容仍会落库并展示，
+  `message.end` 追加 `truncated: true`，`agent_run.status` 记为 `TRUNCATED`，
+  并且**不会触发后续学习分析**（不完整回答不能作为完整学习证据）。
+  `GET /messages` 的助手消息也带 `truncated` 字段，重新加载后仍能区分。
+  正常完成的 `message.end` 字段保持不变，旧客户端可以忽略新增字段。
 - 用户消息在请求线程里**同步落库**（保证 `GET /messages` 立刻看得到、序号按请求顺序分配），生成与推送在 `chatStreamExecutor` 线程池里跑。
 - 对话结束后会静默跑一次消息分析；**分析失败不影响已经推完的对话** —— 用户已经拿到回复了，回滚没有意义。
 - 前端必须用支持流式的 HTTP 客户端（Flutter 侧是 `http` 的 `StreamedResponse`），普通 `fetch` 拿不到中间态。
@@ -621,6 +626,16 @@ spring:
 | ---------------------- | ------------------------------------------------------ | -------------------------------------------------------- |
 | `schema.sql`           | **只 CREATE**，全部 `CREATE TABLE IF NOT EXISTS`，幂等 | `spring.sql.init` 在**每次启动**时自动执行，无需手工干预 |
 | `schema-dev-reset.sql` | **只 DROP**，`SET FOREIGN_KEY_CHECKS = 0/1` 包住       | 需要清库重建时**手工**执行                               |
+| `schema-migration-*.sql` | **只 ALTER**，用 `information_schema` 做幂等检查     | **已有库**升级时**手工**执行（新库不需要）              |
+
+已有库升级（不丢数据）：
+
+```bash
+# RAG 阶段：document / document_chunk / learning_space
+mysql -uroot -p ails < src/main/resources/schema-migration-document-rag.sql
+# Phase 7：message.truncated + agent_run.TRUNCATED
+mysql -uroot -p ails < src/main/resources/schema-migration-phase7-truncation.sql
+```
 
 **为什么必须分开**：`schema.sql` 每次启动都会跑。如果把 DROP 写进去，`./mvnw spring-boot:run` 每重启一次就会清空一次数据库。
 
@@ -649,9 +664,12 @@ IDE 里直接跑 `BackendApplication` 主类同理。
 `createDatabaseIfNotExist=true` 会重新建库，`schema.sql` 会接着把 22 张表建回来 —— 都是幂等的。
 
 > **改过 `schema.sql` 的列清单之后，`IF NOT EXISTS` 不会帮你加列。** 必须走一次
-> 清库重建（`schema-dev-reset.sql` → `schema.sql`），否则新列在库里根本不存在，
-> 而错误会以「字段读出来全是 null」的形式出现，不在启动日志里。B 阶段加
-> `evidence_type` / `dedupe_key` / `scope_type` / `trace_id` / `goal` 就是这么过来的。
+> 迁移脚本（`schema-migration-*.sql`）或清库重建（`schema-dev-reset.sql` →
+> `schema.sql`），否则新列在库里根本不存在。B 阶段加
+> `evidence_type` / `dedupe_key` / `scope_type` / `trace_id` / `goal` 就是这么过来的；
+> Phase 7 加 `message.truncated` 时漏了脚本，老库会直接报
+> `Unknown column 'truncated' in 'field list'`（`schema-migration-phase7-truncation.sql`
+> 是补上的迁移脚本）。
 
 ### 联调 Python Agent（本机）
 
@@ -721,13 +739,13 @@ Agent 日志不在默认的 `/tmp/agent.log` 时，用 `AGENT_LOG=/path/to/agent
 ### 测试
 
 ```bash
-./mvnw test                                    # 189 passed, 29 skipped, 0 failed（2026-10-27）
+./mvnw test                                    # 255 条 / 182 执行通过 / 73 skipped / 0 failed（2026-10-29）
 ./mvnw test -Dtest=MisconceptionLifecycleTest  # 单跑某个纯函数测试类
 ./mvnw -B clean test -Pmq-integration          # Testcontainers 拉 RabbitMQ；本轮未执行
 ```
 
 默认 `./mvnw test` 里实际执行的主要是**纯 JUnit 5 + AssertJ + Mockito**，
-不需要 MySQL；29 个 skip 是需要真实 MySQL / Docker / 环境变量的门控用例
+不需要 MySQL；73 个 skip 是需要真实 MySQL / Docker / 环境变量的门控用例
 （`AILS_SECURITY_IT`、`AILS_DOCUMENT_IT` 等）。**skip 不等于通过**；
 `AnalysisMqIntegrationTest` 在默认 profile 下 0 个用例执行，也不写成通过。
 完整分类见 [../../docs/delivery/TEST_MATRIX.md](../../docs/delivery/TEST_MATRIX.md)。
