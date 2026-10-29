@@ -33,6 +33,27 @@ from app.schemas import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _inject_fixture_retriever_for_analysis(monkeypatch, request):
+    """分析链路现在禁止 fixture 模式在生产配置里冒充真实检索（Phase 1.1 B06）。
+
+    这些契约测试要验证的是分析器的解析/裁剪逻辑，不是检索保护本身，所以
+    只在这个测试模块里显式注入 FixtureRetriever。保护行为由
+    `test_analyze_never_falls_back_to_fixture` 和 Phase 1.1 回归单独覆盖。
+    """
+    if request.node.name == "test_analyze_never_falls_back_to_fixture":
+        yield
+        return
+    from app.config import AGENT_ROOT
+    from app.retriever.fixture import FixtureRetriever
+
+    fixture = FixtureRetriever(AGENT_ROOT / "fixtures" / "demo_space.json")
+    monkeypatch.setattr(
+        "app.analysis.analyzer.build_retriever", lambda *args, **kwargs: fixture
+    )
+    yield
+
+
 def make_analyze_request(message: str, *, history: list[tuple[str, str]] | None = None) -> AnalyzeRequest:
     from app.schemas import HistoryMessage, MessageRole
 

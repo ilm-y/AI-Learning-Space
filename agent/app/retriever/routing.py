@@ -49,13 +49,16 @@ def build_retriever(
     *,
     allow_degradation: bool = True,
     user_id: int | None = None,
+    delegation_token: str | None = None,
     knowledge_search: KnowledgeSearchService | None = None,
 ) -> Retriever:
     """按配置与本次请求组装检索源。每次运行一个实例，用完即关。
 
     凭据二选一：
     - ``auth_token``：同步 Chain 透传的用户 JWT；
-    - ``settings.internal_token`` + ``user_id``：异步 Worker 的服务端凭据。
+    - ``settings.internal_token`` + Spring 签发的 ``delegation_token`` + ``user_id``：
+      异步 Worker 的服务端凭据。Worker <b>不自己签发</b>委托声明，只转发 MQ 任务里
+      Spring 生成的那一条；没有它时 fail closed，不退回共享 token 明文身份。
 
     :param allow_degradation: 允许 ``auto`` 模式在无凭据 / 后端不可用时退回 Fixture。
         Chat 链路保持默认（演示优先）；**Analyze 链路必须传 False** ——
@@ -65,18 +68,28 @@ def build_retriever(
     fixture = _build_fixture(settings)
 
     if mode == MODE_FIXTURE:
+        if not allow_degradation:
+            # Analyze 的结果会被写进长期认知。即使配置显式写了 fixture，
+            # 也不允许它在「禁止降级」的链路上冒充真实检索。
+            raise RetrievalError(
+                "分析链路禁止使用 Fixture 检索源：样例概念会被写进真实用户的长期认知。"
+                "请把 AILS_RETRIEVER_MODE 设为 http 或 auto，并提供 "
+                "authToken 或 AILS_INTERNAL_TOKEN + userId。"
+            )
         return fixture
 
-    http = _build_http(settings, auth_token, user_id, knowledge_search)
+    http = _build_http(settings, auth_token, user_id, delegation_token, knowledge_search)
     if http is None:
         if not allow_degradation:
             raise RetrievalError(
-                "分析链路需要 authToken（或 AILS_INTERNAL_TOKEN）才能走 HTTP 检索；"
+                "分析链路需要 authToken，或 AILS_INTERNAL_TOKEN + "
+                "Spring 签发的 backendIdentity + userId 才能走 HTTP 检索；"
                 "不会退回 Fixture，否则样例概念会被写进真实用户的长期认知。"
             )
         if mode == MODE_HTTP:
             raise RetrievalError(
-                "AILS_RETRIEVER_MODE=http 但既没有 authToken，也没有 AILS_INTERNAL_TOKEN + userId。"
+                "AILS_RETRIEVER_MODE=http 但既没有 authToken，也没有 "
+                "AILS_INTERNAL_TOKEN + Spring 签发的 backendIdentity + userId。"
                 "后端读接口按登录用户鉴权，必须带其中一种凭据。"
             )
         log.info("未提供检索凭据，使用 Fixture 检索源")
@@ -182,9 +195,15 @@ def _build_http(
     settings: Settings,
     auth_token: str | None,
     user_id: int | None,
+    delegation_token: str | None,
     knowledge_search: KnowledgeSearchService | None,
 ) -> HttpBackendRetriever | None:
-    """有凭据才建 HTTP 检索源。用户 JWT 优先于服务端凭据。"""
+    """有凭据才建 HTTP 检索源。用户 JWT 优先于服务端凭据。
+
+    服务端路径必须有 Spring 签发的委托声明；Agent 不读取 signing secret，也不
+    mint 新声明。委托声明的 sub 由后端校验，Agent 只把任务里的 userId 作为
+    交叉核对 Header 一并转发。
+    """
     if auth_token:
         return HttpBackendRetriever(
             settings.backend_base_url,
@@ -194,10 +213,11 @@ def _build_http(
             knowledge_top_k=settings.knowledge_top_k,
             knowledge_search=knowledge_search,
         )
-    if settings.internal_token and user_id is not None:
+    if settings.internal_token and delegation_token and user_id is not None:
         return HttpBackendRetriever(
             settings.backend_base_url,
             internal_token=settings.internal_token,
+            internal_identity=delegation_token,
             user_id=user_id,
             timeout_seconds=settings.backend_timeout_seconds,
             memory_top_k=settings.memory_top_k,

@@ -5,6 +5,7 @@ import com.ails.backend.entity.Conversation;
 import com.ails.backend.entity.Message;
 import com.ails.backend.enums.AgentRunStatus;
 import com.ails.backend.mapper.AgentRunMapper;
+import com.ails.backend.security.InternalIdentitySigner;
 import com.ails.backend.service.MessageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,8 @@ class AnalysisTaskServiceTest {
     private MessageService messageService;
     @Mock
     private AnalysisTaskPublisher publisher;
+    @Mock
+    private InternalIdentitySigner identitySigner;
 
     private AnalysisTaskService service;
     private Conversation conversation;
@@ -50,7 +53,9 @@ class AnalysisTaskServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AnalysisTaskService(agentRunMapper, messageService, publisher);
+        service = new AnalysisTaskService(
+                agentRunMapper, messageService, publisher, identitySigner);
+        lenient().when(identitySigner.signDelegation(1L)).thenReturn("v1.signed.delegation");
 
         conversation = new Conversation();
         conversation.setId(2L);
@@ -75,8 +80,24 @@ class AnalysisTaskServiceTest {
                 service.enqueue(conversation, userMessage, "回答", 101L, null);
 
         assertThat(outcome).isEqualTo(AnalysisTaskService.DispatchOutcome.CONFIRMED);
-        verify(publisher).publish(any(AnalysisTaskMessage.class));
+        ArgumentCaptor<AnalysisTaskMessage> published =
+                ArgumentCaptor.forClass(AnalysisTaskMessage.class);
+        verify(publisher).publish(published.capture());
+        // Spring 必须在消息里携带由服务端签发的委托声明，而不是让 Worker 自行签发。
+        assertThat(published.getValue().backendIdentity()).isEqualTo("v1.signed.delegation");
         verify(agentRunMapper, never()).update(any(AgentRun.class), any());
+    }
+
+    @Test
+    void signingFailureMarksRunFailedAndDoesNotPublish() {
+        when(identitySigner.signDelegation(1L)).thenThrow(new IllegalStateException("未配置"));
+        when(agentRunMapper.update(any(AgentRun.class), any())).thenReturn(1);
+
+        AnalysisTaskService.DispatchOutcome outcome =
+                service.enqueue(conversation, userMessage, "回答", 101L, null);
+
+        assertThat(outcome).isEqualTo(AnalysisTaskService.DispatchOutcome.FAILED);
+        verify(publisher, never()).publish(any());
     }
 
     @Test

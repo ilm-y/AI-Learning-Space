@@ -3,6 +3,7 @@ package com.ails.backend.agent;
 import com.ails.backend.dto.agent.ChatAgentRequest;
 import com.ails.backend.dto.agent.ChatHistoryMessage;
 import com.ails.backend.enums.MessageRole;
+import com.ails.backend.security.InternalIdentitySigner;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -39,6 +40,10 @@ class HttpPythonAgentGatewayTest {
     /** {@link #sampleRequest()} 用的固定 trace id，供「原样透传」的断言引用。 */
     private static final String TRACE_ID = "0123456789abcdef0123456789abcdef";
 
+    /** 仅测试用占位凭据；断言的是「有没有随请求发出」，不是秘密本身。 */
+    private static final String TEST_TOKEN = "test-internal-token";
+    private static final String TEST_IDENTITY_SECRET = "test-identity-secret";
+
     /** 本测试里所有服务端都在 127.0.0.1 的临时端口上，跑完逐个关掉。 */
     private final List<HttpServer> servers = new ArrayList<>();
 
@@ -47,6 +52,12 @@ class HttpPythonAgentGatewayTest {
 
     /** 最近一次请求的 Connection 头，用于钉住「不发 h2c 升级」。 */
     private final AtomicReference<String> lastConnectionHeader = new AtomicReference<>("");
+
+    /** 内网身份头：Agent 侧没有它们会 401。 */
+    private final AtomicReference<String> lastTokenHeader = new AtomicReference<>("");
+    private final AtomicReference<String> lastUserHeader = new AtomicReference<>("");
+    private final AtomicReference<String> lastIdentityHeader = new AtomicReference<>("");
+    private final AtomicInteger requestCount = new AtomicInteger();
 
     @AfterEach
     void stopServers() {
@@ -167,7 +178,8 @@ class HttpPythonAgentGatewayTest {
             deadPort = socket.getLocalPort();
         }
         HttpPythonAgentGateway gateway =
-                new HttpPythonAgentGateway("http://127.0.0.1:" + deadPort, 1000, 5000);
+                new HttpPythonAgentGateway("http://127.0.0.1:" + deadPort, 1000, 5000,
+                        TEST_TOKEN, signer());
 
         RecordingHandler handler = new RecordingHandler();
         gateway.streamReply(sampleRequest(), handler);
@@ -205,6 +217,47 @@ class HttpPythonAgentGatewayTest {
     }
 
     @Test
+    @DisplayName("调用 Agent 必须携带内部凭据，并用请求 userId 绑定身份")
+    void sendsInternalIdentityHeaders() throws IOException {
+        HttpServer server = startServer(200, """
+                event: done
+                data: {"runId":7}
+
+                """);
+
+        gateway(server).streamReply(sampleRequest(), new RecordingHandler());
+
+        // Agent 侧未配置 token 时 fail-closed 503；配置后无凭据是 401。
+        // 这三个头缺任何一个，真实链路都会在鉴权层断掉。
+        assertThat(lastTokenHeader.get()).isEqualTo(TEST_TOKEN);
+        assertThat(lastUserHeader.get()).isEqualTo("1");
+        assertThat(signer().verifyForAudience(lastIdentityHeader.get(), "learning-agent"))
+                .as("身份声明必须由签名密钥签发且绑定 userId")
+                .contains(1L);
+    }
+
+    @Test
+    @DisplayName("未配置身份签名密钥时 fail closed：不调用 Agent，直接 onError(503)")
+    void refusesToCallAgentWithoutIdentitySecret() throws IOException {
+        HttpServer server = startServer(200, """
+                event: done
+                data: {"runId":7}
+
+                """);
+        HttpPythonAgentGateway gateway = new HttpPythonAgentGateway(
+                "http://127.0.0.1:" + server.getAddress().getPort(), 2000, 10000,
+                TEST_TOKEN, signer(""));
+
+        RecordingHandler handler = new RecordingHandler();
+        gateway.streamReply(sampleRequest(), handler);
+
+        assertThat(handler.completes.get()).isZero();
+        assertThat(handler.errors).hasSize(1);
+        assertThat(handler.errors.get(0).code).isEqualTo(503);
+        assertThat(requestCount.get()).as("签名失败时不得发出网络请求").isZero();
+    }
+
+    @Test
     @DisplayName("不得发出 h2c 升级请求：明文 HTTP 下带 Connection: Upgrade 会让 uvicorn 丢掉请求体")
     void doesNotSendH2cUpgrade() throws IOException {
         HttpServer server = startServer(200, """
@@ -229,7 +282,18 @@ class HttpPythonAgentGatewayTest {
 
     private HttpPythonAgentGateway gateway(HttpServer server) {
         return new HttpPythonAgentGateway(
-                "http://127.0.0.1:" + server.getAddress().getPort(), 2000, 10000);
+                "http://127.0.0.1:" + server.getAddress().getPort(), 2000, 10000,
+                TEST_TOKEN, signer());
+    }
+
+    private static InternalIdentitySigner signer() {
+        return signer(TEST_IDENTITY_SECRET);
+    }
+
+    private static InternalIdentitySigner signer(String secret) {
+        return new InternalIdentitySigner(
+                secret, secret + "-delegation", "learning-agent", 60,
+                "learning-backend", 300, 5, 900, 3600);
     }
 
     /**
@@ -243,6 +307,10 @@ class HttpPythonAgentGatewayTest {
         server.createContext("/agent/chat", exchange -> {
             lastRequestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             lastConnectionHeader.set(String.valueOf(exchange.getRequestHeaders().getFirst("Connection")));
+            lastTokenHeader.set(String.valueOf(exchange.getRequestHeaders().getFirst("X-Internal-Token")));
+            lastUserHeader.set(String.valueOf(exchange.getRequestHeaders().getFirst("X-Internal-User-Id")));
+            lastIdentityHeader.set(String.valueOf(exchange.getRequestHeaders().getFirst("X-Internal-Identity")));
+            requestCount.incrementAndGet();
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "text/event-stream; charset=utf-8");
             exchange.sendResponseHeaders(status, bytes.length);

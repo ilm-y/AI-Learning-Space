@@ -8,6 +8,7 @@ import com.ails.backend.entity.Message;
 import com.ails.backend.enums.AgentRunStatus;
 import com.ails.backend.enums.AgentRunType;
 import com.ails.backend.mapper.AgentRunMapper;
+import com.ails.backend.security.InternalIdentitySigner;
 import com.ails.backend.service.LearningAnalysisService;
 import com.ails.backend.service.MessageService;
 import com.ails.backend.utils.TraceIds;
@@ -52,6 +53,7 @@ public class AnalysisTaskService {
     private final AgentRunMapper agentRunMapper;
     private final MessageService messageService;
     private final AnalysisTaskPublisher publisher;
+    private final InternalIdentitySigner identitySigner;
 
     /** 投递结果。未知结果必须与确定失败分开，否则会重复调用模型。 */
     public enum DispatchOutcome {
@@ -77,9 +79,22 @@ public class AnalysisTaskService {
             return DispatchOutcome.FAILED;
         }
         AgentRun run = createRun(conversation, userMessage);
+        // 委托声明由 Spring 用只存在于本进程的 delegation-secret 签发。
+        // 签发失败说明配置不完整：不能退回同步分析（同步链路需要用户 JWT，
+        // 这里拿不到），也不能把无身份的任务投进队列让 Worker 自行签发。
+        final String backendIdentity;
+        try {
+            backendIdentity = identitySigner.signDelegation(conversation.getUserId());
+        } catch (RuntimeException e) {
+            log.error("签发后端委托身份失败, runId={}, userId={}",
+                    run.getId(), conversation.getUserId(), e);
+            return markFailed(run, "内部身份签名不可用: " + e.getMessage())
+                    ? DispatchOutcome.CONFIRMED : DispatchOutcome.FAILED;
+        }
         try {
             publisher.publish(buildMessage(
-                    run, conversation, userMessage, assistantContent, assistantMessageId, opening));
+                    run, conversation, userMessage, assistantContent, assistantMessageId,
+                    opening, backendIdentity));
             return DispatchOutcome.CONFIRMED;
         } catch (AnalysisPublishException e) {
             if (e.outcome() == AnalysisPublishException.Outcome.UNKNOWN) {
@@ -122,7 +137,8 @@ public class AnalysisTaskService {
 
     private AnalysisTaskMessage buildMessage(AgentRun run, Conversation conversation, Message userMessage,
                                              String assistantContent, Long assistantMessageId,
-                                             LearningAnalysisService.TurnOpening opening) {
+                                             LearningAnalysisService.TurnOpening opening,
+                                             String backendIdentity) {
         // 本轮的用户消息与助手消息都已经在表里，历史必须把两者都排除：
         // 它们已经通过独立字段传给 Worker，再出现在历史末尾就是同一轮说了两遍。
         List<Long> excluded = new ArrayList<>(2);
@@ -144,7 +160,8 @@ public class AnalysisTaskService {
                 userMessage.getContent(),
                 assistantContent,
                 messageService.history(conversation.getId(), excluded, HISTORY_LIMIT),
-                sessionContext(opening));
+                sessionContext(opening),
+                backendIdentity);
     }
 
     /**

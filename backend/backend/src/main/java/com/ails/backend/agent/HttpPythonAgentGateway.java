@@ -1,6 +1,7 @@
 package com.ails.backend.agent;
 
 import com.ails.backend.dto.agent.ChatAgentRequest;
+import com.ails.backend.security.InternalIdentitySigner;
 import com.ails.backend.utils.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -83,21 +84,36 @@ public class HttpPythonAgentGateway implements AgentGateway {
     private static final int CODE_UNAVAILABLE = 503;
     private static final int CODE_INTERNAL = 500;
 
+    /**
+     * 与 Agent 内部服务鉴权、后端 InternalServiceAuthenticationFilter 共用同一组头。
+     * {@code X-Internal-User-Id} 只用于交叉核对，真正的用户身份在
+     * {@code X-Internal-Identity} 签名声明里。
+     */
+    private static final String TOKEN_HEADER = "X-Internal-Token";
+    private static final String USER_HEADER = "X-Internal-User-Id";
+    private static final String IDENTITY_HEADER = "X-Internal-Identity";
+
     /** 解析事件 data 用。与 {@link JsonUtil} 里那个分开：这里只读不写，且不需要 java.time 支持。 */
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final HttpClient client;
     private final String chatUrl;
     private final Duration readTimeout;
+    private final String internalToken;
+    private final InternalIdentitySigner identitySigner;
 
     public HttpPythonAgentGateway(
             @Value("${ails.agent.base-url}") String baseUrl,
             @Value("${ails.agent.connect-timeout-ms}") long connectTimeoutMs,
-            @Value("${ails.agent.read-timeout-ms}") long readTimeoutMs) {
+            @Value("${ails.agent.read-timeout-ms}") long readTimeoutMs,
+            @Value("${ails.internal.token:}") String internalToken,
+            InternalIdentitySigner identitySigner) {
         // 防御性去掉结尾斜杠，避免拼出 //agent/chat（Starlette 会 307 重定向，白白多一跳）
         String trimmed = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.chatUrl = trimmed + CHAT_PATH;
         this.readTimeout = Duration.ofMillis(readTimeoutMs);
+        this.internalToken = internalToken == null ? "" : internalToken.trim();
+        this.identitySigner = identitySigner;
         this.client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(connectTimeoutMs))
                 // 不跟随重定向：Agent 的地址是我们自己配的，跟着 3xx 跑只会在排查时把人带偏
@@ -118,12 +134,31 @@ public class HttpPythonAgentGateway implements AgentGateway {
         // 与「收到 done/error」是两条独立的路径，没有这个开关就会两头都收尾。
         AtomicBoolean terminated = new AtomicBoolean(false);
 
+        // 身份声明必须由服务端已认证的 userId 签发。缺失/未配置时 fail closed，
+        // 绝不降级成只带共享 token —— 那会让 Agent 无法区分用户。
+        String identity;
         try {
-            HttpRequest httpRequest = HttpRequest.newBuilder()
+            identity = identitySigner.sign(request.userId());
+        } catch (RuntimeException e) {
+            log.error("签发 Agent 内部身份失败, runId={}, userId={}",
+                    request.runId(), request.userId(), e);
+            emitError(handler, terminated, CODE_UNAVAILABLE, "内部身份签名不可用");
+            return;
+        }
+
+        try {
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(chatUrl))
                     .timeout(readTimeout)
                     .header("Content-Type", "application/json")
-                    .header("Accept", "text/event-stream")
+                    .header("Accept", "text/event-stream");
+            if (!internalToken.isEmpty()) {
+                builder.header(TOKEN_HEADER, internalToken);
+            }
+            builder.header(IDENTITY_HEADER, identity);
+            // 保留明文 userId 仅供 Agent 交叉核对；它本身不再构成身份。
+            builder.header(USER_HEADER, String.valueOf(request.userId()));
+            HttpRequest httpRequest = builder
                     .POST(HttpRequest.BodyPublishers.ofString(
                             JsonUtil.toJson(request), StandardCharsets.UTF_8))
                     .build();

@@ -17,31 +17,33 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * 内部服务凭据：让 Python Agent Worker 在没有用户 JWT 的情况下，以指定用户身份调用
- * 后端的<b>只读</b>检索接口。
+ * 内部服务委托凭据：让 Python Agent Worker 在没有用户 JWT 的情况下，以指定用户身份
+ * 调用后端的<b>只读</b>检索接口。
  *
- * <h3>为什么需要它</h3>
- * 分析任务在 MQ 里排队，可能在几分钟甚至更久之后才被消费。用户 JWT 会过期，
- * 把它放进持久化消息既不可靠也不安全。Worker 因此在检索时带上：
+ * <h3>信任链</h3>
  * <pre>
- *   X-Internal-Token:   &lt;AILS_INTERNAL_TOKEN&gt;
- *   X-Internal-User-Id: &lt;task.userId&gt;
+ *   Spring Boot 在创建 MQ 分析任务时，用 delegation-secret 签发：
+ *     X-Internal-Identity: v1.&lt;payload&gt;.&lt;hmac&gt;   （aud=learning-backend,
+ *                                                        scope=analysis:read）
+ *   Agent Worker 只把这条声明原样转发，不重新签发、不修改 sub。
+ *   本过滤器用同一把 delegation-secret 校验，用户身份只来自声明里的 sub。
  * </pre>
- * 本过滤器校验共享密钥后，往 SecurityContext 写入与该用户等价的 principal；
- * 后续 Controller / Service 仍走原有的 {@code SecurityUtil.currentUserId()}，
- * 不需要为 Worker 单独开一套接口，也不会绕过空间归属校验。
+ *
+ * <p>delegation-secret 只存在于 Spring 进程；Agent 即使拿到共享 token，也没有签发
+ * 后端可接受声明的材料。共享 token 仍必须正确，但它本身不再构成用户身份。</p>
  *
  * <h3>边界</h3>
  * <ul>
- *   <li>只对 {@code /api/**} 生效；未配置 token 时整个过滤器是空操作（安全默认值）。</li>
+ *   <li>只对 {@code /api/**} 的 <b>GET</b> 生效。内部凭据不能写业务数据，
+ *       因此即使声明被重放，也不能创建/修改学习记录。</li>
+ *   <li>只接受 scope=analysis:read 的声明；audience 必须是 learning-backend。</li>
+ *   <li>声明有效期内可多次使用，{@code jti} 只做审计关联，<b>不做重放检测</b>。
+ *       这是当前明确接受的短期风险。</li>
+ *   <li>未配置 token 时整个过滤器是空操作（安全默认值）。</li>
  *   <li>密钥比较用常量时间，避免通过响应时间猜测。</li>
- *   <li>它只能冒充身份，不能提升权限：所有接口原本的业务校验（对话归属、空间可见性）
- *       仍然照常执行；写接口也仍然存在，因此这个 token 必须只部署在内网。</li>
- *   <li>它排在 JWT 过滤器之前；两者都只在 SecurityContext 为空时写入，因此请求同时带
- *       Bearer 与内部凭据时，最终生效的是最先执行的内部身份。两种凭据都是受信入口，
- *       不存在借此提权的路径。</li>
  * </ul>
  */
 @Slf4j
@@ -50,12 +52,17 @@ public class InternalServiceAuthenticationFilter extends OncePerRequestFilter {
 
     public static final String TOKEN_HEADER = "X-Internal-Token";
     public static final String USER_HEADER = "X-Internal-User-Id";
+    public static final String IDENTITY_HEADER = "X-Internal-Identity";
 
     private final byte[] expectedToken;
+    private final InternalIdentitySigner identitySigner;
 
-    public InternalServiceAuthenticationFilter(@Value("${ails.internal.token:}") String configuredToken) {
+    public InternalServiceAuthenticationFilter(
+            @Value("${ails.internal.token:}") String configuredToken,
+            InternalIdentitySigner identitySigner) {
         this.expectedToken = configuredToken == null
                 ? new byte[0] : configuredToken.getBytes(StandardCharsets.UTF_8);
+        this.identitySigner = identitySigner;
     }
 
     @Override
@@ -69,19 +76,27 @@ public class InternalServiceAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String provided = request.getHeader(TOKEN_HEADER);
         String userIdHeader = request.getHeader(USER_HEADER);
-        if (SecurityContextHolder.getContext().getAuthentication() == null
+        String identity = request.getHeader(IDENTITY_HEADER);
+        // 内部凭据只读。POST/PUT/PATCH/DELETE 一律不建立内部身份；若同时带合法 JWT，
+        // 仍由 JWT 过滤器按用户自己的权限处理，不会被这条分支放大。
+        boolean readOnly = "GET".equalsIgnoreCase(request.getMethod());
+        if (readOnly
+                && SecurityContextHolder.getContext().getAuthentication() == null
                 && StringUtils.hasText(provided)
-                && StringUtils.hasText(userIdHeader)
                 && constantTimeEquals(provided.getBytes(StandardCharsets.UTF_8), expectedToken)) {
-            try {
-                Long userId = Long.valueOf(userIdHeader.trim());
-                AuthUser principal = new AuthUser(userId, "agent-worker", null);
+            Optional<InternalIdentitySigner.DelegationClaims> verified =
+                    identitySigner.verifyDelegation(identity);
+            if (verified.isEmpty()) {
+                log.warn("内部服务请求缺少或携带了无效的委托声明，拒绝建立用户上下文");
+            } else if (StringUtils.hasText(userIdHeader)
+                    && !userIdHeader.trim().equals(String.valueOf(verified.get().userId()))) {
+                log.warn("内部委托声明与 X-Internal-User-Id 不一致，拒绝建立用户上下文");
+            } else {
+                AuthUser principal = new AuthUser(verified.get().userId(), "agent-worker", null);
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
                                 principal, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-            } catch (NumberFormatException e) {
-                log.warn("内部服务凭据携带了非法的 userId：{}", userIdHeader);
             }
         }
         filterChain.doFilter(request, response);

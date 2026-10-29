@@ -13,6 +13,7 @@ import com.ails.backend.enums.MessageRole;
 import com.ails.backend.enums.QuestionType;
 import com.ails.backend.enums.VerificationAction;
 import com.ails.backend.enums.VerificationTrigger;
+import com.ails.backend.security.InternalIdentitySigner;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -25,6 +26,7 @@ import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,9 +47,17 @@ class HttpPythonAgentAnalysisGatewayTest {
 
     private static final String TRACE_ID = "0123456789abcdef0123456789abcdef";
 
+    /** 仅测试用占位凭据；断言的是「有没有随请求发出」，不是秘密本身。 */
+    private static final String TEST_TOKEN = "test-internal-token";
+    private static final String TEST_IDENTITY_SECRET = "test-identity-secret";
+
     private final List<HttpServer> servers = new ArrayList<>();
     private final AtomicReference<String> lastRequestBody = new AtomicReference<>("");
     private final AtomicReference<String> lastRequestPath = new AtomicReference<>("");
+    private final AtomicReference<String> lastTokenHeader = new AtomicReference<>("");
+    private final AtomicReference<String> lastUserHeader = new AtomicReference<>("");
+    private final AtomicReference<String> lastIdentityHeader = new AtomicReference<>("");
+    private final AtomicInteger requestCount = new AtomicInteger();
 
     @AfterEach
     void stopServers() {
@@ -162,7 +172,7 @@ class HttpPythonAgentAnalysisGatewayTest {
             deadPort = socket.getLocalPort();
         }
         HttpPythonAgentAnalysisGateway gateway = new HttpPythonAgentAnalysisGateway(
-                "http://127.0.0.1:" + deadPort, 1000, 5000);
+                "http://127.0.0.1:" + deadPort, 1000, 5000, TEST_TOKEN, signer());
 
         assertThatThrownBy(() -> gateway.analyze(sampleRequest()))
                 .isInstanceOf(AgentAnalysisException.class)
@@ -189,6 +199,34 @@ class HttpPythonAgentAnalysisGatewayTest {
     }
 
     @Test
+    @DisplayName("分析请求必须携带内部凭据与 userId：结果会写长期认知")
+    void sendsInternalIdentityHeaders() throws IOException {
+        HttpServer server = startServer(200, "{\"code\":0,\"data\":{}}");
+
+        gateway(server).analyze(sampleRequest());
+
+        assertThat(lastTokenHeader.get()).isEqualTo(TEST_TOKEN);
+        assertThat(lastUserHeader.get()).isEqualTo("1");
+        assertThat(signer().verifyForAudience(lastIdentityHeader.get(), "learning-agent"))
+                .as("分析请求的身份声明必须签名且绑定 userId")
+                .contains(1L);
+    }
+
+    @Test
+    @DisplayName("未配置签名密钥：分析请求 fail closed 503，且不发出网络请求")
+    void refusesAnalysisWithoutIdentitySecret() throws IOException {
+        HttpServer server = startServer(200, "{\"code\":0,\"data\":{}}");
+        HttpPythonAgentAnalysisGateway gateway = new HttpPythonAgentAnalysisGateway(
+                "http://127.0.0.1:" + server.getAddress().getPort(), 2000, 10000,
+                TEST_TOKEN, signer(""));
+
+        assertThatThrownBy(() -> gateway.analyze(sampleRequest()))
+                .isInstanceOf(AgentAnalysisException.class)
+                .satisfies(e -> assertThat(((AgentAnalysisException) e).statusCode()).isEqualTo(503));
+        assertThat(requestCount.get()).as("签名失败时不得发出网络请求").isZero();
+    }
+
+    @Test
     @DisplayName("data 为空对象时全部字段取默认值（空列表 + SKIP），不会 NPE")
     void emptyDataUsesDefaults() throws IOException {
         HttpServer server = startServer(200, "{\"code\":0,\"data\":{}}");
@@ -206,7 +244,18 @@ class HttpPythonAgentAnalysisGatewayTest {
 
     private HttpPythonAgentAnalysisGateway gateway(HttpServer server) {
         return new HttpPythonAgentAnalysisGateway(
-                "http://127.0.0.1:" + server.getAddress().getPort(), 2000, 10000);
+                "http://127.0.0.1:" + server.getAddress().getPort(), 2000, 10000,
+                TEST_TOKEN, signer());
+    }
+
+    private static InternalIdentitySigner signer() {
+        return signer(TEST_IDENTITY_SECRET);
+    }
+
+    private static InternalIdentitySigner signer(String secret) {
+        return new InternalIdentitySigner(
+                secret, secret + "-delegation", "learning-agent", 60,
+                "learning-backend", 300, 5, 900, 3600);
     }
 
     private HttpServer startServer(int status, String body) throws IOException {
@@ -214,6 +263,10 @@ class HttpPythonAgentAnalysisGatewayTest {
         server.createContext("/agent/analyze", exchange -> {
             lastRequestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             lastRequestPath.set(exchange.getRequestURI().getPath());
+            lastTokenHeader.set(String.valueOf(exchange.getRequestHeaders().getFirst("X-Internal-Token")));
+            lastUserHeader.set(String.valueOf(exchange.getRequestHeaders().getFirst("X-Internal-User-Id")));
+            lastIdentityHeader.set(String.valueOf(exchange.getRequestHeaders().getFirst("X-Internal-Identity")));
+            requestCount.incrementAndGet();
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
             exchange.sendResponseHeaders(status, bytes.length);

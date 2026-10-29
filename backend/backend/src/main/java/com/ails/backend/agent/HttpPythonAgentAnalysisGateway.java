@@ -2,6 +2,7 @@ package com.ails.backend.agent;
 
 import com.ails.backend.dto.agent.AnalyzeAgentRequest;
 import com.ails.backend.dto.agent.AnalyzeAgentResult;
+import com.ails.backend.security.InternalIdentitySigner;
 import com.ails.backend.utils.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,19 +40,31 @@ import java.time.Duration;
 public class HttpPythonAgentAnalysisGateway implements AgentAnalysisGateway {
 
     private static final String ANALYZE_PATH = "/agent/analyze";
+
+    /** 与 Agent 内部服务鉴权、后端 InternalServiceAuthenticationFilter 共用同一组头。 */
+    private static final String TOKEN_HEADER = "X-Internal-Token";
+    private static final String USER_HEADER = "X-Internal-User-Id";
+    private static final String IDENTITY_HEADER = "X-Internal-Identity";
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final HttpClient client;
     private final String analyzeUrl;
     private final Duration timeout;
+    private final String internalToken;
+    private final InternalIdentitySigner identitySigner;
 
     public HttpPythonAgentAnalysisGateway(
             @Value("${ails.agent.base-url}") String baseUrl,
             @Value("${ails.agent.connect-timeout-ms}") long connectTimeoutMs,
-            @Value("${ails.agent.analyze-timeout-ms:90000}") long analyzeTimeoutMs) {
+            @Value("${ails.agent.analyze-timeout-ms:90000}") long analyzeTimeoutMs,
+            @Value("${ails.internal.token:}") String internalToken,
+            InternalIdentitySigner identitySigner) {
         String trimmed = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.analyzeUrl = trimmed + ANALYZE_PATH;
         this.timeout = Duration.ofMillis(analyzeTimeoutMs);
+        this.internalToken = internalToken == null ? "" : internalToken.trim();
+        this.identitySigner = identitySigner;
         this.client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(connectTimeoutMs))
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -68,12 +81,29 @@ public class HttpPythonAgentAnalysisGateway implements AgentAnalysisGateway {
     @Override
     public AnalyzeAgentResult analyze(AnalyzeAgentRequest request) {
         HttpRequest httpRequest;
+        // 分析会写长期认知，身份声明必须来自服务端已认证的 userId；签发失败直接
+        // 返回 503 让调用方降级，不能退回只带共享 token 的旧路径。
+        final String identity;
         try {
-            httpRequest = HttpRequest.newBuilder()
+            identity = identitySigner.sign(request.userId());
+        } catch (RuntimeException e) {
+            log.error("签发 Agent 分析身份失败, runId={}, userId={}",
+                    request.runId(), request.userId(), e);
+            throw new AgentAnalysisException(503, "内部身份签名不可用", e);
+        }
+        try {
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(analyzeUrl))
                     .timeout(timeout)
                     .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
+                    .header("Accept", "application/json");
+            if (!internalToken.isEmpty()) {
+                builder.header(TOKEN_HEADER, internalToken);
+            }
+            builder.header(IDENTITY_HEADER, identity);
+            // 仅交叉核对；Agent 只信任签名声明里的 sub。
+            builder.header(USER_HEADER, String.valueOf(request.userId()));
+            httpRequest = builder
                     .POST(HttpRequest.BodyPublishers.ofString(
                             JsonUtil.toJson(request), StandardCharsets.UTF_8))
                     .build();

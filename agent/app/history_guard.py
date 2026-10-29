@@ -119,6 +119,12 @@ _ONLY_EVIDENCE_RE = re.compile(
     r"(唯一|仅有|只有|仅)[^。！？!?\n]{0,8}(一|1)?[^。！？!?\n]{0,4}证据"
 )
 
+# 记录条数断言：「答对了三道题」「有 3 条记录」。断言数不能超过实际记录数。
+_COUNT_CLAIM_RE = re.compile(
+    r"(?P<num>[0-9]+|[一二两三四五六七八九十]+)\s*"
+    r"(?P<unit>道|条|次|个)\s*(?P<kind>题|证据|记录|测试)"
+)
+
 # 把 PARTIAL 升级成绝对判断。
 _ABSOLUTE_CORRECT_RE = re.compile(
     r"(完全|彻底|全部)(答对|正确|掌握|理解)|完全正确|完全答对|全部答对"
@@ -128,8 +134,20 @@ _WRONG_ANSWER_RE = re.compile(r"(答错|回答错误|答错了)")
 # 「记录没有写 / 无法确认是否借助过外部资料」是对记录状态的真实说明，
 # 不是「没有借助」的断言。它可能包含「没有……外部资料」的字面片段。
 _RECORD_UNCERTAINTY_RE = re.compile(
-    r"没有记录|未记录|记录(里)?(没有|未|无法)|无法确认|不能确认|看不出|"
-    r"没有写明|没有说明|未说明"
+    r"没有记录|未记录|记录(?:里|中)?(?:都|也|均|全)?(?:没有|未|无法)|"
+    r"无法确认|不能确认|看不出|没有写明|没有说明|未说明"
+)
+
+# 从句级判断：疑问 / 选择问 / 「是否」列举是在询问记录，不是在断言过去。
+# 例：「那次纠正是独立完成的还是有人指出——同样没有记录」「是否意识到问题的根源」。
+_CLAUSE_SPLIT_RE = re.compile(r"[，,；;。！？!?——\n]")
+_INTERROGATIVE_CLAUSE_RE = re.compile(
+    r"有没有|是否|是不是|还是|或者|到底|究竟|怎么|为什么|如何|"
+    r"哪一?[个种些]|吗[\s？?。]*$"
+)
+_UNCERTAINTY_CLAUSE_RE = re.compile(
+    r"没有记录|未记录|记录(?:里|中)?(?:都|也|均|全)?(?:没有|未|无法)|"
+    r"无法确认|不能确认|看不出|没有写明|没有说明|未说明|不清楚|不知道"
 )
 
 # 当前没有历史轨迹时：否认过去 / 从当前状态反推过去。
@@ -199,10 +217,17 @@ def check_history_answer(answer: str, state: AgentState) -> list[HistoryIssue]:
         issues.extend(_check_internal_process(sentence, corpus))
         issues.extend(_check_external_absence(sentence, corpus))
 
-    if state.trajectories:
+    # 「有记录」不等于「有轨迹」：按需召回的 evidence 也是记录。
+    # 只看 trajectories 会把「只有 evidence」误判成「没有历史」。
+    has_records = bool(state.trajectories) or bool(_recorded_evidences(state))
+    if has_records:
         issues.extend(_check_record_facts(state, text))
-    else:
-        issues.extend(_check_no_history(sentences, text))
+    if not state.trajectories:
+        # 没有轨迹时仍要防止否认过去 / 从当前状态反推；
+        # 但只有在完全没有记录时，才要求回答先声明「信息不足」。
+        issues.extend(
+            _check_no_history(sentences, text, require_ack=not has_records)
+        )
 
     return _dedupe(issues)
 
@@ -250,6 +275,9 @@ def build_history_fallback(state: AgentState) -> str:
     """
     if state.trajectories:
         return _trajectory_fallback(state.trajectories)
+    evidences = _recorded_evidences(state)
+    if evidences:
+        return _evidence_only_fallback(evidences)
     return _no_history_fallback(state)
 
 
@@ -259,6 +287,9 @@ def build_history_fallback(state: AgentState) -> str:
 def _check_internal_process(sentence: str, corpus: list[str]) -> list[HistoryIssue]:
     issues: list[HistoryIssue] = []
     for match in _INTERNAL_PROCESS_RE.finditer(sentence):
+        if _is_question_or_uncertainty(sentence, match.start(), match.end()):
+            # 疑问 / 选择问 / 「是否」列举只是在问记录，不是对过去的断言。
+            continue
         span = match.group(0)
         if _recorded_phrase(span, corpus):
             continue
@@ -278,14 +309,15 @@ def _check_internal_process(sentence: str, corpus: list[str]) -> list[HistoryIss
 
 
 def _check_external_absence(sentence: str, corpus: list[str]) -> list[HistoryIssue]:
-    # 「记录没有写是否借助资料」不是「没有借助」；这类不确定性说明必须放行。
-    # 但如果同一句里还有「完全靠自己」这类肯定断言，就不能整句放行。
-    if _RECORD_UNCERTAINTY_RE.search(sentence) and not _STRONG_EXTERNAL_ABSENCE_RE.search(
-        sentence
-    ):
-        return []
+    # 不能因为整句里出现「记录没有写」就放行所有外部帮助判断：
+    # 「记录里没有写是否借助资料，你完全靠自己」后半句仍是肯定断言。
+    # 因此逐匹配到所在从句判断（见 _is_question_or_uncertainty）。
     issues: list[HistoryIssue] = []
     for match in _EXTERNAL_ABSENCE_RE.finditer(sentence):
+        if _is_question_or_uncertainty(sentence, match.start(), match.end()):
+            # 记录是否写明外部帮助，属于「无法确认」，不是「没有帮助」的断言。
+            # 同一从句里若有「完全靠自己」这类肯定断言，_STRONG_ 检查已在上方拦住。
+            continue
         span = match.group(0)
         if _recorded_phrase(span, corpus):
             continue
@@ -299,9 +331,49 @@ def _check_external_absence(sentence: str, corpus: list[str]) -> list[HistoryIss
     return issues
 
 
+def _is_question_or_uncertainty(sentence: str, start: int, end: int) -> bool:
+    """匹配片段所在的从句是否只是在询问 / 说明记录不足。"""
+    left = 0
+    right = len(sentence)
+    for delimiter in _CLAUSE_SPLIT_RE.finditer(sentence):
+        if delimiter.end() <= start:
+            left = delimiter.end()
+        elif delimiter.start() >= end:
+            right = delimiter.start()
+            break
+    clause = sentence[left:right]
+    if _INTERROGATIVE_CLAUSE_RE.search(clause):
+        return True
+    return bool(_UNCERTAINTY_CLAUSE_RE.search(clause))
+
+
 def _check_record_facts(state: AgentState, text: str) -> list[HistoryIssue]:
     issues: list[HistoryIssue] = []
-    evidences = [evidence for item in state.trajectories for evidence in item.evidences]
+    evidences = _recorded_evidences(state)
+
+    count_match = _COUNT_CLAIM_RE.search(text)
+    if count_match:
+        claimed = _parse_count(count_match.group("num"))
+        # 「三道题 / 三次测试」只能由测试类证据支撑；「三条记录 / 证据」
+        # 才按全部记录计数。否则普通解释会把「答对三道题」蒙混过去。
+        if count_match.group("kind") in {"题", "测试"}:
+            pool = [
+                evidence
+                for evidence in evidences
+                if evidence.evidence_type is EvidenceType.TEST_RESULT
+            ]
+            unit = "次测试"
+        else:
+            pool = evidences
+            unit = "条记录"
+        if claimed is not None and claimed > len(pool):
+            issues.append(
+                HistoryIssue(
+                    "record_completeness",
+                    _excerpt(count_match.group(0)),
+                    f"回答声称有 {claimed} {unit}，实际只有 {len(pool)} {unit}",
+                )
+            )
 
     if len(evidences) > 1:
         match = _ONLY_EVIDENCE_RE.search(text)
@@ -352,7 +424,9 @@ def _check_record_facts(state: AgentState, text: str) -> list[HistoryIssue]:
     return issues
 
 
-def _check_no_history(sentences: list[str], text: str) -> list[HistoryIssue]:
+def _check_no_history(
+    sentences: list[str], text: str, *, require_ack: bool = True
+) -> list[HistoryIssue]:
     issues: list[HistoryIssue] = []
     for sentence in sentences:
         for pattern, kind, reason in (
@@ -368,7 +442,7 @@ def _check_no_history(sentences: list[str], text: str) -> list[HistoryIssue]:
                 issues.append(
                     HistoryIssue(kind, _excerpt(sentence), reason)
                 )
-    if not any(marker in text for marker in _NO_HISTORY_ACK_MARKERS):
+    if require_ack and not any(marker in text for marker in _NO_HISTORY_ACK_MARKERS):
         issues.append(
             HistoryIssue(
                 "missing_history_acknowledgement",
@@ -458,6 +532,29 @@ def _no_history_fallback(state: AgentState) -> str:
     return "\n".join(lines)
 
 
+def _evidence_only_fallback(evidences) -> str:
+    """没有 Revision、只有按需 evidence 时的确定性回退。
+
+    不能套用 `_no_history_fallback` —— 那会对着一条真实测试记录说
+    「没有关于这个主题的过往错误表述、测试回答」。只复述证据本身。
+    """
+    lines = ["我只能按当前可见的记录复述可以核对的部分，不推断记录之外的原因或经过。"]
+    lines.append("")
+    lines.append("- 可以核对的记录（按时间）：")
+    for evidence in sorted(
+        evidences, key=lambda item: item.created_at or datetime.min
+    ):
+        lines.append("  - " + _render_evidence(evidence))
+    lines.extend(
+        [
+            "",
+            "这些记录能说明当时发生了什么；但记录没有写你为什么这样回答，"
+            "也没有记录是否借助过外部提示或资料，这两点无法确认。",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _render_evidence(evidence) -> str:
     correctness = _CORRECTNESS_LABEL.get(
         evidence.correctness, evidence.correctness.value
@@ -481,6 +578,43 @@ def _render_evidence(evidence) -> str:
 # ---------- 工具 ----------
 
 
+def _recorded_evidences(state: AgentState) -> list:
+    """本轮可以核对的所有证据：轨迹关联的 + 按需召回的。
+
+    同一 id 只保留一条，避免轨迹与 state.evidences 重叠时重复计数。
+    """
+    seen: set[int] = set()
+    result = []
+    for evidence in [
+        *[item for trajectory in state.trajectories for item in trajectory.evidences],
+        *state.evidences,
+    ]:
+        if evidence.id in seen:
+            continue
+        seen.add(evidence.id)
+        result.append(evidence)
+    return result
+
+
+def _parse_count(text: str) -> int | None:
+    if text.isdigit():
+        return int(text)
+    digits = {"零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+              "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if text == "十":
+        return 10
+    if "十" in text:
+        tens, _, ones = text.partition("十")
+        if tens and tens not in digits:
+            return None
+        if ones and ones not in digits:
+            return None
+        return (digits.get(tens, 1) if tens else 1) * 10 + (digits.get(ones, 0) if ones else 0)
+    if all(char in digits for char in text):
+        return int("".join(str(digits[char]) for char in text)) if len(text) == 1 else None
+    return None
+
+
 def _recorded_corpus(state: AgentState) -> list[str]:
     texts: list[str] = []
     for understanding in state.understandings:
@@ -500,6 +634,8 @@ def _recorded_corpus(state: AgentState) -> list[str]:
             if revision.user_explanation:
                 texts.append(revision.user_explanation)
         texts.extend(evidence.observation for evidence in trajectory.evidences)
+    # 按需召回的 evidence 也可能包含用户原话；它同样是可核对记录。
+    texts.extend(evidence.observation for evidence in state.evidences)
     return [_normalise(text) for text in texts if text]
 
 

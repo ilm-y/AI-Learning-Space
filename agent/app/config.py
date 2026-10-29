@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # agent/ 目录，用于把相对路径（fixtures、.env）解析成绝对路径
@@ -23,6 +23,8 @@ class Settings(BaseSettings):
         env_file=AGENT_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # 校验失败时不要回显输入值：配置里可能有密钥。
+        hide_input_in_errors=True,
     )
 
     # ---------- HTTP 服务自身 ----------
@@ -32,10 +34,23 @@ class Settings(BaseSettings):
     # ---------- 后端（Spring Boot）----------
     backend_base_url: str = "http://localhost:8080"
     backend_timeout_seconds: float = 10.0
-    # 异步分析 Worker 不回传用户 JWT。它用这个共享密钥 + 目标 userId 调用后端的
-    # 只读检索接口（请求头 X-Internal-Token / X-Internal-User-Id）。
-    # 必须与后端 ails.internal.token 一致；为空时异步分析的检索会被后端拒绝。
+    # 异步分析 Worker 不回传用户 JWT。它用这个共享密钥访问后端内部接口
+    # （请求头 X-Internal-Token）。必须与后端 ails.internal.token 一致。
     internal_token: str = ""
+    # Spring → Agent 的签名校验密钥（aud=learning-agent）。Agent 只用它校验入站身份；
+    # 后端委托声明（aud=learning-backend）由 Spring 用另一把 delegation-secret 签发，
+    # 该密钥<b>不在 Agent 配置里</b>。未配置本项时用户级内部路由 fail closed。
+    internal_identity_secret: str = ""
+    internal_identity_audience: str = "learning-agent"
+    internal_identity_issuer: str = "learning-backend"
+    internal_identity_ttl_seconds: int = 60
+    internal_identity_max_ttl_seconds: int = 300
+    internal_identity_clock_skew_seconds: int = 5
+    # 仅用于 fail-closed 守卫：委托声明（aud=learning-backend）只能由 Spring 用
+    # delegation-secret 签发，Agent 不得持有该密钥。字段默认空；一旦从环境变量或
+    # .env 读到非空值，Settings 构造失败，HTTP/Worker 都无法启动。不要在任何地方
+    # 把它当合法输入使用，也不要写进 describe()/日志。
+    internal_delegation_secret: str = Field(default="", exclude=True, repr=False)
 
     # ---------- RabbitMQ ----------
     # 只有 `python -m app.worker` 会使用这些配置；HTTP 服务不依赖 RabbitMQ。
@@ -112,6 +127,21 @@ class Settings(BaseSettings):
     qdrant_collection_prefix: str = "ails_documents"
     qdrant_upsert_batch_size: int = 64
 
+    @field_validator("internal_delegation_secret")
+    @classmethod
+    def _reject_delegation_signing_secret(cls, value: str) -> str:
+        """Agent 进程不能持有后端委托签发密钥。
+
+        这是运行配置的 fail-closed 校验，不是身份协议的一部分，也不能阻止
+        拥有修改代码或启动参数权限的人。错误信息只说明发现了该配置，不回显值。
+        """
+        if value.strip():
+            raise ValueError(
+                "检测到禁止的 AILS_INTERNAL_DELEGATION_SECRET："
+                "Agent 不得持有后端委托签发密钥"
+            )
+        return ""
+
     @model_validator(mode="after")
     def _validate_document_pipeline(self) -> "Settings":
         if self.document_max_bytes <= 0:
@@ -136,6 +166,22 @@ class Settings(BaseSettings):
             raise ValueError("knowledge_min_score 必须在 [-1, 1] 之间")
         if self.knowledge_timeout_seconds <= 0:
             raise ValueError("knowledge_timeout_seconds 必须为正数")
+        if self.internal_identity_ttl_seconds <= 0:
+            raise ValueError("internal_identity_ttl_seconds 必须为正数")
+        if self.internal_identity_max_ttl_seconds < self.internal_identity_ttl_seconds:
+            raise ValueError("internal_identity_max_ttl_seconds 不能小于 ttl_seconds")
+        if self.internal_identity_clock_skew_seconds < 0:
+            raise ValueError("internal_identity_clock_skew_seconds 不能为负数")
+        if not self.internal_identity_audience.strip():
+            raise ValueError("internal_identity_audience 不能为空")
+        if not self.internal_identity_issuer.strip():
+            raise ValueError("internal_identity_issuer 不能为空")
+        if (self.internal_token and self.internal_identity_secret
+                and self.internal_token == self.internal_identity_secret):
+            raise ValueError(
+                "internal_token 不能与 internal_identity_secret 相同："
+                "共享 bearer token 不能同时充当签名密钥"
+            )
         return self
 
     @property
@@ -152,6 +198,9 @@ class Settings(BaseSettings):
             "retriever_mode": self.retriever_mode,
             "backend_base_url": self.backend_base_url,
             "internal_auth_configured": bool(self.internal_token),
+            "internal_identity_configured": bool(self.internal_identity_secret),
+            "internal_identity_audience": self.internal_identity_audience,
+            "internal_identity_issuer": self.internal_identity_issuer,
             "rabbitmq_url": _mask_url(self.rabbitmq_url),
             "max_context_tokens": self.max_context_tokens,
             "knowledge_top_k": self.knowledge_top_k,

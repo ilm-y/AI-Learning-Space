@@ -309,3 +309,55 @@ def test_no_history_fallback_refuses_to_deny_the_past() -> None:
     assert "无法确认你过去是否出现过这个误解" in fallback
     assert "不能断言你过去没有出现过" in fallback
     assert "你以前没有这个错误" not in fallback
+
+
+def _plain_evidence_state() -> AgentState:
+    """无显式批注来源的状态：本组只验证不确定性措辞，不混入 source mapping 规则。"""
+    evidences = [
+        _evidence(401, "TLB 缓存的是页表项", EvidenceCorrectness.CORRECT),
+    ]
+    return _state(with_trajectory=True, evidences=evidences)
+
+
+def test_compliant_uncertainty_disclaimers_are_not_flagged() -> None:
+    """A01-r2 回归：说明「记录没写」不是「没有发生」。"""
+    answers = [
+        "那次纠正是独立完成的还是有人指出——同样没有记录。",
+        "你当时的心情、感受，以及是否意识到问题的根源——这些都没有记录。",
+        (
+            "你当时为什么会那样理解、后来是怎么改过来的、有没有借助外部资料，"
+            "这些在记录里都没有，我不做推测。"
+        ),
+        "记录里没有写你是否借助外部资料或他人提示，因此这一点无法确认。",
+        "记录里没有说明你当时有没有意识到这个误区。",
+        # 以下三句逐字来自 A01-r2 的 historyGuard.excerpts。
+        "**你当时为什么会那样理解、后来是怎么改过来的、有没有借助外部资料**，这些在记录里都没有，我不做推测。",
+        "- 那次纠正是独立完成的还是有人指出——同样没有记录。",
+        "- 你当时的心情、感受，以及是否意识到问题的根源——这些都没有记录。",
+    ]
+    for answer in answers:
+        issues = check_history_answer(answer, _plain_evidence_state())
+        assert not issues, (answer, [issue.as_dict() for issue in issues])
+
+
+def test_uncertainty_note_does_not_excuse_a_fabricated_assertion() -> None:
+    """说明不足以掩护另一从句里的肯定断言。"""
+    cases = [
+        ("记录里没有写过程，但你突然想通了。", "internal_process"),
+        ("记录里没有写外部帮助，你完全靠自己。", "external_absence"),
+        ("你当时没有借助外部资料，虽然记录没有写。", "external_absence"),
+        ("你当时自己推导出了正确关系。", "internal_process"),
+    ]
+    for answer, expected_kind in cases:
+        issues = check_history_answer(answer, _plain_evidence_state())
+        assert expected_kind in _kinds(issues), (answer, issues)
+
+
+def test_compliant_disclaimer_does_not_trigger_deterministic_fallback() -> None:
+    state = _plain_evidence_state()
+    answer = (
+        "记录里可以看出你之前把 TLB 当成整个页表，后来通过测试回答纠正为页表项。"
+        "至于那次纠正是独立完成的还是有人指出——同样没有记录，我不做推测。"
+    )
+    assert check_history_answer(answer, state) == []
+    assert "我只能按当前记录复述" not in answer
