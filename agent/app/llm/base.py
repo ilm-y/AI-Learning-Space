@@ -17,7 +17,7 @@ Memory、Tutor，也不认识任何业务概念。换模型厂商不需要动 Co
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import AsyncIterator, Protocol, runtime_checkable
+from typing import AsyncIterator, Callable, Protocol, runtime_checkable
 
 
 class LLMError(RuntimeError):
@@ -26,6 +26,64 @@ class LLMError(RuntimeError):
     def __init__(self, message: str, *, status_code: int = 502) -> None:
         super().__init__(message)
         self.status_code = status_code
+
+
+@dataclass(slots=True)
+class StreamCompletion:
+    """一次流式生成的终态事实。
+
+    适配器负责把供应商的 ``finish_reason`` 归一化后放进这里。``finish_reason``
+    为 ``length`` 表示模型因为 Token 上限停止，已经产出的内容是不完整的；
+    ``metadata_available=False`` 表示适配器没有提供终态信息（例如测试替身），
+    此时只能按旧语义当作正常结束，不能凭空推断截断。
+    """
+
+    finish_reason: str | None = None
+    metadata_available: bool = False
+
+    @property
+    def truncated(self) -> bool:
+        return self.finish_reason == "length"
+
+    def copy_from(self, other: StreamCompletion) -> None:
+        self.finish_reason = other.finish_reason
+        self.metadata_available = other.metadata_available
+
+
+class CompletionAwareStream:
+    """把普通文本流包成「耗尽后可读取终态」的迭代器。
+
+    只在正常耗尽时调用 ``completion_factory``。流提前被丢弃或抛出异常时
+    ``completion`` 保持 ``None`` —— 调用方不能把「没读完」误当成「正常结束」。
+    """
+
+    def __init__(
+        self,
+        inner: AsyncIterator[str],
+        completion_factory: Callable[[], StreamCompletion],
+    ) -> None:
+        self._inner = inner
+        self._completion_factory = completion_factory
+        self._completion: StreamCompletion | None = None
+        self._exhausted = False
+
+    def __aiter__(self) -> CompletionAwareStream:
+        return self
+
+    async def __anext__(self) -> str:
+        if self._exhausted:
+            raise StopAsyncIteration
+        try:
+            return await self._inner.__anext__()
+        except StopAsyncIteration:
+            self._exhausted = True
+            self._completion = self._completion_factory()
+            raise
+
+    @property
+    def completion(self) -> StreamCompletion | None:
+        """正常耗尽后的终态；未读完或中途失败时为 ``None``。"""
+        return self._completion
 
 
 @dataclass(slots=True)
@@ -54,7 +112,13 @@ class LLMAdapter(Protocol):
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
-        """流式产出增量文本。实现方负责在结束时自然结束迭代。"""
+        """流式产出增量文本。实现方负责在结束时自然结束迭代。
+
+        若适配器能拿到供应商的 ``finish_reason``，应额外实现
+        ``stream_chat_with_completion(...) -> CompletionAwareStream``。
+        Tutor 会优先使用它，把 ``StreamCompletion`` 传给 Runtime；没有该方法时
+        退回本方法，并按「终态未知」处理，保持旧适配器可用。
+        """
         ...
 
     async def complete(

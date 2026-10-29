@@ -90,7 +90,9 @@ async def collect_answer(runtime: AgentRuntime, prepared) -> str:
     return "".join(parts)
 
 
-async def test_runtime_records_invalid_citation_in_trace() -> None:
+async def test_runtime_filters_invalid_citation_and_records_it_in_trace() -> None:
+    """非法来源在交付前被丢弃，原样内容留在 CITATION_FILTER 里。"""
+
     chunk = KnowledgeChunk(
         id=1,
         document_id=10,
@@ -107,21 +109,35 @@ async def test_runtime_records_invalid_citation_in_trace() -> None:
         retriever=FakeRetriever(chunk),
     )
     try:
-        await collect_answer(runtime, prepared)
+        answer = await collect_answer(runtime, prepared)
         report = runtime.validate_citations(prepared)
     finally:
         await runtime.aclose()
 
-    assert report.invalid == 1
-    assert report.invalid_labels == ["[资料《不存在.md》#9]"]
+    # 交付给用户的文本里没有越界来源。标注前的空格在识别出 `[` 之前就已经
+    # 放行，流式无法撤回，因此交付文本保留一个空格；这是延迟取舍，不是引用泄漏。
+    assert "不存在.md" not in answer
+    assert answer == "ZenFrame 使用 MQTT 。"
+
+    # 交付文本本身的校验结果干净；模型的原始错误在过滤器 trace 里。
+    assert report.invalid == 0
+    filter_events = [
+        event
+        for event in prepared.trace.events
+        if event.type is TraceEventType.CITATION_FILTER
+    ]
+    assert len(filter_events) == 1
+    assert filter_events[0].detail["droppedLabels"] == ["[资料《不存在.md》#9]"]
+    assert filter_events[0].detail["malformedLabels"] == []
+    assert filter_events[0].detail["providedLabels"] == ["资料《zenframe.md》#0"]
+
     citation_events = [
         event
         for event in prepared.trace.events
         if event.type is TraceEventType.CITATION_CHECK
     ]
     assert len(citation_events) == 1
-    assert citation_events[0].detail["invalid"] == 1
-    assert citation_events[0].detail["invalidLabels"] == ["[资料《不存在.md》#9]"]
+    assert citation_events[0].detail["invalid"] == 0
 
 
 async def test_runtime_accepts_valid_citation() -> None:

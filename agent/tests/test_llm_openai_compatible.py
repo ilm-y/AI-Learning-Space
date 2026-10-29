@@ -149,6 +149,60 @@ async def test_stream_diagnostics_capture_finish_reason_usage_and_provider_id() 
     assert diag.content_chars == len("TLB 是缓存")
 
 
+async def test_stream_completion_exposes_final_finish_reason_for_truncation() -> None:
+    """最后一个非空 finish_reason 必须进入每次调用的终态，而不是只留在诊断字段。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = sse(
+            json.dumps({"choices": [{"delta": {"content": "部分回答"}}]}),
+            json.dumps(
+                {"choices": [{"delta": {}, "finish_reason": "length"}]}
+            ),
+        )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=body,
+        )
+
+    adapter = await adapter_with_transport(handler)
+    try:
+        stream = adapter.stream_chat_with_completion([ChatMessage("user", "hi")])
+        deltas = [item async for item in stream]
+    finally:
+        await adapter.aclose()
+
+    assert deltas == ["部分回答"]
+    assert stream.completion is not None
+    assert stream.completion.metadata_available is True
+    assert stream.completion.finish_reason == "length"
+    assert stream.completion.truncated is True
+
+
+async def test_stream_completion_is_normal_after_stop() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = sse(
+            json.dumps({"choices": [{"delta": {"content": "完整回答"}}]}),
+            json.dumps({"choices": [{"delta": {}, "finish_reason": "stop"}]}),
+        )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=body,
+        )
+
+    adapter = await adapter_with_transport(handler)
+    try:
+        stream = adapter.stream_chat_with_completion([ChatMessage("user", "hi")])
+        [item async for item in stream]
+    finally:
+        await adapter.aclose()
+
+    assert stream.completion is not None
+    assert stream.completion.finish_reason == "stop"
+    assert stream.completion.truncated is False
+
+
 @pytest.mark.parametrize(
     ("response", "reason"),
     [

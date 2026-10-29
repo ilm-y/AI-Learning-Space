@@ -25,9 +25,12 @@ class TraceEventType(str, Enum):
     RETRIEVE = "RETRIEVE"
     CONTEXT_BUILT = "CONTEXT_BUILT"
     LLM_CALL = "LLM_CALL"
-    # 回答生成后的来源标注校验。它只记录、不阻断 SSE —— 非法引用目前是
-    # 评估与排查信号，而不是把用户可见回答拦掉的开关。
+    # 回答生成后的来源标注校验。因为生成阶段已经过滤掉非法标注，
+    # 这里看到的是**实际交付文本**的校验结果（正常应为 0 invalid）。
     CITATION_CHECK = "CITATION_CHECK"
+    # 生成阶段的流式来源过滤：记录被丢弃的越界 / 残缺标注。
+    # 这是「模型原本写了什么」的证据，不会因为交付文本被清洗而消失。
+    CITATION_FILTER = "CITATION_FILTER"
     # 非成功知识检索状态的运行时兜底：记录本轮状态、是否追加了说明、以及
     # 触发/跳过原因。它不改变 SSE 事件类型，只影响回答末尾的固定说明。
     EVIDENCE_GUARD = "EVIDENCE_GUARD"

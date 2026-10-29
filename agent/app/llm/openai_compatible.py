@@ -17,7 +17,12 @@ from typing import Any, AsyncIterator
 
 import httpx
 
-from app.llm.base import ChatMessage, LLMError
+from app.llm.base import (
+    ChatMessage,
+    CompletionAwareStream,
+    LLMError,
+    StreamCompletion,
+)
 
 
 @dataclass(slots=True)
@@ -149,6 +154,23 @@ class OpenAICompatibleAdapter:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
+        async for delta in self.stream_chat_with_completion(
+            messages, temperature=temperature, max_tokens=max_tokens
+        ):
+            yield delta
+
+    def stream_chat_with_completion(
+        self,
+        messages: list[ChatMessage],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> CompletionAwareStream:
+        """流式生成，并在正常耗尽后暴露本次的 ``finish_reason``。
+
+        每次调用都创建独立的 ``StreamDiagnostics``，终态由闭包捕获；不依赖
+        ``last_diagnostics`` 这类共享字段，因此并发请求不会串号。
+        """
         payload = self._payload(messages, temperature, max_tokens, stream=True)
         diagnostics = StreamDiagnostics(
             request_id=uuid.uuid4().hex,
@@ -157,6 +179,19 @@ class OpenAICompatibleAdapter:
         )
         self.last_diagnostics = diagnostics
         self.last_status_code = None
+        return CompletionAwareStream(
+            self._stream_chat(payload, diagnostics),
+            lambda: StreamCompletion(
+                finish_reason=diagnostics.finish_reason,
+                metadata_available=True,
+            ),
+        )
+
+    async def _stream_chat(
+        self,
+        payload: dict[str, object],
+        diagnostics: StreamDiagnostics,
+    ) -> AsyncIterator[str]:
         started = time.perf_counter()
         emitted = 0
         try:
