@@ -1,0 +1,33 @@
+{
+  "space": {
+    "id": 9101,
+    "name": "操作系统（评测）"
+  },
+  "concepts": [
+    {
+      "id": 9201,
+      "canonicalName": "TLB",
+      "displayName": "TLB（快表）"
+    }
+  ],
+  "understandings": [
+    {
+      "id": 1201,
+      "conceptId": 9201,
+      "conceptName": "TLB",
+      "summary": "知道 TLB 是页表项缓存，但把 TLB Miss 与缺页混为一谈。",
+      "knownParts": ["TLB 是页表项的缓存"],
+      "misconceptions": [
+        {
+          "text": "把 TLB Miss 当成缺页异常",
+          "status": "ACTIVE"
+        }
+      ],
+      "status": "MISCONCEPTION"
+    }
+  ],
+  "memories": [],
+  "knowledge": [],
+  "evidences": [],
+  "revisions": []
+}

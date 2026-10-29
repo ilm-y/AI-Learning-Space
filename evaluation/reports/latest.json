@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-27T02:12:54+08:00",
-  "commit": "74d99a1",
+  "generatedAt": "2026-10-27T13:20:06+08:00",
+  "commit": "67172e4",
   "mode": "offline",
   "environment": {
     "backend": null,
@@ -97,7 +97,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型把 JSON 包在 ```json 围栏里时，仍能取出对象并解析",
-      "durationMs": 18,
+      "durationMs": 6,
       "checks": [
         {
           "path": "evidence.count",
@@ -224,7 +224,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型输出里没有 JSON 对象时，抛 AnalysisError，而不是静默返回空结果",
-      "durationMs": 9,
+      "durationMs": 3,
       "checks": [
         {
           "path": "error",
@@ -244,7 +244,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "未知的 evidenceType 属于契约违约：整份结果作废，不能把半份写进库",
-      "durationMs": 9,
+      "durationMs": 4,
       "checks": [
         {
           "path": "error",
@@ -264,7 +264,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型把结果多包一层（{\"result\": {...}}）时必须报错：AnalyzeResult 全字段有默认值，放行就变成「成功但零候选」",
-      "durationMs": 8,
+      "durationMs": 3,
       "checks": [
         {
           "path": "error",
@@ -284,7 +284,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "空白消息直接返回空结果，不检索、不调用模型",
-      "durationMs": 8,
+      "durationMs": 2,
       "checks": [
         {
           "path": "evidence.count",
@@ -389,7 +389,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "闲聊不命中任何 Concept 时返回空结果（没有可挂证据的对象）",
-      "durationMs": 7,
+      "durationMs": 3,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -478,7 +478,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "未知字段被忽略；越界质量分被裁剪到 [0,1]；analyzerVersion 由分析器决定而不是模型决定",
-      "durationMs": 12,
+      "durationMs": 3,
       "checks": [
         {
           "path": "evidence.count",
@@ -606,7 +606,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "本轮消息不含概念名时，从最近的用户历史里找回 TLB（跨轮上下文）",
-      "durationMs": 12,
+      "durationMs": 3,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -745,7 +745,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "用户与 AI 的历史都提到概念时，优先采信用户自己说的（避免被 AI 的措辞带偏）",
-      "durationMs": 11,
+      "durationMs": 3,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -852,7 +852,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "回看窗口只有最近 4 条：更早提到的概念不再影响本轮识别",
-      "durationMs": 10,
+      "durationMs": 3,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -933,7 +933,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "用户历史没有线索时才回看 AI 历史：虚拟内存仍能被识别",
-      "durationMs": 8,
+      "durationMs": 3,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -1048,7 +1048,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "同一结果里的重复候选（概念+类型+观察都相同）只保留一条",
-      "durationMs": 8,
+      "durationMs": 3,
       "checks": [
         {
           "path": "evidence.count",
@@ -1144,7 +1144,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "文本相同但证据类型不同，是两条不同的观察，不能合并",
-      "durationMs": 8,
+      "durationMs": 3,
       "checks": [
         {
           "path": "evidence.count",
@@ -1250,7 +1250,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "单个概念最多保留 2 条证据，防止一次分析把状态刷屏",
-      "durationMs": 7,
+      "durationMs": 4,
       "checks": [
         {
           "path": "evidence.count",
@@ -1356,7 +1356,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "整份结果最多 6 条证据：三个概念各 3 条，最后只留下 6 条",
-      "durationMs": 15,
+      "durationMs": 3,
       "checks": [
         {
           "path": "evidence.count",
@@ -1525,7 +1525,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型编造的 conceptId 一律丢弃；同一结果里合法的候选仍然保留",
-      "durationMs": 8,
+      "durationMs": 3,
       "checks": [
         {
           "path": "evidence.count",
@@ -1633,7 +1633,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "空白观察不构成证据，不能占用去重名额",
-      "durationMs": 11,
+      "durationMs": 3,
       "checks": [
         {
           "path": "evidence.count",
@@ -1729,7 +1729,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "ADD 语义原样保留，由后端判断同身份记忆是否已存在",
-      "durationMs": 7,
+      "durationMs": 3,
       "checks": [
         {
           "path": "memory.count",
@@ -1837,7 +1837,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "UPDATE 语义原样保留；后端只会更新仍是 CANDIDATE 的那条",
-      "durationMs": 12,
+      "durationMs": 3,
       "checks": [
         {
           "path": "memory.count",
@@ -1933,7 +1933,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "IGNORE 也保留在结果里 —— 让后端日志能看出「模型想过但不写」，而不是凭空消失",
-      "durationMs": 8,
+      "durationMs": 3,
       "checks": [
         {
           "path": "memory.count",
@@ -2029,7 +2029,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "空白内容不是一条可写的记忆，不能进入后端 Reconcile",
-      "durationMs": 7,
+      "durationMs": 3,
       "checks": [
         {
           "path": "memory.count",
@@ -2125,7 +2125,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "importance 越界被裁剪到 [0,1]，避免影响后端排序与阈值判断",
-      "durationMs": 10,
+      "durationMs": 3,
       "checks": [
         {
           "path": "memory.count",
@@ -2231,7 +2231,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "GLOBAL 记忆必须清空 spaceId / conceptId，否则 scope_key 会出现两种真相",
-      "durationMs": 8,
+      "durationMs": 3,
       "checks": [
         {
           "path": "memory.count",
@@ -2363,7 +2363,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "SPACE 记忆的空间取自当前请求，模型给别的空间 id 会被纠正",
-      "durationMs": 9,
+      "durationMs": 3,
       "checks": [
         {
           "path": "memory.count",
@@ -2483,7 +2483,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "CONCEPT 记忆保留本轮命中的 conceptId，且不带 spaceId（由后端按概念反查）",
-      "durationMs": 10,
+      "durationMs": 3,
       "checks": [
         {
           "path": "memory.count",
@@ -2603,7 +2603,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型给了一个没命中的 conceptId 时，CONCEPT 记忆回落到本轮主概念，而不是被丢弃或写错",
-      "durationMs": 9,
+      "durationMs": 3,
       "checks": [
         {
           "path": "memory.count",
@@ -2699,7 +2699,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "未声明 scope 时默认 CONCEPT；未给 conceptId 时回落到主概念",
-      "durationMs": 17,
+      "durationMs": 3,
       "checks": [
         {
           "path": "memory.count",
@@ -2831,7 +2831,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "同一结果里内容相同的两条记忆只提一次（跨轮去重由后端唯一约束负责）",
-      "durationMs": 17,
+      "durationMs": 3,
       "checks": [
         {
           "path": "memory.count",
@@ -2927,7 +2927,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "理解提案是增量：known / uncertain / explanation 原样进入候选，交给后端合并",
-      "durationMs": 10,
+      "durationMs": 3,
       "checks": [
         {
           "path": "proposal.present",
@@ -3039,7 +3039,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "空提案（全是空列表 / 空白文本）不产生 Revision，也不能制造一次假的理解变化",
-      "durationMs": 8,
+      "durationMs": 3,
       "checks": [
         {
           "path": "proposal.present",
@@ -3107,7 +3107,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "误区作为提案的一部分进入候选；是否新增 / 解除由后端生命周期决定",
-      "durationMs": 7,
+      "durationMs": 3,
       "checks": [
         {
           "path": "proposal.present",
@@ -3189,7 +3189,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "提案指向未命中的 conceptId 时回落到主概念，避免把理解写到别处",
-      "durationMs": 10,
+      "durationMs": 3,
       "checks": [
         {
           "path": "proposal.present",
@@ -3279,7 +3279,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "过长的用户自述被截断到 500 字（保留省略号），防止 prompt 与数据库字段被撑爆",
-      "durationMs": 8,
+      "durationMs": 3,
       "checks": [
         {
           "path": "proposal.present",
@@ -3363,7 +3363,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "离线规则路径：用户自述会产生只带 latestUserExplanation 的提案（不猜 knownParts）",
-      "durationMs": 9,
+      "durationMs": 3,
       "checks": [
         {
           "path": "proposal.present",
@@ -3479,7 +3479,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "首次接触一个概念且用户在提问时，只记 ASK_LATER，不打断教学",
-      "durationMs": 7,
+      "durationMs": 3,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -3606,7 +3606,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "已有理解快照的概念不重复触发验证（TLB 在 fixture 里是 MISCONCEPTION）",
-      "durationMs": 7,
+      "durationMs": 3,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -3701,7 +3701,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "用户在解释而不是提问时，不插入验证（这一轮的任务是把话说完）",
-      "durationMs": 7,
+      "durationMs": 3,
       "checks": [
         {
           "path": "verification.action",
@@ -3793,7 +3793,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型给出 ASK_NOW 时，题型 / 题干 / 正确答案 / trigger 原样保留",
-      "durationMs": 6,
+      "durationMs": 3,
       "checks": [
         {
           "path": "verification.action",
@@ -3975,7 +3975,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "ASK_NOW 没给题干时补一个可作答的默认题，而不是静默降级成 SKIP",
-      "durationMs": 4,
+      "durationMs": 3,
       "checks": [
         {
           "path": "verification.action",

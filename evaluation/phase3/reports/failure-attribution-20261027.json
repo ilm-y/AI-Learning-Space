@@ -1,0 +1,86 @@
+{
+  "generatedAt": "2026-10-27",
+  "runsReviewed": 22,
+  "observedTags": [
+    "CONTEXT_BUDGET",
+    "GUARD_FALSE_POSITIVE",
+    "UNKNOWN"
+  ],
+  "notObservedTags": [
+    "RETRIEVAL_MISS",
+    "HISTORICAL_EVIDENCE_IGNORED",
+    "UNSUPPORTED_CLAIM",
+    "MASTERY_OVERCLAIM",
+    "GUARD_FALSE_NEGATIVE",
+    "MODEL_EMPTY_OUTPUT",
+    "STREAM_PARSE_ERROR"
+  ],
+  "items": [
+    {
+      "id": "F1",
+      "caseId": "B05",
+      "runIndex": 1,
+      "artifact": "evaluation/phase3/artifacts/phase3-baseline-20261027/B05-r1.json",
+      "hardStatus": "FAIL",
+      "semanticMean": 2.0,
+      "tags": [
+        "UNKNOWN",
+        "CONTEXT_BUDGET"
+      ],
+      "primary": "hard assertion contract inverted + fixed wording; output truncated at 4096",
+      "requiresHumanReview": true
+    },
+    {
+      "id": "F2",
+      "caseId": "E01",
+      "runIndex": 3,
+      "artifact": "evaluation/phase3/artifacts/phase3-repeats-20261027/E01-r3.json",
+      "hardStatus": "FAIL",
+      "semanticMean": 2.0,
+      "tags": [
+        "GUARD_FALSE_POSITIVE"
+      ],
+      "primary": "negation-blind substring match on 已经完全掌握",
+      "requiresHumanReview": true
+    },
+    {
+      "id": "F3",
+      "caseId": "E01",
+      "runIndex": 2,
+      "artifact": "evaluation/phase3/artifacts/phase3-repeats-20261027/E01-r2.json",
+      "hardStatus": "PASS",
+      "semanticMean": 2.0,
+      "tags": [
+        "CONTEXT_BUDGET"
+      ],
+      "primary": "finish_reason=length; truncation not detected by hard assertions or judge",
+      "requiresHumanReview": true
+    },
+    {
+      "id": "F4",
+      "caseId": "A01",
+      "runIndex": 2,
+      "artifact": "evaluation/phase3/artifacts/phase3-repeats-20261027/A01-r2.json",
+      "hardStatus": "PASS",
+      "semanticMean": 2.0,
+      "tags": [
+        "GUARD_FALSE_POSITIVE"
+      ],
+      "primary": "history guard flagged compliant uncertainty statements; deterministic fallback",
+      "requiresHumanReview": true
+    },
+    {
+      "id": "F5",
+      "caseId": "D01",
+      "runIndex": 1,
+      "artifact": "evaluation/phase3/artifacts/phase3-baseline-20261027/D01-r1.json",
+      "hardStatus": "PASS",
+      "semanticMean": 2.0,
+      "tags": [
+        "UNKNOWN"
+      ],
+      "primary": "malformed citation labels not covered by invalid=0 assertion",
+      "requiresHumanReview": false
+    }
+  ]
+}

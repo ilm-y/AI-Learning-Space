@@ -183,6 +183,9 @@ class ChatRequest(CamelModel):
     # 还没有归属。这是正常状态，不是数据缺失。
     session: SessionContext | None = None
     auth_token: str | None = None
+    # Spring 为本任务签发的后端委托声明（aud=learning-backend, scope=analysis:read）。
+    # Agent 只原样转发给后端读接口，不解包、不改 sub、不自己签发。
+    backend_identity: str | None = None
 
 
 class AnalyzeRequest(CamelModel):
@@ -208,6 +211,8 @@ class AnalyzeRequest(CamelModel):
     history: list[HistoryMessage] = Field(default_factory=list)
     session: SessionContext | None = None
     auth_token: str | None = None
+    # 同 ChatRequest：只转发 Spring 签发的委托声明；缺失时分析链路 fail closed。
+    backend_identity: str | None = None
 
 
 # ===================== 分析结果（Agent → Backend）=====================

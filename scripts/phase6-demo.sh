@@ -88,8 +88,14 @@ api() {
   fi
 }
 
+mint_identity(){ # mint_identity <userId>
+  ( cd "$ROOT/agent" && python -m app.internal_identity --user "$1" )
+}
+
 preview_context() { # preview_context <userId> <conversationId> <spaceId> <question> <outfile>
   local uid="$1" cid="$2" sid="$3" q="$4" out="$5"
+  local ident
+  ident="$(mint_identity "$uid")" || { echo "无法签发内部身份" >&2; return 1; }
   python - "$uid" "$cid" "$sid" "$q" "$TOKEN" > "$out.payload" <<'PY'
 import json, sys
 uid, cid, sid, question, token = sys.argv[1:6]
@@ -103,7 +109,11 @@ print(json.dumps({
 }, ensure_ascii=False))
 PY
   curl -s -m 90 -X POST "$AGENT/agent/context/preview" \
-    -H 'Content-Type: application/json' -d @"$out.payload" > "$out"
+    -H 'Content-Type: application/json' \
+    -H "X-Internal-Token: ${AILS_INTERNAL_TOKEN:-}" \
+    -H "X-Internal-Identity: $ident" \
+    -H "X-Internal-User-Id: $uid" \
+    -d @"$out.payload" > "$out"
 }
 
 send_message() { # send_message <conversationId> <text> <sse-file>
@@ -118,7 +128,12 @@ has_section(){ jqv "$(cat "$1")" "any(s['name'].startswith('$2') for s in d['dat
 
 # =====================================================================
 section "0. 前置检查"
-AHEALTH=$(curl -s -m 3 "$AGENT/health")
+if [ -z "${AILS_INTERNAL_TOKEN:-}" ] || [ -z "${AILS_INTERNAL_IDENTITY_SECRET:-}" ]; then
+  echo "需要 AILS_INTERNAL_TOKEN 读取诊断，以及 AILS_INTERNAL_IDENTITY_SECRET 调用用户级内部接口。" >&2
+  exit 1
+fi
+AHEALTH=$(curl -s -m 3 -H "X-Internal-Token: $AILS_INTERNAL_TOKEN" \
+  "$AGENT/health/diagnostics")
 PROVIDER=$(printf '%s' "$AHEALTH" | python -c 'import sys,json;print(json.load(sys.stdin).get("llm_provider"))' 2>/dev/null)
 if [ "$PROVIDER" != "mock" ]; then
   echo "演示要求 Agent 处于 mock 模式（当前 provider=[$PROVIDER]）。" >&2

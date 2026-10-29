@@ -37,9 +37,11 @@ _NUMBER = re.compile(r"\d+(?:\.\d+)?")
 _SENTENCE_BREAK = re.compile(r"[。！？!?\n；;]")
 _CLAIM_DECORATION = re.compile(r"[\s>#*_`~\-—–:：;；,，。.!！?？|（）()\[\]【】\"'“”‘’…]+")
 # 只在后面紧跟量词时换算，避免把「两者 / 二级缓存」里的「两 / 二」当成数字 2。
+# 不收「个」：「一个历史值 / 一个片段」是不定指，不是可核对的事实数字；
+# 真实模型回答里这种用法会把 `numeric_conflict` 误报成来源冲突。
 _CJK_NUMBER_RUN = re.compile(
     r"([零一二两三四五六七八九十]+)"
-    r"(?=(?:次|条|个|天|秒|分|分钟|小时|级|页|位|张|台|卡|倍|年|月|日|周|轮|层))"
+    r"(?=(?:次|条|天|秒|分|分钟|小时|级|页|位|张|台|卡|倍|年|月|日|周|轮|层))"
 )
 _CJK_DIGITS = {
     "零": 0,
@@ -85,6 +87,7 @@ class Citation:
     chunk_index: int
     valid: bool
     chunk_id: int | None
+    document_id: int | None
     claim: str
     source_excerpt: str | None
     lexical_support: str
@@ -98,6 +101,7 @@ class Citation:
             "chunkIndex": self.chunk_index,
             "valid": self.valid,
             "chunkId": self.chunk_id,
+            "documentId": self.document_id,
             "claim": self.claim,
             "sourceExcerpt": self.source_excerpt,
             "lexicalSupport": self.lexical_support,
@@ -138,6 +142,42 @@ class CitationReport:
     def has_citations(self) -> bool:
         return self.total > 0
 
+    @property
+    def malformed_count(self) -> int:
+        """不符合 `[资料《名》#序号]` 精确格式的疑似标注数量。"""
+        return len(self.malformed_labels)
+
+    @property
+    def syntax_valid(self) -> bool:
+        """所有疑似标注都符合唯一合法格式；不是「引用内容正确」。"""
+        return self.malformed_count == 0
+
+    @property
+    def unsupported_count(self) -> int:
+        """格式与索引都合法、但所在句子与片段没有词面重合的标注数。
+
+        词面支持度只是排查线索，不是事实正确性证明；因此单独报数，
+        不能和 `invalid`（索引不存在）混为一谈。
+        """
+        return sum(
+            1
+            for citation in self.citations
+            if citation.valid and citation.lexical_support == "none"
+        )
+
+    @property
+    def numeric_conflict_count(self) -> int:
+        """标注句里的数字在对应片段中找不到的条数。
+
+        这是来源归属的诊断信号，不是错误判定：同义改写、跨句组合都可能触发，
+        真正的语义是否由该来源支持仍需人工复核。
+        """
+        return sum(
+            1
+            for citation in self.citations
+            if citation.valid and citation.numeric_conflict
+        )
+
     def as_dict(self) -> dict[str, object]:
         return {
             "providedLabels": self.provided_labels,
@@ -147,6 +187,10 @@ class CitationReport:
             "illegalRate": self.illegal_rate,
             "invalidLabels": self.invalid_labels,
             "malformedLabels": self.malformed_labels,
+            "malformedCount": self.malformed_count,
+            "syntaxValid": self.syntax_valid,
+            "unsupportedCount": self.unsupported_count,
+            "numericConflictCount": self.numeric_conflict_count,
             "duplicateLabels": self.duplicate_labels,
             "citedDocuments": self.cited_documents,
             "citations": [citation.as_dict() for citation in self.citations],
@@ -226,6 +270,7 @@ def validate_citations(
                     chunk_index=index,
                     valid=False,
                     chunk_id=None,
+                    document_id=None,
                     claim=claim,
                     source_excerpt=None,
                     lexical_support="none",
@@ -242,6 +287,7 @@ def validate_citations(
                 chunk_index=index,
                 valid=True,
                 chunk_id=chunk.id,
+                document_id=chunk.document_id,
                 claim=claim,
                 source_excerpt=_excerpt(chunk.content, overlap),
                 lexical_support=support,

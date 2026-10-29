@@ -31,7 +31,7 @@ pytestmark = pytest.mark.skipif(
     reason="未设置 AILS_TEST_RABBITMQ_URL；真实 Broker 测试未执行（跳过 ≠ 通过）",
 )
 
-BODY = b'{"schemaVersion":1,"taskId":42}'
+BODY = b'{"schemaVersion":2,"taskId":42}'
 
 
 class FakeRuntime:

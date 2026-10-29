@@ -93,8 +93,14 @@ wait_evidence() { # wait_evidence <conceptId> <min> <seconds>
   return 1
 }
 
+mint_identity(){ # mint_identity <userId>
+  ( cd "$ROOT/agent" && python -m app.internal_identity --user "$1" )
+}
+
 preview_context() { # preview_context <conversationId> <question> <outfile>
-  local cid="$1" q="$2" out="$3" sid sess_json payload
+  local cid="$1" q="$2" out="$3"
+  local ident
+  ident="$(mint_identity "$USER_A")" || { echo "  无法签发内部身份" >&2; return 1; }
   sid=$(jqv "$(api GET "/api/conversations/$cid")" "['data']['sessionId']")
   sess_json=$(api GET "/api/sessions/$sid")
   payload="$OUT/.preview-payload-$$.json"
@@ -115,6 +121,9 @@ payload = {
 json.dump(payload, open(out, "w", encoding="utf-8"), ensure_ascii=False)
 PY
   curl -s -X POST "$AGENT/agent/context/preview" -H 'Content-Type: application/json' \
+    -H "X-Internal-Token: ${AILS_INTERNAL_TOKEN:-}" \
+    -H "X-Internal-Identity: $ident" \
+    -H "X-Internal-User-Id: $USER_A" \
     -d @"$payload" > "$out"
 }
 
@@ -138,7 +147,11 @@ section "0. 前置检查"
 if ! curl -s -m 3 "$AGENT/health" > /dev/null; then
   echo "Python Agent 未启动：$AGENT"; exit 1
 fi
-AHEALTH=$(curl -s "$AGENT/health")
+if [ -z "${AILS_INTERNAL_TOKEN:-}" ] || [ -z "${AILS_INTERNAL_IDENTITY_SECRET:-}" ]; then
+  echo "需要 AILS_INTERNAL_TOKEN（诊断）与 AILS_INTERNAL_IDENTITY_SECRET（preview 身份签名）。"; exit 1
+fi
+AHEALTH=$(curl -s -m 3 -H "X-Internal-Token: $AILS_INTERNAL_TOKEN" \
+  "$AGENT/health/diagnostics")
 if [ "$(printf '%s' "$AHEALTH" | python -c 'import sys,json;print(json.load(sys.stdin).get("llm_provider"))')" != "mock" ]; then
   echo "本脚本按 Mock LLM 设计；当前 provider 不是 mock，结果不能与 Mock 基线混在一起。"
   echo "$AHEALTH"
@@ -157,8 +170,8 @@ USER_A=$(jqv "$REG_A" "['data']['user']['id']")
 REG_B=$(register "$UB")
 TOKEN_B=$(jqv "$REG_B" "['data']['token']")
 USER_B=$(jqv "$REG_B" "['data']['user']['id']")
-checknot "用户 A 注册并取得 token" "$TOKEN" ""
-checknot "用户 B 注册并取得 token" "$TOKEN_B" ""
+if [ -n "$TOKEN" ]; then ok "用户 A 注册并取得 token"; else bad "用户 A 注册未返回 token"; fi
+if [ -n "$TOKEN_B" ]; then ok "用户 B 注册并取得 token"; else bad "用户 B 注册未返回 token"; fi
 
 # =====================================================================
 section "1. 空间 / 概念（场景使用项目已有的 TLB 概念）"
@@ -336,6 +349,8 @@ PY
 )
 PREVIEW="$OUT/session-b.preview.json"
 curl -s -X POST "$AGENT/agent/context/preview" -H 'Content-Type: application/json' \
+  -H "X-Internal-Token: ${AILS_INTERNAL_TOKEN:-}" \
+  -H "X-Internal-User-Id: $USER_A" \
   -d "$PREVIEW_PAYLOAD" > "$PREVIEW"
 python - "$PREVIEW" <<'PY'
 import json, sys

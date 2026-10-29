@@ -21,6 +21,10 @@
 
 ```bash
 curl -s http://127.0.0.1:8000/health
+# 存活探针：{"status":"ok"}
+curl -s -H "X-Internal-Token: $AILS_INTERNAL_TOKEN" \
+  -H "X-Internal-User-Id: 1" \
+  http://127.0.0.1:8000/health/diagnostics
 # 必须包含 "llm_provider":"mock"
 
 curl -s http://127.0.0.1:8080/api/auth/login \

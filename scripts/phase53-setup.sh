@@ -109,7 +109,11 @@ highlight() { # highlight <messageId> <markType> <selectedText>
 }
 # =====================================================================
 section "0. 前置检查"
-AHEALTH=$(curl -s -m 3 "$AGENT/health")
+if [ -z "${AILS_INTERNAL_TOKEN:-}" ]; then
+  echo "需要 AILS_INTERNAL_TOKEN 读取 /health/diagnostics（/health 只回存活状态）。" >&2; exit 1
+fi
+AHEALTH=$(curl -s -m 3 -H "X-Internal-Token: $AILS_INTERNAL_TOKEN" \
+  -H "X-Internal-User-Id: 1" "$AGENT/health/diagnostics")
 PROVIDER=$(printf '%s' "$AHEALTH" | python -c 'import sys,json;print(json.load(sys.stdin).get("llm_provider"))' 2>/dev/null)
 if [ "$PROVIDER" != "mock" ]; then
   echo "数据准备要求 Agent 处于 mock 模式；当前 provider=[$PROVIDER]。" >&2

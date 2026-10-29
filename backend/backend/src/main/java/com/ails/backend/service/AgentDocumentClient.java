@@ -5,6 +5,7 @@ import com.ails.backend.dto.document.agent.AgentIndexRequest;
 import com.ails.backend.dto.document.agent.AgentIndexResponse;
 import com.ails.backend.dto.document.agent.AgentParseResponse;
 import com.ails.backend.entity.Document;
+import com.ails.backend.security.InternalIdentitySigner;
 import com.ails.backend.utils.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -42,6 +43,7 @@ public class AgentDocumentClient {
 
     static final String TOKEN_HEADER = "X-Internal-Token";
     static final String USER_HEADER = "X-Internal-User-Id";
+    static final String IDENTITY_HEADER = "X-Internal-Identity";
 
     private static final String PARSE_PATH = "/agent/documents/parse";
     private static final String INDEX_PATH = "/agent/documents/index";
@@ -50,6 +52,7 @@ public class AgentDocumentClient {
     private final HttpClient client;
     private final String baseUrl;
     private final String internalToken;
+    private final InternalIdentitySigner identitySigner;
     private final Duration parseTimeout;
     private final Duration indexTimeout;
 
@@ -57,9 +60,11 @@ public class AgentDocumentClient {
             @Value("${ails.agent.base-url}") String baseUrl,
             @Value("${ails.agent.connect-timeout-ms:3000}") long connectTimeoutMs,
             @Value("${ails.internal.token:}") String internalToken,
-            DocumentIndexProperties properties) {
+            DocumentIndexProperties properties,
+            InternalIdentitySigner identitySigner) {
         this.baseUrl = trimTrailingSlash(baseUrl);
         this.internalToken = internalToken == null ? "" : internalToken.trim();
+        this.identitySigner = identitySigner;
         this.parseTimeout = Duration.ofMillis(properties.parseTimeoutMs());
         this.indexTimeout = Duration.ofMillis(properties.indexTimeoutMs());
         this.client = HttpClient.newBuilder()
@@ -104,6 +109,15 @@ public class AgentDocumentClient {
     private JsonNode send(String url, byte[] body, String contentType, Duration timeout,
                           String action, Long userId) {
         HttpRequest request;
+        // 文档归属用户来自已认证的上传者（Document.userId），由服务端签发；
+        // 缺密钥时 fail closed，避免文档以“无主”或可伪造身份进入索引。
+        final String identity;
+        try {
+            identity = identitySigner.sign(userId);
+        } catch (RuntimeException e) {
+            throw new DocumentIndexException(503,
+                    "未配置 ails.internal.identity-secret，无法签发内部身份", e);
+        }
         try {
             request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -111,6 +125,7 @@ public class AgentDocumentClient {
                     .header("Content-Type", contentType)
                     .header("Accept", "application/json")
                     .header(TOKEN_HEADER, internalToken)
+                    .header(IDENTITY_HEADER, identity)
                     .header(USER_HEADER, String.valueOf(userId))
                     .POST(HttpRequest.BodyPublishers.ofByteArray(body))
                     .build();

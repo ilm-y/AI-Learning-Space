@@ -257,6 +257,19 @@ async def test_http_ready_ids_are_used_and_model_is_sent() -> None:
     assert search.calls[0][1] == [101, 202]
 
 
+async def test_fatal_401_from_backend_is_retrieval_error() -> None:
+    """委托声明过期时后端返回 401，必须映射成可被 Worker 归类的 RetrievalError。"""
+    retriever = http_retriever(
+        lambda request: httpx.Response(401, json={"code": 401, "message": "unauthorized"}),
+        RecordingSearch(),
+    )
+    try:
+        with pytest.raises(RetrievalError, match="401"):
+            await retriever.list_concepts(9)
+    finally:
+        await retriever.aclose()
+
+
 @pytest.mark.parametrize(
     ("status_code", "payload"),
     [

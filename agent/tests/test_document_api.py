@@ -9,10 +9,18 @@ from app.config import Settings
 from app.documents.errors import DocumentEmbeddingError, DocumentVectorStoreError
 from app.documents.routes import router
 from app.embedding import HashEmbeddingProvider
+from app.internal_identity import mint_identity
 from app.vectorstore.qdrant_store import point_id_for
 
 TOKEN = "internal-test-token"
-HEADERS = {"X-Internal-Token": TOKEN, "X-Internal-User-Id": "1"}
+IDENTITY_SECRET = "internal-test-identity-secret"
+HEADERS = {
+    "X-Internal-Token": TOKEN,
+    "X-Internal-User-Id": "1",
+    "X-Internal-Identity": mint_identity(
+        1, secret=IDENTITY_SECRET, ttl_seconds=300
+    ),
+}
 
 
 class FakeStore:
@@ -47,6 +55,7 @@ def make_client(*, store: FakeStore | None = None, settings: Settings | None = N
     app.state.settings = settings or Settings(
         _env_file=None,
         internal_token=TOKEN,
+        internal_identity_secret=IDENTITY_SECRET,
         embedding_provider="hash",
         embedding_dimension=8,
         document_max_bytes=1024,
@@ -67,7 +76,12 @@ def test_parse_requires_internal_token() -> None:
 
 
 def test_parse_fails_closed_when_token_not_configured() -> None:
-    settings = Settings(_env_file=None, internal_token="", embedding_dimension=8)
+    settings = Settings(
+        _env_file=None,
+        internal_token="",
+        internal_identity_secret=IDENTITY_SECRET,
+        embedding_dimension=8,
+    )
     client = make_client(settings=settings)
     response = client.post(
         "/agent/documents/parse",

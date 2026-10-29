@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from app.analysis import AnalysisError
 from app.llm.base import LLMError
 from app.messaging import (
@@ -18,7 +21,7 @@ from app.schemas import MessageRole
 def test_task_message_accepts_backend_camel_case_and_builds_analyze_request():
     task = AnalysisTaskMessage.model_validate(
         {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "taskId": 42,
             "runId": 42,
             "traceId": "trace-1",
@@ -40,6 +43,7 @@ def test_task_message_accepts_backend_camel_case_and_builds_analyze_request():
                 "goal": "理解 TLB",
                 "currentFocus": None,
             },
+            "backendIdentity": "v1.spring-signed-delegation",
         }
     )
 
@@ -54,6 +58,24 @@ def test_task_message_accepts_backend_camel_case_and_builds_analyze_request():
     assert request.session is not None and request.session.id == 5
     # 异步链路绝不携带用户 JWT：Worker 用服务端凭据检索
     assert request.auth_token is None
+    # Spring 签发的委托声明原样透传，Worker 不会自己重签
+    assert request.backend_identity == "v1.spring-signed-delegation"
+
+
+@pytest.mark.parametrize("identity", [None, "", "   "])
+def test_schema_v2_task_without_backend_identity_is_invalid(identity) -> None:
+    body = {
+        "schemaVersion": 2,
+        "taskId": 42,
+        "runId": 42,
+        "userId": 7,
+        "conversationId": 9,
+        "learningSpaceId": 3,
+        "userMessage": "TLB 是什么？",
+        "backendIdentity": identity,
+    }
+    with pytest.raises(ValidationError, match="backendIdentity"):
+        AnalysisTaskMessage.model_validate(body)
 
 
 def test_result_message_serializes_to_backend_camel_case():

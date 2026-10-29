@@ -145,8 +145,10 @@ class LearningAnalyzer:
             self._settings,
             request.auth_token,
             allow_degradation=False,
-            # 异步 Worker 没有用户 JWT，用它自己的服务端凭据
+            # 异步 Worker 没有用户 JWT，用 Spring 放进任务里的委托声明。
+            # Agent 不自己签发：没有 backend_identity 时 build_retriever 直接 fail closed。
             user_id=request.user_id,
+            delegation_token=request.backend_identity,
         )
         try:
             concepts = await retriever.list_concepts(request.learning_space_id)

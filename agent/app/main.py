@@ -35,13 +35,18 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.analysis import AnalysisError
 from app.config import Settings
 from app.documents.routes import router as documents_router
 from app.embedding import build_embedding_provider
+from app.internal_auth import (
+    require_internal_service,
+    require_internal_user,
+    require_matching_user,
+)
 from app.llm import build_llm_adapter
 from app.llm.base import LLMError
 from app.retriever.base import RetrievalError
@@ -101,13 +106,28 @@ app.include_router(documents_router)
 
 
 @app.get("/health")
-async def health(request: Request) -> dict[str, object]:
+async def health() -> dict[str, object]:
+    """安全存活探针：只回一个固定状态，不暴露 provider / token / 地址。"""
+    return {"status": "ok"}
+
+
+@app.get("/health/diagnostics")
+async def health_diagnostics(
+    request: Request,
+    _: None = Depends(require_internal_service),
+) -> dict[str, object]:
+    """受保护诊断：只校验服务凭据，不绑定用户，也不读取用户数据。"""
     settings: Settings = request.app.state.settings
     return {"status": "ok", **settings.describe()}
 
 
 @app.post("/agent/chat")
-async def chat(payload: ChatRequest, request: Request) -> StreamingResponse:
+async def chat(
+    payload: ChatRequest,
+    request: Request,
+    internal_user_id: int = Depends(require_internal_user),
+) -> StreamingResponse:
+    require_matching_user(payload.user_id, internal_user_id)
     runtime: AgentRuntime = request.app.state.runtime
     return StreamingResponse(
         _sse(runtime.stream(payload)),
@@ -117,7 +137,12 @@ async def chat(payload: ChatRequest, request: Request) -> StreamingResponse:
 
 
 @app.post("/agent/analyze")
-async def analyze(payload: AnalyzeRequest, request: Request) -> JSONResponse:
+async def analyze(
+    payload: AnalyzeRequest,
+    request: Request,
+    internal_user_id: int = Depends(require_internal_user),
+) -> JSONResponse:
+    require_matching_user(payload.user_id, internal_user_id)
     runtime: AgentRuntime = request.app.state.runtime
     try:
         result = await runtime.analyze(payload)
@@ -138,7 +163,12 @@ async def analyze(payload: AnalyzeRequest, request: Request) -> JSONResponse:
 
 
 @app.post("/agent/context/preview")
-async def preview(payload: ChatRequest, request: Request) -> JSONResponse:
+async def preview(
+    payload: ChatRequest,
+    request: Request,
+    internal_user_id: int = Depends(require_internal_user),
+) -> JSONResponse:
+    require_matching_user(payload.user_id, internal_user_id)
     runtime: AgentRuntime = request.app.state.runtime
     try:
         prepared = await runtime.prepare(payload)
@@ -151,7 +181,11 @@ async def preview(payload: ChatRequest, request: Request) -> JSONResponse:
             "data": {
                 "summary": prepared.state.summary(),
                 "retriever": prepared.retriever_name,
+                "requestedMode": prepared.requested_mode,
+                "resolvedSource": prepared.retriever_name,
                 "degraded": prepared.degraded,
+                "fallbackVisible": prepared.degraded,
+                "fallbackReason": prepared.fallback_reason,
                 "context": prepared.context.as_dict(),
                 "trace": prepared.trace.as_dict(),
             },

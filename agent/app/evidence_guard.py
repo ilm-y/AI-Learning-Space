@@ -134,6 +134,11 @@ _CASUAL_RE = re.compile(
 )
 
 
+def status_notice(status: str) -> str | None:
+    """返回该状态的固定说明文本；用于评测判断是否重复追加，不用于绕过校验。"""
+    return _STATUS_NOTICE.get(str(status or ""))
+
+
 def evidence_status_notice(status: str, question: str, answer: str) -> str | None:
     """返回应追加的状态说明；不应追加时返回 None。
 

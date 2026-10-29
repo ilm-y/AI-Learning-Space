@@ -213,6 +213,42 @@ async def test_guard_does_not_duplicate_an_existing_disclosure() -> None:
     assert already_discloses("THRESHOLD_FILTERED", answer) is True
 
 
+async def test_budget_dropped_success_is_explained_by_context_not_contradicted_by_guard() -> None:
+    """检索成功但知识全被预算丢掉时，Context 说「检索到了」，Guard 不能再说「没有资料」。"""
+    chunk = KnowledgeChunk(
+        id=9,
+        document_id=10,
+        chunk_index=0,
+        document_name="orbit_current.md",
+        content="ORBIT-4721 当前调度器使用 17 秒的重试窗口。" * 20,
+    )
+    answer = "当前是 17 秒。"
+    runtime = AgentRuntime(
+        Settings(_env_file=None, retriever_mode="fixture", max_context_tokens=100),
+        FakeLLM(answer),
+    )
+    prepared = await runtime.prepare(
+        _request("ORBIT-4721 当前重试窗口是多少？"),
+        retriever=FakeRetriever(KnowledgeStatus.SUCCESS, chunk=chunk),
+    )
+    try:
+        output = "".join([delta async for delta in runtime.generate(prepared)])
+    finally:
+        await runtime.aclose()
+
+    assert prepared.context.knowledge_state == "SUCCESS_BUT_DROPPED"
+    assert "SUCCESS_BUT_DROPPED" in prepared.context.messages[0].content
+    assert "检索成功" in prepared.context.messages[0].content
+    # Guard 不追加「没有检索到资料」，否则会与 Context 状态直接矛盾。
+    assert output == answer
+    assert "本轮上传资料中没有检索到" not in output
+    assert not any(
+        item.type is TraceEventType.EVIDENCE_GUARD for item in prepared.trace.events
+    )
+    assert "SUCCESS_BUT_DROPPED" not in GUARD_STATUSES
+    assert evidence_status_notice("SUCCESS_BUT_DROPPED", "这是什么？", answer) is None
+
+
 async def test_successful_retrieval_is_unchanged() -> None:
     chunk = KnowledgeChunk(
         id=1,

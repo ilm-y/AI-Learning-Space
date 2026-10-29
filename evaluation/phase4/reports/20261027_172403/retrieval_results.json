@@ -1,0 +1,192 @@
+[
+  {
+    "key": "supported_paraphrase",
+    "space": "A1",
+    "question": "ORBIT-4721 新部署在失败后等待多久再重试？",
+    "label_basis": "target chunk contains the only current 17-second statement",
+    "expected_chunk_ids": [
+      18
+    ],
+    "status": "SUCCESS",
+    "candidates": 2,
+    "warning": null,
+    "returned": [
+      {
+        "chunk_id": 18,
+        "document_id": 20,
+        "chunk_index": 0,
+        "document_name": "orbit_current_20261027_172403.md",
+        "score": 0.73351645
+      },
+      {
+        "chunk_id": 19,
+        "document_id": 21,
+        "chunk_index": 0,
+        "document_name": "orbit_legacy_20261027_172403.md",
+        "score": 0.71335006
+      }
+    ],
+    "rank_of_first_expected": 1,
+    "recall_at_k": 1.0,
+    "reciprocal_rank": 1.0
+  },
+  {
+    "key": "legacy_version",
+    "space": "A1",
+    "question": "2024 年以前 ORBIT-4721 的旧调度器重试窗口是多少秒？",
+    "label_basis": "distractor chunk contains the legacy 12-second statement",
+    "expected_chunk_ids": [
+      19
+    ],
+    "status": "SUCCESS",
+    "candidates": 2,
+    "warning": null,
+    "returned": [
+      {
+        "chunk_id": 19,
+        "document_id": 21,
+        "chunk_index": 0,
+        "document_name": "orbit_legacy_20261027_172403.md",
+        "score": 0.8760601
+      },
+      {
+        "chunk_id": 18,
+        "document_id": 20,
+        "chunk_index": 0,
+        "document_name": "orbit_current_20261027_172403.md",
+        "score": 0.8421389
+      }
+    ],
+    "rank_of_first_expected": 1,
+    "recall_at_k": 1.0,
+    "reciprocal_rank": 1.0
+  },
+  {
+    "key": "supported_with_missing_detail",
+    "space": "A1",
+    "question": "ORBIT-4721 当前重试窗口是多少？它的仪表盘默认颜色是什么？",
+    "label_basis": "target chunk supports the retry-window half only",
+    "expected_chunk_ids": [
+      18
+    ],
+    "status": "SUCCESS",
+    "candidates": 2,
+    "warning": null,
+    "returned": [
+      {
+        "chunk_id": 19,
+        "document_id": 21,
+        "chunk_index": 0,
+        "document_name": "orbit_legacy_20261027_172403.md",
+        "score": 0.75001204
+      },
+      {
+        "chunk_id": 18,
+        "document_id": 20,
+        "chunk_index": 0,
+        "document_name": "orbit_current_20261027_172403.md",
+        "score": 0.7139683
+      }
+    ],
+    "rank_of_first_expected": 2,
+    "recall_at_k": 1.0,
+    "reciprocal_rank": 0.5
+  },
+  {
+    "key": "other_user_scope",
+    "space": "B1",
+    "question": "ORBIT-4721 当前调度器的重试窗口是多少秒？",
+    "label_basis": "user B's own READY chunk",
+    "expected_chunk_ids": [
+      21
+    ],
+    "status": "SUCCESS",
+    "candidates": 1,
+    "warning": null,
+    "returned": [
+      {
+        "chunk_id": 21,
+        "document_id": 23,
+        "chunk_index": 0,
+        "document_name": "orbit_shared_20261027_172403.md",
+        "score": 0.67679745
+      }
+    ],
+    "rank_of_first_expected": 1,
+    "recall_at_k": 1.0,
+    "reciprocal_rank": 1.0
+  },
+  {
+    "key": "other_space_scope",
+    "space": "A2",
+    "question": "ORBIT-4721 当前调度器的重试窗口是多少秒？",
+    "label_basis": "user A's other-space READY chunk",
+    "expected_chunk_ids": [
+      20
+    ],
+    "status": "SUCCESS",
+    "candidates": 1,
+    "warning": null,
+    "returned": [
+      {
+        "chunk_id": 20,
+        "document_id": 22,
+        "chunk_index": 0,
+        "document_name": "orbit_archive_20261027_172403.md",
+        "score": 0.741372
+      }
+    ],
+    "rank_of_first_expected": 1,
+    "recall_at_k": 1.0,
+    "reciprocal_rank": 1.0
+  },
+  {
+    "key": "no_match",
+    "space": "A1",
+    "question": "镓的熔点是多少摄氏度？",
+    "label_basis": "no document in A1 is about gallium",
+    "expected_chunk_ids": [],
+    "status": "THRESHOLD_FILTERED",
+    "candidates": 2,
+    "warning": "检索到文档候选，但相似度均低于阈值 0.35，本次回答未使用文档资料。",
+    "returned": [],
+    "rank_of_first_expected": null,
+    "recall_at_k": 0.0,
+    "reciprocal_rank": 0.0
+  },
+  {
+    "key": "qdrant_defense_filters",
+    "filters": [
+      {
+        "key": "A_query_with_B_document_id",
+        "hits": 0,
+        "expected_zero": true,
+        "pass": true,
+        "payload_document_ids": []
+      },
+      {
+        "key": "B_query_with_A_document_id",
+        "hits": 0,
+        "expected_zero": true,
+        "pass": true,
+        "payload_document_ids": []
+      },
+      {
+        "key": "A1_query_with_A2_document_id",
+        "hits": 0,
+        "expected_zero": true,
+        "pass": true,
+        "payload_document_ids": []
+      },
+      {
+        "key": "A1_query_with_A1_document_id",
+        "hits": 1,
+        "expected_zero": false,
+        "pass": true,
+        "payload_document_ids": [
+          20
+        ]
+      }
+    ]
+  }
+]

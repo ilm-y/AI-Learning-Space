@@ -228,6 +228,22 @@ def test_chinese_word_liangzhe_is_not_treated_as_number_two() -> None:
     assert report.citations[0].numeric_conflict is False
 
 
+def test_indefinite_yi_ge_is_not_a_factual_numeric_conflict() -> None:
+    """「一个历史值」不是事实数字；它不能把正确归属的引用误报为冲突。"""
+    source = chunk(
+        content=(
+            "2024 年及以前的旧调度器使用 12 秒的重试窗口，该版本已在 2025 年下线。"
+        )
+    )
+    answer = (
+        "这里容易混进来一个历史值：2024 年及以前的旧调度器用的是 12 秒，"
+        "那个版本已经在 2025 年下线 [资料《zenframe.md》#0]。"
+    )
+    report = validate_citations(answer, [source])
+
+    assert report.citations[0].numeric_conflict is False
+
+
 def test_context_builder_keeps_heading_outside_the_citation_brackets() -> None:
     source = KnowledgeChunk(
         id=200,

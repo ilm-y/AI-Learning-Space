@@ -92,6 +92,12 @@ ails:
       # 解析只需上传文件内容；索引可能包含 Embedding API 调用与批量 upsert。
       parse-timeout-ms: ${AILS_DOCUMENT_PARSE_TIMEOUT_MS:60000}
       index-timeout-ms: ${AILS_DOCUMENT_INDEX_TIMEOUT_MS:120000}
+      # PROCESSING 超时回收：必须明显大于 parse + index 的最坏耗时（默认 3 分钟），
+      # 否则会误伤仍在运行的有效索引任务。只有进程中断/线程挂死才会留到 15 分钟。
+      stale-processing-timeout-ms: ${AILS_DOCUMENT_STALE_PROCESSING_TIMEOUT_MS:900000}
+      recovery-interval-ms: ${AILS_DOCUMENT_RECOVERY_INTERVAL_MS:300000}
+      recovery-initial-delay-ms: ${AILS_DOCUMENT_RECOVERY_INITIAL_DELAY_MS:60000}
+      recovery-batch-size: ${AILS_DOCUMENT_RECOVERY_BATCH_SIZE:100}
 
   agent:
     # AgentGateway 的实现选择，决定「后端把问题发给谁」：
@@ -151,10 +157,25 @@ ails:
 
   # ===================== Agent 内部服务凭据 =====================
   internal:
-    # Python Worker 不回传用户 JWT。它用这个共享密钥 + 目标 userId 调后端的只读接口，
-    # 由 InternalServiceAuthenticationFilter 建立「服务代用户」的身份。
-    # 为空表示禁用该入口（默认值）：此时 Worker 必须自己带用户 token，异步分析会失败。
+    # 共享服务凭据：只证明“调用方是内部服务”，不绑定用户。
+    # 为空表示禁用内部入口（默认值）。
     token: ${AILS_INTERNAL_TOKEN:}
+    # Spring → Agent 的用户身份签名密钥（aud=learning-agent）。Agent 必须持有同一把
+    # 密钥才能校验，因此它也能签发同 audience 的声明；后端不接受该 audience。
+    identity-secret: ${AILS_INTERNAL_IDENTITY_SECRET:}
+    identity-audience: ${AILS_INTERNAL_IDENTITY_AUDIENCE:learning-agent}
+    identity-ttl-seconds: ${AILS_INTERNAL_IDENTITY_TTL_SECONDS:60}
+    # Spring → 后端读接口的委托签名密钥（aud=learning-backend, scope=analysis:read）。
+    # 只存在于 Spring 进程，绝不能下发给 Agent。Agent 仅转发 MQ 任务里的声明。
+    delegation-secret: ${AILS_INTERNAL_DELEGATION_SECRET:}
+    # Agent Worker → 后端的声明接收方；后端只接受这个 audience。
+    backend-identity-audience: ${AILS_BACKEND_IDENTITY_AUDIENCE:learning-backend}
+    identity-max-ttl-seconds: ${AILS_INTERNAL_IDENTITY_MAX_TTL_SECONDS:300}
+    identity-clock-skew-seconds: ${AILS_INTERNAL_IDENTITY_CLOCK_SKEW_SECONDS:5}
+    # MQ 任务可能在队列里等待，委托声明需要比同步链路更长；仍限定为短期。
+    # 过期后 Worker 会收到 401/403 并走重试/失败，而不会绕过校验。
+    delegation-ttl-seconds: ${AILS_INTERNAL_DELEGATION_TTL_SECONDS:900}
+    delegation-max-ttl-seconds: ${AILS_INTERNAL_DELEGATION_MAX_TTL_SECONDS:3600}
 
 logging:
   level:

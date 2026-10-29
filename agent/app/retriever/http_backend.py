@@ -56,6 +56,7 @@ log = logging.getLogger(__name__)
 # 内部服务凭据的请求头。与后端 InternalServiceAuthenticationFilter 的常量保持一致。
 INTERNAL_TOKEN_HEADER = "X-Internal-Token"
 INTERNAL_USER_HEADER = "X-Internal-User-Id"
+INTERNAL_IDENTITY_HEADER = "X-Internal-Identity"
 
 
 class HttpBackendRetriever:
@@ -65,6 +66,7 @@ class HttpBackendRetriever:
         auth_token: str | None = None,
         *,
         internal_token: str | None = None,
+        internal_identity: str | None = None,
         user_id: int | None = None,
         timeout_seconds: float = 10.0,
         memory_top_k: int = 5,
@@ -79,13 +81,17 @@ class HttpBackendRetriever:
         # 两者都没有时直接失败，而不是发一个注定 401 的请求。
         if auth_token:
             headers = {"Authorization": f"Bearer {auth_token}"}
-        elif internal_token and user_id is not None:
+        elif internal_token and internal_identity and user_id is not None:
             headers = {
                 INTERNAL_TOKEN_HEADER: internal_token,
+                INTERNAL_IDENTITY_HEADER: internal_identity,
                 INTERNAL_USER_HEADER: str(user_id),
             }
         else:
-            raise ValueError("HttpBackendRetriever 需要 auth_token 或 internal_token + user_id")
+            raise ValueError(
+                "HttpBackendRetriever 需要 auth_token，或 "
+                "internal_token + internal_identity + user_id"
+            )
         self._client = httpx.AsyncClient(timeout=timeout_seconds, headers=headers)
 
     @property

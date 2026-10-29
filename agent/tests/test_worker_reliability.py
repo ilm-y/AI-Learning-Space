@@ -151,7 +151,7 @@ def settings(**overrides: Any) -> Settings:
 
 def task_body(**overrides: Any) -> bytes:
     payload = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "taskId": 42,
         "runId": 42,
         "traceId": "trace-1",
@@ -164,6 +164,7 @@ def task_body(**overrides: Any) -> bytes:
         "assistantMessage": "闭包是函数与其词法环境的组合。",
         "history": [],
         "session": None,
+        "backendIdentity": "v1.test-delegation",
     }
     payload.update(overrides)
     return json.dumps(payload).encode("utf-8")
@@ -434,6 +435,54 @@ def test_retryable_failure_on_last_attempt_publishes_failed_and_acks():
     assert payload["errorCode"] == "RETRIEVAL_UNAVAILABLE"
 
 
+def test_expired_backend_identity_is_bounded_and_dead_lettered():
+    """委托声明过期后后端返回 401：重试次数有上限，最终 FAILED + 死信。
+
+    这是 Phase 3.3 的过期凭据回归：401 目前被归类为可重试的
+    ``RETRIEVAL_UNAVAILABLE``，因此要证明它不会无限重试，也不会在重试期间
+    提前写业务成功状态。第 3 次 Runtime 调用是最后一次；之后不再投递。
+    """
+    result_exchange = FakeExchange()
+    dead_exchange = FakeExchange()
+    runtime = FakeRuntime(
+        error=RetrievalError("后端返回 401：凭据无效（委托声明已过期）")
+    )
+    worker = build_worker(
+        runtime=runtime, result_exchange=result_exchange, dead_exchange=dead_exchange
+    )
+    message = FakeMessage(body=task_body())
+
+    # retries=0 → 1、retries=1 → 2：两次都只发重试副本，不发布结果。
+    for expected_retry in (1, 2):
+        asyncio.run(worker._handle(message))
+        assert message.acked is True
+        assert result_exchange.published == []
+        copy = dead_exchange.published[-1]
+        assert copy["routing_key"] == settings().analysis_retry_routing_key
+        assert copy["message"].headers["x-analysis-retry"] == expected_retry
+        assert copy["message"].headers["x-retry-reason"] == "RETRIEVAL_UNAVAILABLE"
+        message = FakeMessage(
+            body=copy["message"].body,
+            headers=dict(copy["message"].headers),
+        )
+
+    # retries=2 是最后一次 Runtime 调用：失败后发布 FAILED，不再生成重试副本。
+    asyncio.run(worker._handle(message))
+
+    assert runtime.calls == 3
+    assert message.acked is True
+    dead = dead_exchange.published[-1]
+    assert dead["routing_key"] == settings().analysis_dead_routing_key
+    assert dead["message"].headers["x-error-code"] == "RETRIEVAL_UNAVAILABLE"
+    assert dead["message"].headers["x-retry-count"] == 3
+    # 死信保留原始 body，过期声明仍在 DLQ 中；这不代表它仍然有效。
+    assert json.loads(dead["message"].body)["backendIdentity"] == "v1.test-delegation"
+    result = json.loads(result_exchange.published[0]["message"].body)
+    assert result["status"] == "FAILED"
+    assert result["errorCode"] == "RETRIEVAL_UNAVAILABLE"
+    assert result["retryable"] is False
+
+
 def test_invalid_task_with_task_id_does_not_crash_the_worker():
     # 回归：这里曾经多传一个位置参数，TypeError 会把整个消费循环带崩。
     result_exchange = FakeExchange()
@@ -505,3 +554,52 @@ def test_dead_letter_keeps_forensic_identifiers():
     assert dead.correlation_id == "corr-9"
     assert dead.headers["x-original-message-id"] == "msg-9"
     assert dead.headers["x-error-code"] == "INTERNAL"
+
+
+def test_v1_task_without_backend_identity_is_rejected():
+    """schemaVersion=1 的任务没有 Spring 委托身份，不能悄悄按新协议跑。"""
+    result_exchange = FakeExchange()
+    dead_exchange = FakeExchange()
+    runtime = FakeRuntime(result=FakeResult())
+    worker = build_worker(
+        runtime=runtime, result_exchange=result_exchange, dead_exchange=dead_exchange
+    )
+    payload = json.loads(task_body())
+    payload["schemaVersion"] = 1
+    payload.pop("backendIdentity", None)
+    message = FakeMessage(body=json.dumps(payload).encode("utf-8"))
+
+    asyncio.run(worker._handle(message))
+
+    assert message.acked is True
+    assert runtime.calls == 0
+    # 无法安全处理的消息进死信队列留证，不重试
+    assert len(dead_exchange.published) == 1
+    assert dead_exchange.published[0]["routing_key"] == settings().analysis_dead_routing_key
+    result = json.loads(result_exchange.published[0]["message"].body)
+    assert result["status"] == "FAILED"
+    assert result["errorCode"] == "TASK_SCHEMA_UNSUPPORTED"
+
+
+def test_v2_task_without_backend_identity_is_rejected_at_the_entry():
+    """v2 合同缺委托身份属于请求非法，不是可重试的后端故障。"""
+    result_exchange = FakeExchange()
+    dead_exchange = FakeExchange()
+    runtime = FakeRuntime(result=FakeResult())
+    worker = build_worker(
+        runtime=runtime, result_exchange=result_exchange, dead_exchange=dead_exchange
+    )
+    payload = json.loads(task_body())
+    payload.pop("backendIdentity", None)
+    message = FakeMessage(body=json.dumps(payload).encode("utf-8"))
+
+    asyncio.run(worker._handle(message))
+
+    assert message.acked is True
+    # 消息在入口即被拒绝，绝不能进入 Analyze / 检索
+    assert runtime.calls == 0
+    assert len(dead_exchange.published) == 1
+    result = json.loads(result_exchange.published[0]["message"].body)
+    assert result["status"] == "FAILED"
+    assert result["errorCode"] == "MESSAGE_INVALID"
+    assert result["retryable"] is False

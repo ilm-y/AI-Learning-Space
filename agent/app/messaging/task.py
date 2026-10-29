@@ -17,14 +17,14 @@ import asyncio
 from enum import Enum
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import ValidationError, model_validator
 
 from app.analysis import AnalysisError
 from app.llm.base import LLMError
 from app.retriever.base import RetrievalError
 from app.schemas import AnalyzeRequest, CamelModel, HistoryMessage, SessionContext
 
-TASK_SCHEMA_VERSION = 1
+TASK_SCHEMA_VERSION = 2
 RESULT_SCHEMA_VERSION = 1
 
 # Worker 主动重投请求消息时写入的重试计数。Worker 不再依赖 nack + broker DLX
@@ -37,7 +37,13 @@ class AnalysisTaskMessage(CamelModel):
     """Spring Boot → Worker 的分析任务。
 
     `user_message` / `assistant_message` / `history` 随任务携带，避免 Worker 再发一次
-    同步查询；任务里**没有** authToken —— Worker 用服务端凭据回访后端的只读接口。
+    同步查询；任务里**没有** authToken —— Worker 不持有用户 JWT。
+
+    Worker 回访后端读接口需要两层凭据：共享 `X-Internal-Token` 证明服务身份，
+    Spring 签发的 `backend_identity`（aud=learning-backend, scope=analysis:read）
+    证明「代表哪个用户」。委托声明由 Spring 生成后放进消息，Worker 只原样转发；
+    Agent 不持有 delegation-secret，因此无法自己造一份后端接受的用户身份。
+    schemaVersion=2 起该字段为必需：旧 v1 消息没有可信用户身份，拒收。
     """
 
     schema_version: int = TASK_SCHEMA_VERSION
@@ -55,11 +61,26 @@ class AnalysisTaskMessage(CamelModel):
     assistant_message: str | None = None
     history: list[HistoryMessage] = []
     session: SessionContext | None = None
+    backend_identity: str | None = None
+
+    @model_validator(mode="after")
+    def _require_backend_identity(self) -> "AnalysisTaskMessage":
+        """v2 合同要求携带 Spring 的委托声明。
+
+        没有它，Worker 到达 Analyze 后才 fail closed 并进入重试；在消息入口就
+        拒绝更清楚：缺字段是合同错误，不是可重试的后端故障。
+        """
+        if self.schema_version >= 2 and not (self.backend_identity or "").strip():
+            raise ValueError(
+                "schemaVersion=2 的任务必须携带 Spring 签发的 backendIdentity"
+            )
+        return self
 
     def to_analyze_request(self) -> AnalyzeRequest:
         """转成 HTTP 分析接口用的同一个请求模型。
 
         `auth_token` 刻意留空：异步链路使用服务端凭据，不携带用户 JWT。
+        `backend_identity` 原样带上 Spring 的委托声明，Worker 不重签。
         """
         return AnalyzeRequest(
             runId=self.run_id,
@@ -73,6 +94,7 @@ class AnalysisTaskMessage(CamelModel):
             history=self.history,
             session=self.session,
             authToken=None,
+            backendIdentity=self.backend_identity,
         )
 
 

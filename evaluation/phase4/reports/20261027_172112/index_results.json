@@ -1,0 +1,135 @@
+[
+  {
+    "role": "target",
+    "document_id": 4,
+    "db_status": "READY",
+    "db_chunk_count": 1,
+    "db_chunks": 1,
+    "db_chunks_with_vector_ref": 1,
+    "qdrant_points": 1,
+    "qdrant_dimension": 1024,
+    "embedding_dimension": 1024,
+    "indexed_at_present": true,
+    "embedding_model": "text-embedding-v4",
+    "payload_matches_db": [
+      {
+        "chunk_id": 2,
+        "present": true,
+        "matches": false
+      }
+    ],
+    "user_space_match": false,
+    "payload_count_matches_db": true,
+    "vector_refs_nonempty": true,
+    "chunk_count_matches": true,
+    "dimension_matches": true,
+    "pass": false
+  },
+  {
+    "role": "distractor",
+    "document_id": 5,
+    "db_status": "READY",
+    "db_chunk_count": 1,
+    "db_chunks": 1,
+    "db_chunks_with_vector_ref": 1,
+    "qdrant_points": 1,
+    "qdrant_dimension": 1024,
+    "embedding_dimension": 1024,
+    "indexed_at_present": true,
+    "embedding_model": "text-embedding-v4",
+    "payload_matches_db": [
+      {
+        "chunk_id": 3,
+        "present": true,
+        "matches": false
+      }
+    ],
+    "user_space_match": false,
+    "payload_count_matches_db": true,
+    "vector_refs_nonempty": true,
+    "chunk_count_matches": true,
+    "dimension_matches": true,
+    "pass": false
+  },
+  {
+    "role": "other_space",
+    "document_id": 6,
+    "db_status": "READY",
+    "db_chunk_count": 1,
+    "db_chunks": 1,
+    "db_chunks_with_vector_ref": 1,
+    "qdrant_points": 1,
+    "qdrant_dimension": 1024,
+    "embedding_dimension": 1024,
+    "indexed_at_present": true,
+    "embedding_model": "text-embedding-v4",
+    "payload_matches_db": [
+      {
+        "chunk_id": 4,
+        "present": true,
+        "matches": false
+      }
+    ],
+    "user_space_match": false,
+    "payload_count_matches_db": true,
+    "vector_refs_nonempty": true,
+    "chunk_count_matches": true,
+    "dimension_matches": true,
+    "pass": false
+  },
+  {
+    "role": "other_user",
+    "document_id": 7,
+    "db_status": "READY",
+    "db_chunk_count": 1,
+    "db_chunks": 1,
+    "db_chunks_with_vector_ref": 1,
+    "qdrant_points": 1,
+    "qdrant_dimension": 1024,
+    "embedding_dimension": 1024,
+    "indexed_at_present": true,
+    "embedding_model": "text-embedding-v4",
+    "payload_matches_db": [
+      {
+        "chunk_id": 5,
+        "present": true,
+        "matches": false
+      }
+    ],
+    "user_space_match": false,
+    "payload_count_matches_db": true,
+    "vector_refs_nonempty": true,
+    "chunk_count_matches": true,
+    "dimension_matches": true,
+    "pass": false
+  },
+  {
+    "role": "failed_fixture",
+    "document_id": 2,
+    "status": "FAILED",
+    "index_error": "Agent 服务未启动或无法连接",
+    "chunks": 0,
+    "qdrant_points": 0,
+    "ready": false
+  },
+  {
+    "role": "processing_fixture",
+    "document_id": 3,
+    "status": "PROCESSING",
+    "index_error": "NULL",
+    "chunks": 0,
+    "qdrant_points": 0,
+    "ready": false
+  },
+  {
+    "role": "ready_ids",
+    "A1_exact_ready_set": true,
+    "A1_excludes_failed": true,
+    "A1_excludes_processing": true,
+    "A1_excludes_other_space": true,
+    "A1_excludes_other_user": true,
+    "A2_exact_ready_set": true,
+    "B1_exact_ready_set": true,
+    "pass": true
+  }
+]

@@ -127,8 +127,14 @@ wait_status() { # wait_status <conceptId> <status> <seconds>
   done
   return 1
 }
+mint_identity(){ # mint_identity <userId>
+  ( cd "$ROOT/agent" && python -m app.internal_identity --user "$1" )
+}
+
 preview_context() { # preview_context <userId> <conversationId> <spaceId> <question> <outfile>
   local uid="$1" cid="$2" sid="$3" q="$4" out="$5"
+  local ident
+  ident="$(mint_identity "$uid")" || { echo "  无法签发内部身份" >&2; return 1; }
   python - "$uid" "$cid" "$sid" "$q" "$TOKEN" > "$out.payload" <<'PY'
 import json, sys
 uid, cid, sid, question, token = sys.argv[1:6]
@@ -142,6 +148,9 @@ print(json.dumps({
 }, ensure_ascii=False))
 PY
   curl -s -m 90 -X POST "$AGENT/agent/context/preview" -H 'Content-Type: application/json' \
+    -H "X-Internal-Token: ${AILS_INTERNAL_TOKEN:-}" \
+    -H "X-Internal-Identity: $ident" \
+    -H "X-Internal-User-Id: $uid" \
     -d @"$out.payload" > "$out"
 }
 send_message() { # send_message <conversationId> <text> <sse-file>
@@ -168,7 +177,11 @@ section "0. 前置检查"
 if ! curl -s -m 3 "$AGENT/health" > /dev/null; then
   echo "Python Agent 未启动：$AGENT"; exit 1
 fi
-AHEALTH=$(curl -s "$AGENT/health")
+if [ -z "${AILS_INTERNAL_TOKEN:-}" ] || [ -z "${AILS_INTERNAL_IDENTITY_SECRET:-}" ]; then
+  echo "需要 AILS_INTERNAL_TOKEN（诊断）与 AILS_INTERNAL_IDENTITY_SECRET（preview 身份签名）。"; exit 1
+fi
+AHEALTH=$(curl -s -m 3 -H "X-Internal-Token: $AILS_INTERNAL_TOKEN" \
+  "$AGENT/health/diagnostics")
 PROVIDER=$(printf '%s' "$AHEALTH" | python -c 'import sys,json;print(json.load(sys.stdin).get("llm_provider"))')
 if [ "$PROVIDER" != "mock" ]; then
   echo "本脚本按 Mock LLM 设计；当前 provider=$PROVIDER，结果不能与 Mock 基线混在一起。"
@@ -190,8 +203,8 @@ USER_A=$(jqv "$REG_A" "['data']['user']['id']")
 REG_B=$(register "$UB")
 TOKEN_B=$(jqv "$REG_B" "['data']['token']")
 USER_B=$(jqv "$REG_B" "['data']['user']['id']")
-checknot "用户 A 注册并取得 token" "$TOKEN" ""
-checknot "用户 B 注册并取得 token" "$TOKEN_B" ""
+if [ -n "$TOKEN" ]; then ok "用户 A 注册并取得 token"; else bad "用户 A 注册未返回 token"; fi
+if [ -n "$TOKEN_B" ]; then ok "用户 B 注册并取得 token"; else bad "用户 B 注册未返回 token"; fi
 
 # =====================================================================
 section "1. 场景 A：当前误区进入新会话"

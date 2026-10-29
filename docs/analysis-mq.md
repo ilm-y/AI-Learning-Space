@@ -76,7 +76,7 @@ learning.analysis.exchange (direct, durable)
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "taskId": 4201,
   "runId": 4201,
   "traceId": "b1f0c7d2e9a34c56",
@@ -92,7 +92,8 @@ learning.analysis.exchange (direct, durable)
     {"role": "USER", "content": "TLB 是什么？"},
     {"role": "ASSISTANT", "content": "TLB 是……"}
   ],
-  "session": {"id": 5, "title": "分页", "goal": "理解 TLB", "currentFocus": null}
+  "session": {"id": 5, "title": "分页", "goal": "理解 TLB", "currentFocus": null},
+  "backendIdentity": "v1.<payload>.<hmac>"
 }
 ```
 
@@ -100,19 +101,29 @@ learning.analysis.exchange (direct, durable)
   `AnalyzeRequest`，两者当前相同。
 - `history` 已排除本轮的用户/助手消息（它们由独立字段携带），最多 20 条。
 - **没有 `authToken`。** 用户 JWT 会过期，而消息可能在队列里停留任意长时间。
+- **`backendIdentity` 必须存在（schemaVersion=2）。** 它由 Spring 用仅后端持有的
+  `delegation-secret` 签发，claims 为 `iss=learning-backend`、`sub=userId`、
+  `aud=learning-backend`、`scope=analysis:read`、短期 `exp` 与 `jti`。Worker/Agent
+  只原样转发，不能修改 `sub`、不能重新签名。旧 v1 消息没有该字段，会被 Worker
+  拒绝并转入死信。
 
 Worker 需要的跨对话上下文由它自己回访后端只读接口获取，使用服务端凭据而非用户 JWT：
 
 ```text
 X-Internal-Token:   <AILS_INTERNAL_TOKEN>
-X-Internal-User-Id: <task.userId>
+X-Internal-Identity: <task.backendIdentity>
+X-Internal-User-Id: <task.userId>   # 仅交叉核对，可信身份来自签名 sub
 ```
 
-后端 `InternalServiceAuthenticationFilter` 校验共享密钥后建立与该用户等价的 principal，
-原有 Controller / 空间归属校验照常执行，没有为 Worker 开旁路接口。
-这是「服务代用户读」的凭据：只能部署在内网，不能下发给客户端。
+后端 `InternalServiceAuthenticationFilter` 先校验共享 token，再校验委托声明的签名、
+issuer、audience、scope、有效期，最后要求 `sub` 与 `X-Internal-User-Id` 一致。
+之后原有 Controller / 空间归属校验照常执行，没有为 Worker 开旁路接口。
+共享 token 只证明「调用方是内部服务」；它单独存在时不建立用户身份，也不允许写操作。
+`jti` 只用于审计关联，不是一次性令牌：短期声明在过期前仍可重放，这是已知残余风险。
 
 ### 3.2 结果消息（Worker → Spring Boot）
+
+结果消息仍为 `schemaVersion: 1`（任务消息升级到 2，两者版本独立）。
 
 成功：
 

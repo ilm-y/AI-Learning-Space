@@ -45,15 +45,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
         "ails.agent.gateway=stub",
         "ails.analysis.mode=inline",
-        "ails.internal.token=" + SecurityContextIntegrationTest.INTERNAL_TOKEN
+        "ails.internal.token=" + SecurityContextIntegrationTest.INTERNAL_TOKEN,
+        "ails.internal.identity-secret=" + SecurityContextIntegrationTest.IDENTITY_SECRET,
+        "ails.internal.delegation-secret=" + SecurityContextIntegrationTest.DELEGATION_SECRET
 })
 @AutoConfigureMockMvc
 class SecurityContextIntegrationTest {
 
     static final String INTERNAL_TOKEN = "security-it-internal-token";
+    static final String IDENTITY_SECRET = "security-it-identity-secret";
+    static final String DELEGATION_SECRET = "security-it-delegation-secret";
 
     @Autowired
     private ApplicationContext applicationContext;
+
+    @Autowired
+    private InternalIdentitySigner identitySigner;
 
     @Autowired
     private MockMvc mockMvc;
@@ -78,7 +85,7 @@ class SecurityContextIntegrationTest {
                         + "?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
                         + "&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true"));
         registry.add("spring.datasource.username", () -> env("AILS_IT_MYSQL_USER", "root"));
-        registry.add("spring.datasource.password", () -> env("AILS_IT_MYSQL_PASSWORD", "root"));
+        registry.add("spring.datasource.password", () -> env("AILS_IT_MYSQL_PASSWORD", ""));
     }
 
     @BeforeEach
@@ -114,6 +121,28 @@ class SecurityContextIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.id").value(userId))
                 .andExpect(jsonPath("$.data.username").value(username));
+    }
+
+    @Test
+    void forgedBodyUserIdCannotOverrideJwtIdentity() throws Exception {
+        String body = "{\"name\":\"forged-space\",\"visibility\":\"PRIVATE\","
+                + "\"userId\":" + otherUserId + "}";
+        String response = mockMvc.perform(post("/api/spaces")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn().getResponse().getContentAsString();
+
+        Long createdId = jdbc.queryForObject(
+                "SELECT id FROM learning_space WHERE name = 'forged-space' ORDER BY id DESC LIMIT 1",
+                Long.class);
+        assertThat(response).contains("\"userId\":" + userId);
+        assertThat(jdbc.queryForObject(
+                "SELECT user_id FROM learning_space WHERE id = ?", Long.class, createdId))
+                .isEqualTo(userId);
+        assertThat(createdId).isNotNull();
     }
 
     @Test
@@ -160,6 +189,7 @@ class SecurityContextIntegrationTest {
     void internalServiceTokenActsAsUserWithoutBypassingSpaceOwnership() throws Exception {
         mockMvc.perform(get("/api/spaces/{spaceId}/documents", otherSpaceId)
                         .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER, backendIdentity(otherUserId))
                         .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
@@ -168,6 +198,7 @@ class SecurityContextIntegrationTest {
         // 内部凭据也只能“成为”指定用户，不能绕过原有的空间归属校验。
         mockMvc.perform(get("/api/spaces/{spaceId}/documents", spaceId)
                         .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER, backendIdentity(otherUserId))
                         .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(404));
@@ -178,6 +209,7 @@ class SecurityContextIntegrationTest {
         mockMvc.perform(get("/api/spaces/{spaceId}/documents/ready-ids", otherSpaceId)
                         .param("embeddingModel", "text-embedding-v4")
                         .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER, backendIdentity(otherUserId))
                         .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
@@ -185,6 +217,7 @@ class SecurityContextIntegrationTest {
         mockMvc.perform(get("/api/spaces/{spaceId}/documents/ready-ids", spaceId)
                         .param("embeddingModel", "text-embedding-v4")
                         .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER, backendIdentity(otherUserId))
                         .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(404));
@@ -196,6 +229,7 @@ class SecurityContextIntegrationTest {
         mockMvc.perform(get("/api/user/me")
                         .header("Authorization", "Bearer " + token)
                         .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER, backendIdentity(otherUserId))
                         .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(otherUserId));
@@ -205,6 +239,118 @@ class SecurityContextIntegrationTest {
     void invalidInternalTokenIsRejected() throws Exception {
         mockMvc.perform(get("/api/spaces/{spaceId}/documents", otherSpaceId)
                         .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, "wrong-token")
+                        .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+    }
+
+    @Test
+    void sharedTokenWithoutSignedIdentityCannotImpersonateAUser() throws Exception {
+        // 只剩共享 token + 普通 Header：旧实现会接受，现在必须拒绝。
+        mockMvc.perform(get("/api/spaces/{spaceId}/documents", otherSpaceId)
+                        .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+    }
+
+    @Test
+    void tamperedOrWrongAudienceIdentityIsRejected() throws Exception {
+        String valid = backendIdentity(otherUserId);
+        String tampered = valid.substring(0, valid.length() - 1)
+                + (valid.endsWith("A") ? "B" : "A");
+
+        mockMvc.perform(get("/api/spaces/{spaceId}/documents", otherSpaceId)
+                        .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER, tampered)
+                        .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/spaces/{spaceId}/documents", otherSpaceId)
+                        .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER,
+                                identitySigner.signDelegationForTest(otherUserId,
+                                        "some-other-service", InternalIdentitySigner.ISSUER,
+                                        InternalIdentitySigner.DELEGATION_SCOPE, 900))
+                        .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void identityAndPlainUserHeaderMustAgree() throws Exception {
+        mockMvc.perform(get("/api/spaces/{spaceId}/documents", otherSpaceId)
+                        .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER, backendIdentity(userId))
+                        .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+    }
+
+    @Test
+    void internalCredentialCannotWriteBusinessData() throws Exception {
+        int before = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM learning_space WHERE name = 'internal-forged-space'",
+                Integer.class);
+        // 即使委托声明有效，内部凭据也只允许 GET：POST 不建立 SecurityContext，
+        // 请求在安全链被拒绝，业务层不会执行，更不会按 body.userId 写库。
+        mockMvc.perform(post("/api/spaces")
+                        .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER,
+                                backendIdentity(otherUserId))
+                        .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"internal-forged-space\",\"visibility\":\"PRIVATE\","
+                                + "\"userId\":" + userId + "}"))
+                .andExpect(status().isUnauthorized());
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM learning_space WHERE name = 'internal-forged-space'",
+                Integer.class)).isEqualTo(before);
+    }
+
+    @Test
+    void delegationWithWrongIssuerOrScopeIsRejected() throws Exception {
+        mockMvc.perform(get("/api/spaces/{spaceId}/documents", otherSpaceId)
+                        .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER,
+                                identitySigner.signDelegationForTest(otherUserId,
+                                        "learning-backend", "attacker-issuer",
+                                        InternalIdentitySigner.DELEGATION_SCOPE, 900))
+                        .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/spaces/{spaceId}/documents", otherSpaceId)
+                        .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER,
+                                identitySigner.signDelegationForTest(otherUserId,
+                                        "learning-backend", InternalIdentitySigner.ISSUER,
+                                        "analysis:write", 900))
+                        .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void agentIdentitySecretCannotForgeBackendAcceptedUser() throws Exception {
+        // Agent 持有 identity-secret 才能校验 Spring → Agent 的声明；用同一把密钥
+        // 伪造 aud=learning-backend 的声明，后端必须拒绝，否则 Agent 仍能冒充任意用户。
+        String forged = identitySigner.signForAudience(otherUserId, "learning-backend");
+
+        mockMvc.perform(get("/api/spaces/{spaceId}/documents", otherSpaceId)
+                        .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER, forged)
+                        .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+    }
+
+    @Test
+    void expiredDelegationIsRejectedBeforeBusinessAccess() throws Exception {
+        String expired = identitySigner.signDelegationForTest(otherUserId,
+                "learning-backend", InternalIdentitySigner.ISSUER,
+                InternalIdentitySigner.DELEGATION_SCOPE, -60);
+
+        mockMvc.perform(get("/api/spaces/{spaceId}/documents", otherSpaceId)
+                        .header(InternalServiceAuthenticationFilter.TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(InternalServiceAuthenticationFilter.IDENTITY_HEADER, expired)
                         .header(InternalServiceAuthenticationFilter.USER_HEADER, otherUserId))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
@@ -221,6 +367,11 @@ class SecurityContextIntegrationTest {
     }
 
     // ===================== helpers =====================
+
+    private String backendIdentity(Long userId) {
+        // 生产路径由 AnalysisTaskService 用 delegation-secret 签发；Agent 只转发。
+        return identitySigner.signDelegation(userId);
+    }
 
     private Long insertUser(String name) {
         jdbc.update("INSERT INTO user (username, password_hash) VALUES (?, ?)", name, "x");

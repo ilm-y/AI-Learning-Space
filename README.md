@@ -206,7 +206,7 @@ Spring ChatService
 cd agent
 pip install -r requirements.txt
 python -m app.main
-# http://127.0.0.1:8000/health
+# http://127.0.0.1:8000/health（存活探针）
 
 # 3) Spring Boot（新终端）
 cd backend/backend

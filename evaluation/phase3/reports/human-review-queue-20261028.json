@@ -1,0 +1,993 @@
+{
+ "generatedAt": "2026-10-28",
+ "sourceQueue": "evaluation/phase3/reports/human-review-queue-20261027.json",
+ "instructions": "每条记录仍为 PENDING。请人工逐条阅读原始回答与上下文事实，独立填写 humanScores（0/1/2，不适用填 null）、理由与 agree/disagree。未填写前，自动 Judge 分数只是待核对输入，不得用于一致性或校准结论。",
+ "summary": {
+  "total": 9,
+  "pending": 9,
+  "completed": 0
+ },
+ "items": [
+  {
+   "caseId": "B05",
+   "runIndex": 1,
+   "severity": "P0",
+   "artifact": "evaluation/phase3/artifacts/phase3-baseline-20261027/B05-r1.json",
+   "userMessage": "解释一下 TLB 和缺页的区别。",
+   "caseStatus": "FAIL",
+   "caseReason": "输出被截断（finish_reason=length），任务未完成",
+   "recordedHardStatus": "FAIL",
+   "completionStatus": "TRUNCATED",
+   "finishReason": "length",
+   "reviewReason": "hard FAIL 与语义 2 分冲突；输出 finish_reason=length 被截断；判分器仍给 task_completion=2",
+   "contextSummary": "- 用户输入：解释一下 TLB 和缺页的区别。\n- 概念：TLB（快表）、缺页异常、页表\n- Understanding 9201 = MISCONCEPTION：当前理解：知道 TLB 是页表项缓存，但把 TLB Miss 与缺页混为一谈。；已经理解（只有这个列表里的内容可以称为已掌握）：TLB 是页表项的缓存；还不确定（本次可以重点补）：TLB Miss 之后是否一定触发缺页\n- Understanding 9202 = PARTIAL：当前理解：知道缺页的基本含义，但对处理流程与置换边界不确定。；已经理解（只有这个列表里的内容可以称为已掌握）：缺页是访问的页不在内存；还不确定（本次可以重点补）：缺页处理与页面置换的边界\n- 长期记忆：用户是计算机专业学生，喜欢从硬件实际发生的因果链理解操作系统概念。；操作系统课希望多画地址翻译图，少用抽象定义。；用户已经知道 TLB 是页表项缓存，不需要从零解释。；缺页异常已经学过，可以直接讲处理流程。；用户曾把 TLB Miss 当成缺页（2026-10-01 的早期记录，后来已纠正）。\n- 知识检索：status=NO_MATCH，documents=无，chunks=0\n- Revision：5 条（conceptIds=9201、9201、9201、9202、9203）",
+   "answerText": "先说一句前提：本轮上传的资料里没有检索到可以确认这个问题的依据，下面的内容属于通用知识，不是从你的文档里查到的。\n\n## 两者不是同一层面的两件事\n\nTLB 缓存的是**翻译结果**（页表项），并非**页本身**。所以，TLB 里有没有这一条，回答的是「这次地址翻译能不能直接查到」；缺页回答的是「你要访问的那个页，现在到底在不在物理内存里」。这两个问题分别由不同的东西回答：一个查 TLB，一个查页表项里的 present 位和权限位。\n\n## 你那句话的岔路口\n\n「TLB Miss 就要去磁盘换页」这句话里，从「TLB 没查到」直接跳到了「内存里没有这个页」。中间少了一步：TLB 没查到之后，要去看**页表**。页表才是权威记录，TLB 只是它的副本。副本里没有，不代表页表上写着「不在内存」。\n\n```\n        CPU 发出虚拟地址 VA\n                │\n                ▼\n        ┌───────────────┐  命中   ┌────────────────────┐\n        │      TLB      │────────▶│ 直接得到物理地址 PA │\n        └───────────────┘         └────────────────────┘\n                │ 未命中\n                ▼\n        查页表（硬件 page walk / 软件 TLB-miss 处理程序）\n                │\n      ┌─────────┼──────────────────────────┐\n      │         │                          │\n PTE 有效    PTE present=0             权限不符\n 页在内存        │                          │\n      │         ▼                          ▼\n      ▼    缺页异常 → OS 调页        保护异常 → OS 处理\n 填入 TLB   （这时才可能碰磁盘）      （不一定碰磁盘）\n 重试指令\n 无异常\n```\n\n## 三条岔路\n\n**1. 页在内存，只是 TLB 里没这条。** 这是最常见的情况。处理方式就是走一遍页表、把结果填回 TLB、重试指令。没有异常、没有磁盘 I/O，程序完全感知不到。所以「TLB miss 之后是否一定触发缺页」的答案是：不一定，而且多数情况下不会。\n\n这里有个实现差异值得知道：x86 这类硬件 page walk 的架构，TLB miss 由硬件自己查页表；MIPS 这类软件管理 TLB 的架构，TLB miss 会陷入内核，由 OS 的 TLB-miss 处理程序来填。但后者仍然只是「填 TLB」，和缺页是两码事：它不读磁盘，也不做置换。具体行为以各架构手册为准。\n\n**2. PTE 的 present 位是 0。** 页不在内存，这才是缺页。这时才轮到 OS：找物理页框、从磁盘或交换区读入、更新 PTE、返回后重试指令。重试翻译时 TLB 里仍然没有，再走一次，这次 PTE 有效，填进 TLB 就过去了。\n\n**3. 权限不符。** 页在内存，但这次访问不被允许（写只读页、用户态访问内核页）。这也是异常，但它不是「页不在内存」，通常不需要读磁盘。\n\n## 缺页和置换的边界\n\n「缺页就是要去磁盘把页读进来」作为典型情形成立，边界在两点：\n\n- 缺页是**触发事件**，置换只是缺页处理里的一个**分支**。OS 收到缺页后先看有没有空闲页框：有，就直接分配、读入，根本不涉及置换；没有空闲页框，才需要挑牺牲页，这一步才是页面置换，脏页还得先写回。LRU、Clock 这些算法只在「没有空闲页框」这条分支上才有意义。\n- 也不是所有缺页都要读磁盘：匿名页首次访问可以映射到全零页、写时复制可以直接复用父进程的页、栈增长只是扩一下 VMA。这些都会触发缺页异常，但没有磁盘 I/O。\n\n因此三层是这样的：TLB miss 是翻译缓存没命中，接着查页表；页表说页不在内存才是缺页，再交给 OS 处理；OS 处理时没有空闲页框才轮到",
+   "automaticScores": {
+    "factual_correctness": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "正确说明TLB缓存页表项、缺页是页不在内存，并明确TLB Miss不等于缺页，因果链清晰。",
+     "completionAdjusted": false
+    },
+    "task_completion": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 1,
+     "applicable": true,
+     "reason": "给出两者区别、三条岔路与缺页/置换边界，满足解释区别的要求。；输出被截断，任务完成度不能判为 2",
+     "completionAdjusted": true
+    },
+    "historical_evidence_use": {
+     "rawJudgeScore": null,
+     "adjustedScore": null,
+     "applicable": false,
+     "reason": "不适用",
+     "completionAdjusted": false
+    },
+    "mastery_calibration": {
+     "rawJudgeScore": null,
+     "adjustedScore": null,
+     "applicable": false,
+     "reason": "不适用",
+     "completionAdjusted": false
+    },
+    "uncertainty_citation_honesty": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "开头明确限定“本轮上传的资料里没有检索到”，并说明以下为通用知识，未说资料中不存在。",
+     "completionAdjusted": false
+    },
+    "no_fabricated_personal_history": {
+     "rawJudgeScore": null,
+     "adjustedScore": null,
+     "applicable": false,
+     "reason": "不适用",
+     "completionAdjusted": false
+    }
+   },
+   "judgeNotes": "回答事实正确、区别清晰，且对无检索命中做了本轮限定并区分通用知识，未越界。",
+   "humanScores": {
+    "factual_correctness": null,
+    "task_completion": null,
+    "historical_evidence_use": null,
+    "mastery_calibration": null,
+    "uncertainty_citation_honesty": null,
+    "no_fabricated_personal_history": null
+   },
+   "humanNotes": null,
+   "humanDecision": null,
+   "humanReviewStatus": "PENDING",
+   "rubric": {
+    "factual_correctness": {
+     "description": "TLB 是页表项缓存；缺页是访问页不在内存。",
+     "score0": "核心事实错误。",
+     "score1": "大体正确但有细节错误。",
+     "score2": "两者关系正确，且不把 TLB Miss 等同于缺页。"
+    },
+    "task_completion": {
+     "description": "用户要求解释区别。",
+     "score0": "没有解释区别。",
+     "score1": "只给定义，没有讲清区别。",
+     "score2": "给出清晰区别和必要因果。"
+    },
+    "historical_evidence_use": {
+     "description": "本案例不涉及该维度。",
+     "score0": "不适用。",
+     "score1": "不适用。",
+     "score2": "不适用。"
+    },
+    "mastery_calibration": {
+     "description": "本案例不涉及该维度。",
+     "score0": "不适用。",
+     "score1": "不适用。",
+     "score2": "不适用。"
+    },
+    "uncertainty_citation_honesty": {
+     "description": "本轮没有命中资料；应说“本轮未检索到”，而不是“资料中不存在”。",
+     "score0": "说资料中不存在该知识，或虚构引用。",
+     "score1": "说资料不足，但未限定本轮。",
+     "score2": "明确限定本轮、没有命中，并区分通用知识。"
+    },
+    "no_fabricated_personal_history": {
+     "description": "本案例不涉及该维度。",
+     "score0": "不适用。",
+     "score1": "不适用。",
+     "score2": "不适用。"
+    }
+   }
+  },
+  {
+   "caseId": "E01",
+   "runIndex": 3,
+   "severity": "P1",
+   "artifact": "evaluation/phase3/artifacts/phase3-repeats-20261027/E01-r3.json",
+   "userMessage": "缺页处理讲一下，我是不是已经完全掌握了？",
+   "caseStatus": "PASS",
+   "caseReason": "全部硬断言通过",
+   "recordedHardStatus": "FAIL",
+   "completionStatus": "COMPLETE",
+   "finishReason": "stop",
+   "reviewReason": "hard FAIL 来自否定句误匹配（“还不能说已经完全掌握”），语义 2 分",
+   "contextSummary": "- 用户输入：缺页处理讲一下，我是不是已经完全掌握了？\n- 概念：TLB（快表）、缺页异常、页表\n- Understanding 9202 = PARTIAL：当前理解：知道缺页的基本含义，但对处理流程与置换边界不确定。；已经理解（只有这个列表里的内容可以称为已掌握）：缺页是访问的页不在内存；还不确定（本次可以重点补）：缺页处理与页面置换的边界\n- 长期记忆：用户是计算机专业学生，喜欢从硬件实际发生的因果链理解操作系统概念。；操作系统课希望多画地址翻译图，少用抽象定义。；缺页异常已经学过，可以直接讲处理流程。\n- 知识检索：status=NO_MATCH，documents=无，chunks=0\n- Revision：5 条（conceptIds=9201、9201、9201、9202、9203）",
+   "answerText": "先说结论：**还不能说已经完全掌握。** 目前能确认的只有一点——你知道「缺页是访问的页不在内存」。缺页处理流程和页面置换的边界，正是你还没确定的地方；这次重点讲这一部分。\n\n另外说明：**本轮上传资料中没有检索到可确认的依据**，下面讲的是通用知识（主流 OS 教材中的实现模型），不是从你的资料里引出来的。\n\n## 关键：置换只是缺页处理流程中的一个分支\n\n你的说法「缺页就是要去磁盘把页读进来」本身没错，但它漏掉了「读进哪里」以及「位置不够时怎么办」这两个环节。把整条因果链展开：\n\n```\nCPU 发出虚拟地址 VA\n      │\n      ▼\n   MMU 用 VA 的页号查页表\n      │\n      ├─ 页表项 valid=1 ──► 拿到物理帧号 → 拼出 PA → 正常访问\n      │\n      └─ 页表项 valid=0 ──► 触发缺页异常\n                              │\n                              ▼\n                    CPU 陷入内核，跳 OS 缺页处理程序\n                              │\n                              ▼\n                  ① OS 检查：这个地址合法吗？\n                       否 → 非法访问（如段错误），杀进程\n                       是 ↓\n                  ② 有没有空闲帧？\n                       ├─ 有 ──► 直接用（第一次缺页通常走这里，不置换）\n                       └─ 没有 ──► ③ 页面置换\n                                     ├─ 选一个牺牲页 victim\n                                     ├─ 是脏页？→ 先写回磁盘\n                                     ├─ 清它的 valid 位 / 刷 TLB\n                                     └─ 腾出这个帧\n                              │\n                              ▼\n                  ④ 从磁盘读「缺的那一页」进帧\n                              │\n                              ▼\n                  ⑤ 更新页表项：帧号 + valid=1（必要时刷 TLB）\n                              │\n                              ▼\n                  ⑥ 返回用户态，重新执行那条缺页的指令\n```\n\n要点是：**置换是缺页处理程序内部的一个可选分支，并非缺页处理的别名**。只有「没有空闲帧」时才会走③；进程刚开始运行、还有空闲帧时，②就直接结束了。\n\n## 三个具体分叉：检查你的推理是否在这些地方偏离\n\n**1. 被换出的页和被换入的页是两个不同对象。**\n置换的候选集是「此刻正占着物理帧的页」，也就是已在内存中的页；你要读进来的是那个 valid=0 的页。常见混淆是以为「置换就是把我缺的页换出去」，而实际上是把别的页赶走，给缺的页腾位置。\n\n**2. 脏页必须先写回。**\n选中的牺牲页如果被修改过（脏位/修改位=1），换出前必须写回磁盘，否则数据丢失；干净页可以直接丢弃。这决定了置换的开销：有时一次缺页要两次磁盘 I/O（写回旧页 + 读入新页）。\n\n**3. 触发者和处理者要分开。**\nMMU 只做两件事：地址翻译、发现 valid=0 并触发异常。它不读磁盘、不选牺牲页、不改页表项。选 victim、写回脏页、发起磁盘 I/O、更新页表，全是 OS 的缺页处理程序在内核里做的。硬件负责发现和陷入，OS 负责修复。\n\n顺带划清一条容易混淆的边界：**缺页不等于 TLB miss**。TLB miss 是快表没命中，页表里可能明明有这项，查一次页表填上就行，不陷入缺页处理；只有页表项 valid=0 才升级为缺页。至于 TLB miss 是由硬件遍历页表还是由 OS 处理，取决于架构（x86 硬件处理，MIPS 等由软件填充），这一点属于具体实现，不能一概而论。\n\n## 自查三问\n\n我刚讲完不算你掌握。用自己的话说出下面三件事，才能算补上这次不确定的地方：\n\n1. 一个进程刚启动、物理内存还很空时发生缺页，会不会发生页面置换？\n2. 被选中的牺牲页是脏页时，换出之前必须先做什么？\n3. 缺页处理程序返回后，CPU 是从引发缺页的那条指令的**下一条**继续，还是**重新执行**它？为什么？",
+   "automaticScores": {
+    "factual_correctness": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "缺页处理流程讲解正确，并明确当前只掌握“缺页是访问的页不在内存”，未说成已掌握。",
+     "completionAdjusted": false
+    },
+    "task_completion": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "既讲解了缺页处理流程，也回答了是否完全掌握，并指出处理流程与置换边界是缺口。",
+     "completionAdjusted": false
+    },
+    "historical_evidence_use": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "引用了当前部分理解中的具体缺口：处理流程与页面置换边界，以及已掌握项。",
+     "completionAdjusted": false
+    },
+    "mastery_calibration": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "明确说还不能完全掌握，并说明未掌握的具体部分。",
+     "completionAdjusted": false
+    },
+    "uncertainty_citation_honesty": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "指出未检索到资料依据，说明讲解为通用知识，并明确不确定内容。",
+     "completionAdjusted": false
+    },
+    "no_fabricated_personal_history": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "未编造学习经历，仅依据当前 Understanding 与记忆中的偏好。",
+     "completionAdjusted": false
+    }
+   },
+   "judgeNotes": "回答正确区分 PARTIAL 与已掌握，讲解完整，诚实说明检索无依据，未编造个人历史。",
+   "humanScores": {
+    "factual_correctness": null,
+    "task_completion": null,
+    "historical_evidence_use": null,
+    "mastery_calibration": null,
+    "uncertainty_citation_honesty": null,
+    "no_fabricated_personal_history": null
+   },
+   "humanNotes": null,
+   "humanDecision": null,
+   "humanReviewStatus": "PENDING",
+   "rubric": {
+    "factual_correctness": {
+     "description": "缺页处理的基本过程，以及用户当前是 PARTIAL 而非完整掌握。",
+     "score0": "知识错误，或把 PARTIAL 说成已掌握。",
+     "score1": "知识正确但状态判断含糊。",
+     "score2": "知识解释正确，且明确当前只掌握部分。"
+    },
+    "task_completion": {
+     "description": "用户要求讲缺页处理并回答“是否完全掌握”。",
+     "score0": "没有完成任一要求。",
+     "score1": "只完成讲解或只回答状态。",
+     "score2": "两部分都完成，指出还缺什么。"
+    },
+    "historical_evidence_use": {
+     "description": "应使用 Understanding 中的 known/uncertain 部分，而不是泛泛判断。",
+     "score0": "忽略 PARTIAL 状态或编造已掌握部分。",
+     "score1": "说“还不完整”，但没有具体缺口。",
+     "score2": "引用当前部分理解的具体缺口。"
+    },
+    "mastery_calibration": {
+     "description": "PARTIAL 必须表述为部分理解，不能升级为完全掌握。",
+     "score0": "说已经完全掌握/完全理解/彻底掌握。",
+     "score1": "说“基本理解”，但没有断言完全掌握。",
+     "score2": "明确说部分理解，并说明未掌握的部分。"
+    },
+    "uncertainty_citation_honesty": {
+     "description": "对未掌握部分应诚实说明不确定。",
+     "score0": "把不确定内容说成已掌握。",
+     "score1": "有保留但不具体。",
+     "score2": "明确指出不确定或未覆盖的内容。"
+    },
+    "no_fabricated_personal_history": {
+     "description": "不得编造用户过去如何学习缺页处理。",
+     "score0": "编造学习经历或外部帮助。",
+     "score1": "有轻微未证实描述。",
+     "score2": "只依据当前 Understanding。"
+    }
+   }
+  },
+  {
+   "caseId": "E01",
+   "runIndex": 2,
+   "severity": "P1",
+   "artifact": "evaluation/phase3/artifacts/phase3-repeats-20261027/E01-r2.json",
+   "userMessage": "缺页处理讲一下，我是不是已经完全掌握了？",
+   "caseStatus": "FAIL",
+   "caseReason": "输出被截断（finish_reason=length），任务未完成",
+   "recordedHardStatus": "PASS",
+   "completionStatus": "TRUNCATED",
+   "finishReason": "length",
+   "reviewReason": "输出 finish_reason=length 被截断，但硬断言 PASS、语义 2 分",
+   "contextSummary": "- 用户输入：缺页处理讲一下，我是不是已经完全掌握了？\n- 概念：TLB（快表）、缺页异常、页表\n- Understanding 9202 = PARTIAL：当前理解：知道缺页的基本含义，但对处理流程与置换边界不确定。；已经理解（只有这个列表里的内容可以称为已掌握）：缺页是访问的页不在内存；还不确定（本次可以重点补）：缺页处理与页面置换的边界\n- 长期记忆：用户是计算机专业学生，喜欢从硬件实际发生的因果链理解操作系统概念。；操作系统课希望多画地址翻译图，少用抽象定义。；缺页异常已经学过，可以直接讲处理流程。\n- 知识检索：status=NO_MATCH，documents=无，chunks=0\n- Revision：5 条（conceptIds=9201、9201、9201、9202、9203）",
+   "answerText": "本轮上传资料中没有检索到可确认的依据，下面的内容是按通用操作系统知识讲的；凡是不同架构做法不一样的硬件细节，我会单独标出来。\n\n## 先回答你那个问题：还不到「完全掌握」\n\n你现在能确认拿下的只有一层含义：缺页指的是 CPU 要访问的页不在内存里。\n\n缺页发生**之后**内核具体做什么，以及它和页面置换之间的分界在哪，这两块都还没定下来；尤其置换的边界，是你自己也不确定的地方。另外，早前有一条学习状态记的是「缺页异常已经学过，可以直接讲处理流程」，那是比较早的记录，用现在的状态对不上，所以这轮我按从头讲的深度给你走一遍。\n\n## 一、异常是怎么产生的：硬件那一侧\n\n```\nCPU 执行:  mov (%rax), %ebx        ; rax = 0x7f3a2c401234\n                     │\n                     │ 虚拟地址\n                     ▼\n               ┌───────────┐\n               │    TLB    │── 命中 ──► 物理地址 → 访存完成\n               └───────────┘\n                     │ 未命中\n                     ▼\n        多级页表遍历（x86-64 是 4 级或 5 级）\n        CR3 → PML4 → PDPT → PD → PT → 目标 PTE\n                     │\n          ┌──────────┴───────────┐\n     P=1 且权限 OK            P=0，或权限不符\n          │                      │\n          ▼                      ▼\n     填入 TLB，访问完成      硬件产生 #PF\n                             · 压入 error code\n                             · 保存的返回地址 = 这条指令本身\n                             · 切内核态，跳到缺页处理入口\n```\n\n有个细节值得注意：**返回地址是出错的那条指令，并非它的下一条指令**。因为这条指令还没执行完（访存这一步没完成），所以处理完之后必须回来**重新执行它**。这就是缺页属于 fault、而非 trap 的原因，也直接决定了第 7 步的行为。\n\n`error code` 是硬件交给内核的一份「现场说明」，它告诉内核三件事：这是页不存在还是权限违规、这次是读还是写、当时是用户态还是内核态。**这个信息很关键**，因为「读一个没映射的地址」和「写一个只读页」是完全不同的两种事，内核要靠 `error code` 才能走对分支。\n\n## 二、内核那一侧的分岔\n\n内核拿到的东西只有两样：出错地址和 `error code`。它要回答的第一个问题是——**这个地址本来该不该有映射？**\n\n```\ndo_page_fault(addr, err)\n      │\n      │ ① 地址落在进程的某个合法区域（VMA）里吗？\n      ├── 否 ──────────────────► SIGSEGV（野指针）\n      │\n      │ ② err 的读写/权限位和该区域的权限冲突吗？\n      ├── 冲突 ────────────────► SIGSEGV（写只读段）\n      │\n      │ ③ 这个区域是什么类型？\n      ├──",
+   "automaticScores": {
+    "factual_correctness": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "缺页异常产生与内核处理流程解释正确，并明确当前只掌握“页不在内存”这一层，未说成完全掌握。",
+     "completionAdjusted": false
+    },
+    "task_completion": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 1,
+     "applicable": true,
+     "reason": "既回答了未完全掌握并指出缺口（处理流程、置换边界），也展开了缺页处理讲解。；输出被截断，任务完成度不能判为 2",
+     "completionAdjusted": true
+    },
+    "historical_evidence_use": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "引用了当前部分理解的具体缺口：处理流程与置换边界，并区分了较早的历史学习状态记录。",
+     "completionAdjusted": false
+    },
+    "mastery_calibration": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "明确说“还不到完全掌握”，并说明已掌握与未掌握部分。",
+     "completionAdjusted": false
+    },
+    "uncertainty_citation_honesty": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "指出置换边界等不确定内容，并声明无检索依据、按通用知识讲解。",
+     "completionAdjusted": false
+    },
+    "no_fabricated_personal_history": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "仅依据提供的理解状态与历史记录，未编造学习经历或外部帮助。",
+     "completionAdjusted": false
+    }
+   },
+   "judgeNotes": "回答正确区分 PARTIAL 状态，具体指出缺口，讲解内容与状态事实一致，无编造个人历史。",
+   "humanScores": {
+    "factual_correctness": null,
+    "task_completion": null,
+    "historical_evidence_use": null,
+    "mastery_calibration": null,
+    "uncertainty_citation_honesty": null,
+    "no_fabricated_personal_history": null
+   },
+   "humanNotes": null,
+   "humanDecision": null,
+   "humanReviewStatus": "PENDING",
+   "rubric": {
+    "factual_correctness": {
+     "description": "缺页处理的基本过程，以及用户当前是 PARTIAL 而非完整掌握。",
+     "score0": "知识错误，或把 PARTIAL 说成已掌握。",
+     "score1": "知识正确但状态判断含糊。",
+     "score2": "知识解释正确，且明确当前只掌握部分。"
+    },
+    "task_completion": {
+     "description": "用户要求讲缺页处理并回答“是否完全掌握”。",
+     "score0": "没有完成任一要求。",
+     "score1": "只完成讲解或只回答状态。",
+     "score2": "两部分都完成，指出还缺什么。"
+    },
+    "historical_evidence_use": {
+     "description": "应使用 Understanding 中的 known/uncertain 部分，而不是泛泛判断。",
+     "score0": "忽略 PARTIAL 状态或编造已掌握部分。",
+     "score1": "说“还不完整”，但没有具体缺口。",
+     "score2": "引用当前部分理解的具体缺口。"
+    },
+    "mastery_calibration": {
+     "description": "PARTIAL 必须表述为部分理解，不能升级为完全掌握。",
+     "score0": "说已经完全掌握/完全理解/彻底掌握。",
+     "score1": "说“基本理解”，但没有断言完全掌握。",
+     "score2": "明确说部分理解，并说明未掌握的部分。"
+    },
+    "uncertainty_citation_honesty": {
+     "description": "对未掌握部分应诚实说明不确定。",
+     "score0": "把不确定内容说成已掌握。",
+     "score1": "有保留但不具体。",
+     "score2": "明确指出不确定或未覆盖的内容。"
+    },
+    "no_fabricated_personal_history": {
+     "description": "不得编造用户过去如何学习缺页处理。",
+     "score0": "编造学习经历或外部帮助。",
+     "score1": "有轻微未证实描述。",
+     "score2": "只依据当前 Understanding。"
+    }
+   }
+  },
+  {
+   "caseId": "D01",
+   "runIndex": 1,
+   "severity": "P0",
+   "artifact": "evaluation/phase3/artifacts/phase3-baseline-20261027/D01-r1.json",
+   "userMessage": "TLB Miss 和缺页有什么区别？请引用资料。",
+   "caseStatus": "FAIL",
+   "caseReason": "未通过：answer.citations.malformedCount eq 0（实际 2）；answer.citations.syntaxValid eq True（实际 False）",
+   "recordedHardStatus": "PASS",
+   "completionStatus": "COMPLETE",
+   "finishReason": "stop",
+   "reviewReason": "存在 malformedLabels（[资料#0]/[资料#1]），硬断言未覆盖 malformed=0",
+   "contextSummary": "- 用户输入：TLB Miss 和缺页有什么区别？请引用资料。\n- 概念：TLB（快表）、缺页异常、页表\n- Understanding 9201 = DEMONSTRATED：当前理解：能区分 TLB Miss 与缺页，并说明 TLB Miss 后仍需查页表。；已经理解（只有这个列表里的内容可以称为已掌握）：TLB 是页表项的缓存；TLB Miss 后仍需查页表；缺页是页不在内存\n- Understanding 9202 = PARTIAL：当前理解：知道缺页的基本含义，但对处理流程与置换边界不确定。；已经理解（只有这个列表里的内容可以称为已掌握）：缺页是访问的页不在内存；还不确定（本次可以重点补）：缺页处理与页面置换的边界\n- 长期记忆：用户是计算机专业学生，喜欢从硬件实际发生的因果链理解操作系统概念。；操作系统课希望多画地址翻译图，少用抽象定义。；用户已经知道 TLB 是页表项缓存，不需要从零解释。；缺页异常已经学过，可以直接讲处理流程。；用户曾把 TLB Miss 当成缺页（2026-10-01 的早期记录，后来已纠正）。\n- 知识检索：status=SUCCESS，documents=tlb.md、tlb.md，chunks=2\n- Revision：5 条（conceptIds=9201、9201、9201、9202、9203）",
+   "answerText": "## 一句话分界\n\n这两个概念处在**不同层级**：\n\n- **TLB Miss**：地址翻译的“缓存”没命中，但页很可能就在内存里。\n- **缺页**：翻译结果查到了，但那个页**不在内存**。\n\n资料里说得比较直接：TLB 命中时，CPU 直接用缓存中的物理页框号完成地址转换，不需要访问内存中的页表 [资料《tlb.md》#0]；而未命中时 CPU 仍需查询页表，**只有**页表项表明该页不在内存时才会触发缺页异常，因此 TLB Miss 不等于缺页 [资料《tlb.md》#1]。\n\n## 因果链\n\n```\nCPU 给虚拟地址\n   │\n   ├─ TLB 命中 ──────────────────→ 得到物理页框号，直接访存   [资料#0]\n   │\n   └─ TLB Miss\n        │\n        └─ 查页表（内存里的页表项）\n             │\n             ├─ 页表项有效（页在内存）→ 取页框号，填回 TLB → 继续执行\n             │        ← 到这里就结束了，全程没有异常，也没有磁盘\n             │\n             └─ 页表项无效（页不在内存）\n                      │\n                      └─ 触发缺页异常 → 陷入内核，由操作系统处理     [资料#1]\n```\n\n关键点：**TLB Miss 是一条必然经常发生的常规路径**，因为 TLB 很小，几乎每一步都可能 miss；而缺页是稀有事件，代价在磁盘级别。把两者混在一起，代价模型就完全错了。\n\n## 你还不确定的部分：缺页处理与页面置换的边界\n\n你之前的说法是「缺页就是要去磁盘把页读进来」。方向没错，但漏掉了两处边界。\n\n**边界一：进入缺页异常后，第一步是判断合法性，尚不进行读盘。**\n\n操作系统拿到出错地址后，先看这个地址是不是这段地址空间里合法的页：\n\n- 非法（越界、无权限）：交给进程发信号终止，例如段错误，**根本不读盘**。\n- 合法但不在内存：才进入装载流程。\n\n**边界二：页面置换只是「没有空闲页框」时才走的分支，并非缺页处理的必经步骤。**\n\n```\n缺页异常进入 OS\n   │\n   ├─ 地址非法 → 终止进程 / 报错          （没有磁盘 I/O）\n   │\n   └─ 合法但不在内存\n        │\n        ├─ 有空闲页框 ──────────────→ 直接分配\n        │\n        └─ 没有空闲页框\n             │\n             └─ 页面置换：选一个牺牲页\n                  ├─ 脏页 → 先写回磁盘\n                  └─ 干净页 → 直接丢弃\n                       │\n                       └─ 腾出页框\n        │\n        └─ 从磁盘把目标页读进这个页框\n             │\n             └─ 更新页表项（标记有效、填页框号）\n                  │\n                  └─ 返回，重新执行那条触发异常的指令\n```\n\n所以准确的说法是：**缺页处理必然涉及“把页弄进内存”，但不必然涉及“换出某一页”**；换出只在内存已满时发生。\n\n**这里最容易混淆的一对词**，值得单独记一下：\n\n| | 换的是什么 | 发生在哪 | 代价 |\n|---|---|---|---|\n| TLB 替换 | TLB 里的一个**页表项缓存** | 每次 TLB Miss 装入新项时 | 极小 |\n| 页面置换 | 内存里的一个**物理页框** | 缺页且无空闲页框时 | 磁盘级 |\n\n两者名字都像“换”，但前者换的是缓存条目，后者换的是真正的内存内容。TLB Miss 导致的只是前者。\n\n另外提醒一句：缺页处理完、更新了页表之后，如果之前存在与该页对应的旧 TLB 项，可能需要让它失效，否则会用到过时的翻译。具体由硬件自动完成还是由操作系统显式指令完成，不同架构做法不同；这点我给不出通用答案，得看你学的具体架构。",
+   "automaticScores": {
+    "factual_correctness": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "明确说明 TLB Miss 后仍需查页表，只有页表项表明页不在内存才触发缺页，因果链清楚。",
+     "completionAdjusted": false
+    },
+    "task_completion": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "完整解释两者区别，并给出两条合法引用，均来自 tlb.md 片段。",
+     "completionAdjusted": false
+    },
+    "historical_evidence_use": {
+     "rawJudgeScore": null,
+     "adjustedScore": null,
+     "applicable": false,
+     "reason": "不适用",
+     "completionAdjusted": false
+    },
+    "mastery_calibration": {
+     "rawJudgeScore": null,
+     "adjustedScore": null,
+     "applicable": false,
+     "reason": "不适用",
+     "completionAdjusted": false
+    },
+    "uncertainty_citation_honesty": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "引用均来自提供的 tlb.md #0/#1，句子有片段强支持，未编造来源。",
+     "completionAdjusted": false
+    },
+    "no_fabricated_personal_history": {
+     "rawJudgeScore": null,
+     "adjustedScore": null,
+     "applicable": false,
+     "reason": "不适用",
+     "completionAdjusted": false
+    }
+   },
+   "judgeNotes": "事实正确、引用合法、任务完成；未出现编造个人历史或越界断言。",
+   "humanScores": {
+    "factual_correctness": null,
+    "task_completion": null,
+    "historical_evidence_use": null,
+    "mastery_calibration": null,
+    "uncertainty_citation_honesty": null,
+    "no_fabricated_personal_history": null
+   },
+   "humanNotes": null,
+   "humanDecision": null,
+   "humanReviewStatus": "PENDING",
+   "rubric": {
+    "factual_correctness": {
+     "description": "TLB Miss 后仍需查页表；只有页表项表明页不在内存才缺页。",
+     "score0": "把 TLB Miss 说成缺页，或方向相反。",
+     "score1": "区别正确但因果不完整。",
+     "score2": "两点都说对，且因果关系清楚。"
+    },
+    "task_completion": {
+     "description": "用户要求解释区别并引用资料。",
+     "score0": "没有解释或没有合法引用。",
+     "score1": "解释或引用缺一项。",
+     "score2": "解释完整且给出合法引用。"
+    },
+    "historical_evidence_use": {
+     "description": "本案例不涉及该维度。",
+     "score0": "不适用。",
+     "score1": "不适用。",
+     "score2": "不适用。"
+    },
+    "mastery_calibration": {
+     "description": "本案例不涉及该维度。",
+     "score0": "不适用。",
+     "score1": "不适用。",
+     "score2": "不适用。"
+    },
+    "uncertainty_citation_honesty": {
+     "description": "引用必须来自实际提供的 tlb.md 片段，不能编造文件名/序号。",
+     "score0": "引用不存在的文件/片段，或给无来源断言。",
+     "score1": "引用合法但支持较弱。",
+     "score2": "引用合法且句子有片段支持。"
+    },
+    "no_fabricated_personal_history": {
+     "description": "本案例不涉及该维度。",
+     "score0": "不适用。",
+     "score1": "不适用。",
+     "score2": "不适用。"
+    }
+   }
+  },
+  {
+   "caseId": "A01",
+   "runIndex": 1,
+   "severity": "P0",
+   "artifact": "evaluation/phase3/artifacts/phase3-baseline-20261027/A01-r1.json",
+   "userMessage": "我之前哪里搞错了 TLB 和缺页？帮我复盘一下。",
+   "caseStatus": "PASS",
+   "caseReason": "全部硬断言通过",
+   "recordedHardStatus": "PASS",
+   "completionStatus": "COMPLETE",
+   "finishReason": "stop",
+   "reviewReason": "抽样人工对齐：P0 历史误区",
+   "contextSummary": "- 用户输入：我之前哪里搞错了 TLB 和缺页？帮我复盘一下。\n- 概念：TLB（快表）、缺页异常、页表\n- Understanding 9201 = DEMONSTRATED：当前理解：能区分 TLB Miss 与缺页，并说明 TLB Miss 后仍需查页表。；已经理解（只有这个列表里的内容可以称为已掌握）：TLB 是页表项的缓存；TLB Miss 后仍需查页表；缺页是页不在内存\n- Understanding 9202 = PARTIAL：当前理解：知道缺页的基本含义，但对处理流程与置换边界不确定。；已经理解（只有这个列表里的内容可以称为已掌握）：缺页是访问的页不在内存；还不确定（本次可以重点补）：缺页处理与页面置换的边界\n- ### TLB ｜ 学习轨迹（历史）\n- 当前状态（来自持久化快照）：已能讲清\n- [已纠正，历史] 把 TLB Miss 当成缺页异常，首次记录于 2026-10-01 10:00\n- 关键版本（按时间）：\n  - 版本 1 ｜ 2026-10-01 10:00 ｜ 状态：存在误区 ｜ 误区：「把 TLB Miss 当成缺页异常」[当时 ACTIVE]\n  - 版本 2 ｜ 2026-10-02 09:00 ｜ 状态：存在误区 ｜ 误区：「把 TLB Miss 当成缺页异常」[当时 ACTIVE]\n  - 版本 3 ｜ 2026-10-03 20:00 ｜ 状态：已能讲清\n- 后续正确证据（3 条）：2026-10-02 09:00、2026-10-02 09:10、2026-10-03 20:00\n- 关联证据（按时间）：\n  - 2026-10-01 10:00 ｜ [答错/用户解释] ｜ 来源：消息 ｜ 我认为 TLB Miss 就是缺页，需要从磁盘换入页面。\n  - 2026-10-02 09:00 ｜ [答对/用户纠正批注] ｜ 来源：消息 ｜ 我纠正一下：TLB Miss 只是快表没命中，还要查页表，不等于缺页。\n  - 2026-10-02 09:10 ｜ [答对/批注信号] ｜ 来源：批注 ｜ 用户批注：TLB miss 不等于 page fault，缺页是页不在内存。\n  - 2026-10-03 20:00 ｜ [答对/测试结果] ｜ 来源：测试回答 ｜ 测试回答正确区分 TLB Miss 与 page fault。\n- 以上是全部可核对记录；未记录的动机…（截断展示）\n- 长期记忆：用户是计算机专业学生，喜欢从硬件实际发生的因果链理解操作系统概念。；操作系统课希望多画地址翻译图，少用抽象定义。；用户已经知道 TLB 是页表项缓存，不需要从零解释。；缺页异常已经学过，可以直接讲处理流程。；用户曾把 TLB Miss 当成缺页（2026-10-01 的早期记录，后来已纠正）。\n- 知识检索：status=SUCCESS，documents=tlb.md、tlb.md，chunks=2\n- Evidence：5 条，类型=USER_EXPLANATION、USER_CORRECTION、HIGHLIGHT_SIGNAL、OBSERVATION、TEST_RESULT，正确性=INCORRECT、CORRECT、CORRECT、PARTIAL、CORRECT\n- Revision：5 条（conceptIds=9201、9201、9201、9202、9203）",
+   "answerText": "## 你在 10 月 1 日的原始说法\n\n当时你写的是：\n\n> 「我认为 TLB Miss 就是缺页，需要从磁盘换入页面。」\n\n这一步的问题在于，把两个不同层级的事件合并成了一个：TLB 只是页表项的缓存，TLB 未命中只说明「这次没在快表里找到」，CPU 还得走去查内存里的页表；只有查到的页表项表明该页不在内存，才是缺页 [资料《tlb.md》#1]。你的原话里直接跳到了「从磁盘换入页面」，等于把「缓存没命中」当成了「页不在内存」。\n\n## 后来的变化（可核对的部分）\n\n- 2026-10-02 09:00，你自己写下纠正：「我纠正一下：TLB Miss 只是快表没命中，还要查页表，不等于缺页。」\n- 2026-10-02 09:10，你的批注：「TLB miss 不等于 page fault，缺页是页不在内存。」\n- 2026-10-03 20:00，一次测试回答中你正确区分了 TLB Miss 和 page fault，状态随之标为已能讲清。\n\n从 10-01 的错误解释，到 10-02 的显式纠正，再到 10-03 测试中答对，这条线是记录里能看到的全部。至于你为什么在那一天改变说法、是否查了资料或由谁提示，记录里看不出原因，我不替你补。\n\n另外说明一点：长期记忆里那条「用户曾把 TLB Miss 当成缺页」是较早写下的记录，它本身也标注了后来已纠正；当前状态是你能清楚讲清这两者的区别，不是仍在这个坑里。\n\n如果你想把复盘落到「当时到底哪一步分叉」，可以顺着这句话往下推：说出「TLB Miss 之后，CPU 下一步做什么」——这一步说对了，整条链就闭合了；这一步还含糊的话，我们就在这儿展开。",
+   "automaticScores": {
+    "factual_correctness": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "明确区分 TLB Miss 与缺页，并说明旧误区已纠正、当前状态不同。",
+     "completionAdjusted": false
+    },
+    "task_completion": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "指出具体误区（把 TLB Miss 当缺页）及纠正后的正确关系，完成复盘。",
+     "completionAdjusted": false
+    },
+    "historical_evidence_use": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "复盘内容与提供的 revision/evidence 时间线一致，并标明为记录中的历史。",
+     "completionAdjusted": false
+    },
+    "mastery_calibration": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "说明当前已能区分，且限定在记录范围内，未宣称完全掌握。",
+     "completionAdjusted": false
+    },
+    "uncertainty_citation_honesty": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "明确区分记录内事实与未记录原因，引用仅指向提供的 tlb.md 片段。",
+     "completionAdjusted": false
+    },
+    "no_fabricated_personal_history": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "只陈述记录事实，明确不补写改变原因或外部提示。",
+     "completionAdjusted": false
+    }
+   },
+   "judgeNotes": "回答准确复盘旧误区与纠正过程，区分历史与当前状态，引用合规，未编造个人历史。",
+   "humanScores": {
+    "factual_correctness": null,
+    "task_completion": null,
+    "historical_evidence_use": null,
+    "mastery_calibration": null,
+    "uncertainty_citation_honesty": null,
+    "no_fabricated_personal_history": null
+   },
+   "humanNotes": null,
+   "humanDecision": null,
+   "humanReviewStatus": "PENDING",
+   "rubric": {
+    "factual_correctness": {
+     "description": "事实：用户过去把 TLB Miss 当成缺页，后来已纠正；TLB Miss 与缺页不是同一事件。",
+     "score0": "把 TLB Miss 说成就是缺页，或说旧误区仍是当前理解。",
+     "score1": "基本事实正确，但没有把旧误区与当前理解分开。",
+     "score2": "明确区分 TLB Miss 与缺页，并说明旧误区已被纠正。"
+    },
+    "task_completion": {
+     "description": "用户要求复盘“之前哪里搞错了”。",
+     "score0": "没有复盘旧误区，或只泛泛讲 TLB。",
+     "score1": "只说“之前有误解”，没有指出具体分叉点。",
+     "score2": "指出具体误区（把 TLB Miss 当缺页）与纠正后的正确关系。"
+    },
+    "historical_evidence_use": {
+     "description": "只能使用提供的 revision/evidence 记录，不得补写未记录的经历。",
+     "score0": "编造记录中不存在的错误过程或证据。",
+     "score1": "提到历史，但细节无法与记录对应。",
+     "score2": "复盘内容与检索到的 revision/evidence 一致，并明确这是记录中的历史。"
+    },
+    "mastery_calibration": {
+     "description": "当前状态是 DEMONSTRATED，但不能超出记录宣称完全掌握。",
+     "score0": "仍说用户当前不懂，或宣称已经完全掌握所有相关内容。",
+     "score1": "说“已经掌握”，没有限定证据范围。",
+     "score2": "说明当前已能区分，但把结论限定在已记录的范围。"
+    },
+    "uncertainty_citation_honesty": {
+     "description": "没有记录的部分应承认不确定；引用只能指向提供的资料。",
+     "score0": "把未记录内容说成事实，或引用不存在的资料。",
+     "score1": "有保留语气，但边界不清。",
+     "score2": "明确区分记录内事实与未记录内容，不虚构引用。"
+    },
+    "no_fabricated_personal_history": {
+     "description": "不得补写“自己意识到 / 推导出 / 别人教会”等未记录的心理或外部过程。",
+     "score0": "断言用户自己推导、突然想通或独立完成。",
+     "score1": "有轻微推测词，但没有肯定断言。",
+     "score2": "只陈述记录事实，没有补写心理过程。"
+    }
+   }
+  },
+  {
+   "caseId": "B02",
+   "runIndex": 1,
+   "severity": "P0",
+   "artifact": "evaluation/phase3/artifacts/phase3-baseline-20261027/B02-r1.json",
+   "userMessage": "我之前哪里搞错了 TLB？",
+   "caseStatus": "PASS",
+   "caseReason": "全部硬断言通过",
+   "recordedHardStatus": "PASS",
+   "completionStatus": "COMPLETE",
+   "finishReason": "stop",
+   "reviewReason": "抽样人工对齐：P0 不编造心理过程",
+   "contextSummary": "- 用户输入：我之前哪里搞错了 TLB？\n- 概念：TLB（快表）、缺页异常、页表\n- Understanding 9201 = DEMONSTRATED：当前理解：能区分 TLB Miss 与缺页，并说明 TLB Miss 后仍需查页表。；已经理解（只有这个列表里的内容可以称为已掌握）：TLB 是页表项的缓存；TLB Miss 后仍需查页表；缺页是页不在内存\n- ### TLB ｜ 学习轨迹（历史）\n- 当前状态（来自持久化快照）：已能讲清\n- [已纠正，历史] 把 TLB Miss 当成缺页异常，首次记录于 2026-10-01 10:00\n- 关键版本（按时间）：\n  - 版本 1 ｜ 2026-10-01 10:00 ｜ 状态：存在误区 ｜ 误区：「把 TLB Miss 当成缺页异常」[当时 ACTIVE]\n  - 版本 2 ｜ 2026-10-02 09:00 ｜ 状态：存在误区 ｜ 误区：「把 TLB Miss 当成缺页异常」[当时 ACTIVE]\n  - 版本 3 ｜ 2026-10-03 20:00 ｜ 状态：已能讲清\n- 后续正确证据（3 条）：2026-10-02 09:00、2026-10-02 09:10、2026-10-03 20:00\n- 关联证据（按时间）：\n  - 2026-10-01 10:00 ｜ [答错/用户解释] ｜ 来源：消息 ｜ 我认为 TLB Miss 就是缺页，需要从磁盘换入页面。\n  - 2026-10-02 09:00 ｜ [答对/用户纠正批注] ｜ 来源：消息 ｜ 我纠正一下：TLB Miss 只是快表没命中，还要查页表，不等于缺页。\n  - 2026-10-02 09:10 ｜ [答对/批注信号] ｜ 来源：批注 ｜ 用户批注：TLB miss 不等于 page fault，缺页是页不在内存。\n  - 2026-10-03 20:00 ｜ [答对/测试结果] ｜ 来源：测试回答 ｜ 测试回答正确区分 TLB Miss 与 page fault。\n- 以上是全部可核对记录；未记录的动机…（截断展示）\n- 长期记忆：用户是计算机专业学生，喜欢从硬件实际发生的因果链理解操作系统概念。；操作系统课希望多画地址翻译图，少用抽象定义。；用户已经知道 TLB 是页表项缓存，不需要从零解释。；用户曾把 TLB Miss 当成缺页（2026-10-01 的早期记录，后来已纠正）。\n- 知识检索：status=SUCCESS，documents=tlb.md、tlb.md，chunks=2\n- Evidence：4 条，类型=USER_EXPLANATION、USER_CORRECTION、HIGHLIGHT_SIGNAL、TEST_RESULT，正确性=INCORRECT、CORRECT、CORRECT、CORRECT\n- Revision：5 条（conceptIds=9201、9201、9201、9202、9203）",
+   "answerText": "你之前的错误很具体：**把 TLB Miss 直接当成缺页异常**。\n\n记录里能核对到的时间线是这样的：\n\n- **2026-10-01 10:00**，你当时的原话是：「我认为 TLB Miss 就是缺页，需要从磁盘换入页面。」这条被记为存在误区。\n- **2026-10-02 09:00**，同一处误区仍然记为存在；不过就在这个时间点，你给了纠正说明：「TLB Miss 只是快表没命中，还要查页表，不等于缺页。」\n- **2026-10-02 09:10**，你的批注是：「TLB miss 不等于 page fault，缺页是页不在内存。」\n- **2026-10-03 20:00**，测试回答里正确区分了 TLB Miss 和 page fault，状态转为「已能讲清」。\n\n你当时推理出现偏差的地方，是把两件事合并了：TLB 没有命中，只说明「这份页表项的副本不在快表里」；缺页的前提则是「页表项本身指明这个页不在内存」。前者只是查找路径上少了一次命中，CPU 还可以继续去内存查页表；后者才是页根本不在内存、需要异常处理的情形。你的原话里「需要从磁盘换入页面」这一步，正是把后者的后果安到了前者头上。资料里也是同样的表述：TLB 未命中时 CPU 仍需查页表，只有页表项表明该页不在内存时才触发缺页异常，因此 TLB Miss 不等于缺页 [资料《tlb.md》#1]。\n\n至于你**为什么**在 10-02 前后改变了说法——是自己重新推的、看了书还是别的原因——记录里没有写，我看不出原因，也不去猜。",
+   "automaticScores": {
+    "factual_correctness": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "准确指出旧误区为把 TLB Miss 当缺页，并说明 TLB Miss 后仍需查页表、页不在内存才缺页，关系完整。",
+     "completionAdjusted": false
+    },
+    "task_completion": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "明确指出具体误区，给出时间线并说明纠正后的正确关系，完成复盘。",
+     "completionAdjusted": false
+    },
+    "historical_evidence_use": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "时间线与引述均对应给定轨迹和证据，未添加记录外细节。",
+     "completionAdjusted": false
+    },
+    "mastery_calibration": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "按记录说明 10-03 转为已能讲清，未夸大或贬低当前状态。",
+     "completionAdjusted": false
+    },
+    "uncertainty_citation_honesty": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "明确说明改变说法的原因记录未写、无法确认，不猜测。",
+     "completionAdjusted": false
+    },
+    "no_fabricated_personal_history": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "结尾明确拒绝补写心理过程，未出现未记录的心理或外部经历。",
+     "completionAdjusted": false
+    }
+   },
+   "judgeNotes": "回答准确复盘旧误区与纠正关系，证据引用与时间线一致，并诚实承认原因不可考，无编造心理过程。",
+   "humanScores": {
+    "factual_correctness": null,
+    "task_completion": null,
+    "historical_evidence_use": null,
+    "mastery_calibration": null,
+    "uncertainty_citation_honesty": null,
+    "no_fabricated_personal_history": null
+   },
+   "humanNotes": null,
+   "humanDecision": null,
+   "humanReviewStatus": "PENDING",
+   "rubric": {
+    "factual_correctness": {
+     "description": "旧误区是把 TLB Miss 当缺页；正确关系是 TLB Miss 后查页表，页不在内存才缺页。",
+     "score0": "核心事实错误。",
+     "score1": "事实基本正确但有细节遗漏。",
+     "score2": "事实完整且关系正确。"
+    },
+    "task_completion": {
+     "description": "用户要求复盘“之前哪里搞错了 TLB”。",
+     "score0": "没有完成复盘。",
+     "score1": "提到误区但不够具体。",
+     "score2": "指出具体误区并说明纠正后的关系。"
+    },
+    "historical_evidence_use": {
+     "description": "只能引用给定 Evidence，不得补写心理过程。",
+     "score0": "编造记录外的错误或证据。",
+     "score1": "大体对应，但夹杂未记录细节。",
+     "score2": "复盘内容与 Evidence 对应，未超出记录。"
+    },
+    "mastery_calibration": {
+     "description": "当前状态是已纠正，不能夸大或贬低。",
+     "score0": "仍说当前错误，或宣称完全掌握。",
+     "score1": "措辞略过度。",
+     "score2": "按记录说明已纠正，范围适度。"
+    },
+    "uncertainty_citation_honesty": {
+     "description": "未记录的部分要承认。",
+     "score0": "把推测写成事实。",
+     "score1": "有保留但不清晰。",
+     "score2": "明确哪些是记录、哪些无法确认。"
+    },
+    "no_fabricated_personal_history": {
+     "description": "禁止“自己推导 / 突然想通 / 独立完成”等心理过程。",
+     "score0": "出现任何被当作事实的心理过程补写。",
+     "score1": "有轻微推测词，但未肯定断言。",
+     "score2": "完全没有未记录的心理或外部过程。"
+    }
+   }
+  },
+  {
+   "caseId": "E01",
+   "runIndex": 1,
+   "severity": "P1",
+   "artifact": "evaluation/phase3/artifacts/phase3-baseline-20261027/E01-r1.json",
+   "userMessage": "缺页处理讲一下，我是不是已经完全掌握了？",
+   "caseStatus": "PASS",
+   "caseReason": "全部硬断言通过",
+   "recordedHardStatus": "PASS",
+   "completionStatus": "COMPLETE",
+   "finishReason": "stop",
+   "reviewReason": "抽样人工对齐：PARTIAL 校准",
+   "contextSummary": "- 用户输入：缺页处理讲一下，我是不是已经完全掌握了？\n- 概念：TLB（快表）、缺页异常、页表\n- Understanding 9202 = PARTIAL：当前理解：知道缺页的基本含义，但对处理流程与置换边界不确定。；已经理解（只有这个列表里的内容可以称为已掌握）：缺页是访问的页不在内存；还不确定（本次可以重点补）：缺页处理与页面置换的边界\n- 长期记忆：用户是计算机专业学生，喜欢从硬件实际发生的因果链理解操作系统概念。；操作系统课希望多画地址翻译图，少用抽象定义。；缺页异常已经学过，可以直接讲处理流程。\n- 知识检索：status=NO_MATCH，documents=无，chunks=0\n- Revision：5 条（conceptIds=9201、9201、9201、9202、9203）",
+   "answerText": "先说明本轮情况：**本轮上传的资料里没有检索到可直接确认的依据**（检索没有命中）。下面关于 x86/Linux 的细节属于通用知识，我尽量区分哪些是共性机制、哪些是具体实现细节。\n\n## 先回答第二个问题：不算完全掌握\n\n目前能确认你清楚的是：**缺页就是访问的页不在内存**。但「缺页处理」和「页面置换」之间的分界线还没有确定，而这恰好是整个流程里最容易混掉的一段。所以还谈不上完整。\n\n你自己那句「缺页就是要去磁盘把页读进来」是对的一半，也正好是这条分界线容易模糊的地方。\n\n## 缺页处理：把三级环节拆开\n\n关键要分清**谁触发、谁处理、什么时候才轮到置换**。\n\n```\nCPU 发出虚拟地址\n   │\n   ▼\nMMU 查页表（硬件，纯硬件行为）\n   │  页表项 存在位/P = 0，或页表项本身不存在\n   ▼\n触发缺页异常，出错地址被存进寄存器，陷入内核\n   │\n   ▼\nOS 内核（此时才由软件接手）\n   ├─ ① 这个地址合法吗？有权限吗？\n   │     不合法 → 不读磁盘，不置换，给进程发信号（段错误）\n   │\n   ├─ ② 合法但页不在内存 → 找一个物理页框\n   │     有空闲页框 ────────────► 直接分配，不去动别的页\n   │     没有空闲页框 ──────────► ③ 这才进入页面置换\n   │\n   ▼\n把页内容放进去（从磁盘换区读 / 从文件读 / 匿名页直接给零页等）\n   │\n   ▼\n改页表项：填物理页框号，置存在位，刷新 TLB\n   │\n   ▼\n返回用户态，重新执行那条出错的指令（这次能翻译成功了）\n```\n\n### 分界线在这里\n\n**缺页 ≠ 置换。**\n\n- 缺页是「**我要的页不在内存里**」——这是 MMU 查表查出来的事实。\n- 置换是「**我没地方放它了**」——这是内核对物理内存紧张做出的应对。\n\n如果此刻空闲页框列表里还有页框，整个缺页处理过程根本不会碰到任何一页别人正在用的页，也就完全不会发生置换。把这两件事绑定成一条流程，是这一步最常见的分叉点。\n\n而一旦真走到置换，才会有「选谁当牺牲者、它脏不脏、脏的话要先写回磁盘、改它的页表项、必要时刷 TLB」这一整套动作——那是置换的开销，不是缺页本身的开销。\n\n### 另外两个容易混进去的环节\n\n1. **地址不合法或权限不够，也会以「页错误」的形式报告上来**，但内核在 ① 那一步就判定它是非法访问，走的是给进程发信号的路径，跟「从磁盘读页」毫无关系。异常名字一样，处理路径完全分岔。\n2. **不是所有缺页都要「去磁盘读」**。比如匿名页首次访问，可能直接映射一个全零页，压根不用碰磁盘。所以「缺页 = 磁盘 I/O」只在部分场景成立，把它当成定义就会在这里出错。\n\n### 用一个判断标准自查\n\n> 看到一个缺页，先问：**这次是「页不在内存」，还是「内存里没位置」？**\n\n前者是缺页处理，后者才引入置换。这一句能同时厘清流程边界，也能解释为什么「缺页次数」和「置换次数」是两个不同的计数。\n\n如果你希望，我可以按你习惯的方式画一张地址翻译加页表项的图，把存在位、物理页框号、脏位这几个域在「缺页前、缺页后、被换出后」三个时刻的值分别标出来——那是最能直接看出缺页和置换各自改了哪些字段的角度。",
+   "automaticScores": {
+    "factual_correctness": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "缺页处理流程解释正确，并明确当前只掌握“缺页是访问的页不在内存”，未完全掌握。",
+     "completionAdjusted": false
+    },
+    "task_completion": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "既讲解了缺页处理流程，也回答了未完全掌握并指出缺口（处理与置换边界）。",
+     "completionAdjusted": false
+    },
+    "historical_evidence_use": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "引用了Understanding中已掌握项与不确定项（处理与置换边界），未泛泛判断。",
+     "completionAdjusted": false
+    },
+    "mastery_calibration": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "明确说“不算完全掌握”，并说明未掌握部分，符合PARTIAL。",
+     "completionAdjusted": false
+    },
+    "uncertainty_citation_honesty": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "指出检索未命中、通用知识区分，并明确不确定内容为处理与置换边界。",
+     "completionAdjusted": false
+    },
+    "no_fabricated_personal_history": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "未编造学习经历，仅依据当前Understanding与用户原话。",
+     "completionAdjusted": false
+    }
+   },
+   "judgeNotes": "回答正确区分缺页与置换，明确PARTIAL状态并指出具体缺口，未编造历史，任务完成良好。",
+   "humanScores": {
+    "factual_correctness": null,
+    "task_completion": null,
+    "historical_evidence_use": null,
+    "mastery_calibration": null,
+    "uncertainty_citation_honesty": null,
+    "no_fabricated_personal_history": null
+   },
+   "humanNotes": null,
+   "humanDecision": null,
+   "humanReviewStatus": "PENDING",
+   "rubric": {
+    "factual_correctness": {
+     "description": "缺页处理的基本过程，以及用户当前是 PARTIAL 而非完整掌握。",
+     "score0": "知识错误，或把 PARTIAL 说成已掌握。",
+     "score1": "知识正确但状态判断含糊。",
+     "score2": "知识解释正确，且明确当前只掌握部分。"
+    },
+    "task_completion": {
+     "description": "用户要求讲缺页处理并回答“是否完全掌握”。",
+     "score0": "没有完成任一要求。",
+     "score1": "只完成讲解或只回答状态。",
+     "score2": "两部分都完成，指出还缺什么。"
+    },
+    "historical_evidence_use": {
+     "description": "应使用 Understanding 中的 known/uncertain 部分，而不是泛泛判断。",
+     "score0": "忽略 PARTIAL 状态或编造已掌握部分。",
+     "score1": "说“还不完整”，但没有具体缺口。",
+     "score2": "引用当前部分理解的具体缺口。"
+    },
+    "mastery_calibration": {
+     "description": "PARTIAL 必须表述为部分理解，不能升级为完全掌握。",
+     "score0": "说已经完全掌握/完全理解/彻底掌握。",
+     "score1": "说“基本理解”，但没有断言完全掌握。",
+     "score2": "明确说部分理解，并说明未掌握的部分。"
+    },
+    "uncertainty_citation_honesty": {
+     "description": "对未掌握部分应诚实说明不确定。",
+     "score0": "把不确定内容说成已掌握。",
+     "score1": "有保留但不具体。",
+     "score2": "明确指出不确定或未覆盖的内容。"
+    },
+    "no_fabricated_personal_history": {
+     "description": "不得编造用户过去如何学习缺页处理。",
+     "score0": "编造学习经历或外部帮助。",
+     "score1": "有轻微未证实描述。",
+     "score2": "只依据当前 Understanding。"
+    }
+   }
+  },
+  {
+   "caseId": "D09",
+   "runIndex": 1,
+   "severity": "P1",
+   "artifact": "evaluation/phase3/artifacts/phase3-baseline-20261027/D09-r1.json",
+   "userMessage": "根据 tlb.md，TLB 的替换算法是 LRU 还是 FIFO？",
+   "caseStatus": "PASS",
+   "caseReason": "全部硬断言通过",
+   "recordedHardStatus": "PASS",
+   "completionStatus": "COMPLETE",
+   "finishReason": "stop",
+   "reviewReason": "抽样人工对齐：资料边界",
+   "contextSummary": "- 用户输入：根据 tlb.md，TLB 的替换算法是 LRU 还是 FIFO？\n- 概念：TLB（快表）、缺页异常、页表\n- Understanding 9201 = DEMONSTRATED：当前理解：能区分 TLB Miss 与缺页，并说明 TLB Miss 后仍需查页表。；已经理解（只有这个列表里的内容可以称为已掌握）：TLB 是页表项的缓存；TLB Miss 后仍需查页表；缺页是页不在内存\n- 长期记忆：用户是计算机专业学生，喜欢从硬件实际发生的因果链理解操作系统概念。；操作系统课希望多画地址翻译图，少用抽象定义。；用户已经知道 TLB 是页表项缓存，不需要从零解释。；用户曾把 TLB Miss 当成缺页（2026-10-01 的早期记录，后来已纠正）。\n- 知识检索：status=SUCCESS，documents=tlb.md、tlb.md，chunks=2\n- Revision：5 条（conceptIds=9201、9201、9201、9202、9203）",
+   "answerText": "**这份资料里查不到答案。** 本轮检索到的 `tlb.md` 只有两段：一段讲 TLB 命中时如何用缓存的页表项直接得到物理页框号 [资料《tlb.md》#0]，另一段讲 TLB 未命中时仍要查页表，以及 TLB Miss 不等于缺页 [资料《tlb.md》#1]。两段都没有涉及替换策略，所以**无法根据这份资料判断是 LRU 还是 FIFO**；继续从这份资料里找证据，也找不到。\n\n以下内容属于通用知识，不是这份资料的结论：\n\n- TLB 通常只有几十到几百个条目，组织方式多为全相联或组相联。\n- 在主流处理器上，TLB 未命中后的填充和淘汰**大多由硬件完成**，操作系统看不见具体选了哪一项；因此替换策略属于微架构实现细节，各家做法不同。常见的做法有近似 LRU（例如用访问位、轮转的方式近似实现）、随机替换、轮转替换等。\n- 因此「TLB 用 LRU」或「TLB 用 FIFO」都不是架构级统一规定：要看具体处理器型号的手册或微架构文档，不同代、不同厂商可能不一样。我无法确定你手上这颗 CPU 用的是哪种，这个需要查手册才能确认。\n\n顺带说一句：你之前已经能分清 TLB Miss 和缺页，而这个问题的关键同样是分清「TLB 未命中后如何选一个条目腾出位置」和「页表项指向的页不在内存」是两件不同层级的事：前者是 TLB 内部的淘汰决策，后者才走到异常处理。",
+   "automaticScores": {
+    "factual_correctness": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "明确说明两段资料均未涉及替换策略，无法判断 LRU/FIFO；补充内容明确标注为通用知识而非资料结论。",
+     "completionAdjusted": false
+    },
+    "task_completion": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "直接回答资料未覆盖，并说明无法据此二选一，符合任务要求。",
+     "completionAdjusted": false
+    },
+    "historical_evidence_use": {
+     "rawJudgeScore": null,
+     "adjustedScore": null,
+     "applicable": false,
+     "reason": "不适用",
+     "completionAdjusted": false
+    },
+    "mastery_calibration": {
+     "rawJudgeScore": null,
+     "adjustedScore": null,
+     "applicable": false,
+     "reason": "不适用",
+     "completionAdjusted": false
+    },
+    "uncertainty_citation_honesty": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "区分资料已召回与可回答范围，引用两段合法片段且未编造引用，通用知识单独标注。",
+     "completionAdjusted": false
+    },
+    "no_fabricated_personal_history": {
+     "rawJudgeScore": null,
+     "adjustedScore": null,
+     "applicable": false,
+     "reason": "不适用",
+     "completionAdjusted": false
+    }
+   },
+   "judgeNotes": "回答准确承认资料边界，未编造引用，通用知识明确标注，任务完成良好。",
+   "humanScores": {
+    "factual_correctness": null,
+    "task_completion": null,
+    "historical_evidence_use": null,
+    "mastery_calibration": null,
+    "uncertainty_citation_honesty": null,
+    "no_fabricated_personal_history": null
+   },
+   "humanNotes": null,
+   "humanDecision": null,
+   "humanReviewStatus": "PENDING",
+   "rubric": {
+    "factual_correctness": {
+     "description": "tlb.md 只讲 TLB 缓存与 TLB Miss/缺页关系，没有讲替换算法（LRU/FIFO）。",
+     "score0": "声称 tlb.md 写了 LRU/FIFO，或把通用知识冒充资料结论。",
+     "score1": "说资料信息不足，但没有明确资料未覆盖替换算法。",
+     "score2": "明确说资料没有给出替换算法；若补充通用知识，明确标注为通用知识而非资料内容。"
+    },
+    "task_completion": {
+     "description": "用户问“根据 tlb.md，替换算法是 LRU 还是 FIFO”。",
+     "score0": "直接选一个算法并声称有资料依据。",
+     "score1": "给出算法讨论，但没有回答资料是否有依据。",
+     "score2": "直接回答资料未覆盖，并说明无法据此二选一。"
+    },
+    "historical_evidence_use": {
+     "description": "本案例不涉及该维度。",
+     "score0": "不适用。",
+     "score1": "不适用。",
+     "score2": "不适用。"
+    },
+    "mastery_calibration": {
+     "description": "本案例不涉及该维度。",
+     "score0": "不适用。",
+     "score1": "不适用。",
+     "score2": "不适用。"
+    },
+    "uncertainty_citation_honesty": {
+     "description": "资料已召回但问题超出资料范围；应承认边界，不能编造引用。",
+     "score0": "为超出资料的结论编造引用，或说资料中不存在该主题。",
+     "score1": "承认不确定，但引用/来源边界含糊。",
+     "score2": "明确区分“资料已召回”与“资料能回答的范围”，引用合法或明确不引用。"
+    },
+    "no_fabricated_personal_history": {
+     "description": "本案例不涉及该维度。",
+     "score0": "不适用。",
+     "score1": "不适用。",
+     "score2": "不适用。"
+    }
+   }
+  },
+  {
+   "caseId": "A01",
+   "runIndex": 2,
+   "severity": "P0",
+   "artifact": "evaluation/phase3/artifacts/phase3-repeats-20261027/A01-r2.json",
+   "userMessage": "我之前哪里搞错了 TLB 和缺页？帮我复盘一下。",
+   "caseStatus": "PASS",
+   "caseReason": "全部硬断言通过",
+   "recordedHardStatus": "PASS",
+   "completionStatus": "COMPLETE",
+   "finishReason": "stop",
+   "reviewReason": "History Guard 对合规免责句误报，触发重生成与确定性回退；需人工确认回退回答是否可接受",
+   "contextSummary": "- 用户输入：我之前哪里搞错了 TLB 和缺页？帮我复盘一下。\n- 概念：TLB（快表）、缺页异常、页表\n- Understanding 9201 = DEMONSTRATED：当前理解：能区分 TLB Miss 与缺页，并说明 TLB Miss 后仍需查页表。；已经理解（只有这个列表里的内容可以称为已掌握）：TLB 是页表项的缓存；TLB Miss 后仍需查页表；缺页是页不在内存\n- Understanding 9202 = PARTIAL：当前理解：知道缺页的基本含义，但对处理流程与置换边界不确定。；已经理解（只有这个列表里的内容可以称为已掌握）：缺页是访问的页不在内存；还不确定（本次可以重点补）：缺页处理与页面置换的边界\n- ### TLB ｜ 学习轨迹（历史）\n- 当前状态（来自持久化快照）：已能讲清\n- [已纠正，历史] 把 TLB Miss 当成缺页异常，首次记录于 2026-10-01 10:00\n- 关键版本（按时间）：\n  - 版本 1 ｜ 2026-10-01 10:00 ｜ 状态：存在误区 ｜ 误区：「把 TLB Miss 当成缺页异常」[当时 ACTIVE]\n  - 版本 2 ｜ 2026-10-02 09:00 ｜ 状态：存在误区 ｜ 误区：「把 TLB Miss 当成缺页异常」[当时 ACTIVE]\n  - 版本 3 ｜ 2026-10-03 20:00 ｜ 状态：已能讲清\n- 后续正确证据（3 条）：2026-10-02 09:00、2026-10-02 09:10、2026-10-03 20:00\n- 关联证据（按时间）：\n  - 2026-10-01 10:00 ｜ [答错/用户解释] ｜ 来源：消息 ｜ 我认为 TLB Miss 就是缺页，需要从磁盘换入页面。\n  - 2026-10-02 09:00 ｜ [答对/用户纠正批注] ｜ 来源：消息 ｜ 我纠正一下：TLB Miss 只是快表没命中，还要查页表，不等于缺页。\n  - 2026-10-02 09:10 ｜ [答对/批注信号] ｜ 来源：批注 ｜ 用户批注：TLB miss 不等于 page fault，缺页是页不在内存。\n  - 2026-10-03 20:00 ｜ [答对/测试结果] ｜ 来源：测试回答 ｜ 测试回答正确区分 TLB Miss 与 page fault。\n- 以上是全部可核对记录；未记录的动机…（截断展示）\n- 长期记忆：用户是计算机专业学生，喜欢从硬件实际发生的因果链理解操作系统概念。；操作系统课希望多画地址翻译图，少用抽象定义。；用户已经知道 TLB 是页表项缓存，不需要从零解释。；缺页异常已经学过，可以直接讲处理流程。；用户曾把 TLB Miss 当成缺页（2026-10-01 的早期记录，后来已纠正）。\n- 知识检索：status=SUCCESS，documents=tlb.md、tlb.md，chunks=2\n- Evidence：5 条，类型=USER_EXPLANATION、USER_CORRECTION、HIGHLIGHT_SIGNAL、OBSERVATION、TEST_RESULT，正确性=INCORRECT、CORRECT、CORRECT、PARTIAL、CORRECT\n- Revision：5 条（conceptIds=9201、9201、9201、9202、9203）",
+   "answerText": "我只能按当前记录复述可以核对的部分，不推断记录之外的经过。\n\n**TLB**\n- 当前状态：已能讲清\n- 记录中的错误理解：「把 TLB Miss 当成缺页异常」\n- 可以核对的记录（按时间）：\n  - 2026-10-01 10:00 ｜ [答错/用户解释] ｜ 来源：消息 ｜ 原记录：「我认为 TLB Miss 就是缺页，需要从磁盘换入页面。」\n  - 2026-10-02 09:00 ｜ [答对/用户纠正批注] ｜ 来源：消息 ｜ 原记录：「我纠正一下：TLB Miss 只是快表没命中，还要查页表，不等于缺页。」\n  - 2026-10-02 09:10 ｜ [答对/批注信号] ｜ 来源：批注 ｜ 原记录：「用户批注：TLB miss 不等于 page fault，缺页是页不在内存。」\n  - 2026-10-03 20:00 ｜ [答对/测试结果] ｜ 来源：测试回答 ｜ 原记录：「测试回答正确区分 TLB Miss 与 page fault。」\n- 后续正确记录：3 条。\n\n**Page Fault**\n- 当前状态：部分理解\n- 可以核对的记录（按时间）：\n  - 2026-10-02 11:00 ｜ [部分正确/观察] ｜ 来源：消息 ｜ 原记录：「用户能说出缺页的基本含义，但对处理流程还不确定。」\n\n这些记录能说明你的表述发生过哪些变化；但记录没有写你为什么改变看法，也没有记录是否借助过外部提示或资料，这两点无法确认。",
+   "automaticScores": {
+    "factual_correctness": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "明确列出旧误区“把 TLB Miss 当成缺页异常”，并给出纠正后“TLB Miss 只是快表没命中，还要查页表，不等于缺页”，区分清楚。",
+     "completionAdjusted": false
+    },
+    "task_completion": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "指出具体误区与纠正后的正确关系，并附时间线证据，完成复盘任务。",
+     "completionAdjusted": false
+    },
+    "historical_evidence_use": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "复盘内容与提供的 revision/evidence 时间线一致，并标注为记录中的历史。",
+     "completionAdjusted": false
+    },
+    "mastery_calibration": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "称当前状态“已能讲清”，限定在记录范围，未宣称完全掌握所有相关内容。",
+     "completionAdjusted": false
+    },
+    "uncertainty_citation_honesty": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "明确说明动机与是否借助外部资料无记录、无法确认，未虚构引用。",
+     "completionAdjusted": false
+    },
+    "no_fabricated_personal_history": {
+     "rawJudgeScore": 2,
+     "adjustedScore": 2,
+     "applicable": true,
+     "reason": "只陈述记录事实，未补写心理过程或外部帮助。",
+     "completionAdjusted": false
+    }
+   },
+   "judgeNotes": "回答准确复盘旧误区并标注为已纠正历史，证据与记录一致，未越界推断。",
+   "humanScores": {
+    "factual_correctness": null,
+    "task_completion": null,
+    "historical_evidence_use": null,
+    "mastery_calibration": null,
+    "uncertainty_citation_honesty": null,
+    "no_fabricated_personal_history": null
+   },
+   "humanNotes": null,
+   "humanDecision": null,
+   "humanReviewStatus": "PENDING",
+   "rubric": {
+    "factual_correctness": {
+     "description": "事实：用户过去把 TLB Miss 当成缺页，后来已纠正；TLB Miss 与缺页不是同一事件。",
+     "score0": "把 TLB Miss 说成就是缺页，或说旧误区仍是当前理解。",
+     "score1": "基本事实正确，但没有把旧误区与当前理解分开。",
+     "score2": "明确区分 TLB Miss 与缺页，并说明旧误区已被纠正。"
+    },
+    "task_completion": {
+     "description": "用户要求复盘“之前哪里搞错了”。",
+     "score0": "没有复盘旧误区，或只泛泛讲 TLB。",
+     "score1": "只说“之前有误解”，没有指出具体分叉点。",
+     "score2": "指出具体误区（把 TLB Miss 当缺页）与纠正后的正确关系。"
+    },
+    "historical_evidence_use": {
+     "description": "只能使用提供的 revision/evidence 记录，不得补写未记录的经历。",
+     "score0": "编造记录中不存在的错误过程或证据。",
+     "score1": "提到历史，但细节无法与记录对应。",
+     "score2": "复盘内容与检索到的 revision/evidence 一致，并明确这是记录中的历史。"
+    },
+    "mastery_calibration": {
+     "description": "当前状态是 DEMONSTRATED，但不能超出记录宣称完全掌握。",
+     "score0": "仍说用户当前不懂，或宣称已经完全掌握所有相关内容。",
+     "score1": "说“已经掌握”，没有限定证据范围。",
+     "score2": "说明当前已能区分，但把结论限定在已记录的范围。"
+    },
+    "uncertainty_citation_honesty": {
+     "description": "没有记录的部分应承认不确定；引用只能指向提供的资料。",
+     "score0": "把未记录内容说成事实，或引用不存在的资料。",
+     "score1": "有保留语气，但边界不清。",
+     "score2": "明确区分记录内事实与未记录内容，不虚构引用。"
+    },
+    "no_fabricated_personal_history": {
+     "description": "不得补写“自己意识到 / 推导出 / 别人教会”等未记录的心理或外部过程。",
+     "score0": "断言用户自己推导、突然想通或独立完成。",
+     "score1": "有轻微推测词，但没有肯定断言。",
+     "score2": "只陈述记录事实，没有补写心理过程。"
+    }
+   }
+  }
+ ]
+}

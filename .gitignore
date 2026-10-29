@@ -7,3 +7,12 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+
+# 评测逐用例原始产物：可由 runner 重新生成。汇总报告与关键证据仍提交。
+evaluation/phase1/artifacts/
+# Phase 3 的 B05/smoke 是重复运行目录；baseline/repeats 被盲评表逐条引用，保留。
+evaluation/phase3/artifacts/B05/
+evaluation/phase3/artifacts/phase3-smoke-d09/
+# 本地日志默认不提交；仅保留 Phase 4.1 索引回收这一条关键证据日志。
+evaluation/**/*.log
+!evaluation/phase4_1/index-recovery-it.log

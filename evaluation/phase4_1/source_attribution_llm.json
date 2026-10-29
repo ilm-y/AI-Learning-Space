@@ -1,0 +1,791 @@
+{
+  "model": "deepseek-flash",
+  "promptVersion": "phase4.1-source-attribution",
+  "trialsPerCase": 3,
+  "summary": [
+    {
+      "key": "insufficient_detail",
+      "trials": 3,
+      "numericConflictTrials": 0,
+      "unsupportedTrials": 0,
+      "invalidCitations": 0
+    },
+    {
+      "key": "legacy_only",
+      "trials": 3,
+      "numericConflictTrials": 0,
+      "unsupportedTrials": 1,
+      "invalidCitations": 0
+    }
+  ],
+  "retrievalSource": "fixed_synthetic_chunks_from_phase4 (no online retrieval)",
+  "knowledgeChunks": [
+    {
+      "chunkId": 18,
+      "documentId": 20,
+      "documentName": "orbit_current_20261027_172403.md",
+      "content": "ORBIT-4721 当前调度规范\n\n本文是 ORBIT-4721 当前部署的现行规范，标记 P4-TARGET-7K2。\n\n当前调度器使用 17 秒的重试窗口（retry window）。该值从 2025 版开始生效，适用于所有新部署。校验种子是 0x7F3A。\n\n运维注意：不要使用历史迁移文档中的旧值。旧值只描述已经下线的调度器。如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值。"
+    },
+    {
+      "chunkId": 19,
+      "documentId": 21,
+      "documentName": "orbit_legacy_20261027_172403.md",
+      "content": "ORBIT-4721 历史迁移记录\n\n标记 P4-DISTRACTOR-3M8。2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口（retry window）。该版本已在 2025 年下线。\n\n本记录只用于迁移考古，不适用于当前部署。不要把 12 秒当作现行值。"
+    }
+  ],
+  "cases": [
+    {
+      "key": "insufficient_detail",
+      "trial": 1,
+      "question": "ORBIT-4721 当前重试窗口是多少？它的仪表盘默认颜色是什么？",
+      "knowledgeState": "SUCCESS",
+      "injectedChunkIds": [
+        18,
+        19
+      ],
+      "droppedChunkIds": [],
+      "contextTokens": 468,
+      "budgetTokens": 3000,
+      "providedLabels": [
+        "资料《orbit_current_20261027_172403.md》#0",
+        "资料《orbit_legacy_20261027_172403.md》#0"
+      ],
+      "answer": "**当前重试窗口：17 秒。**\n\n这是现行调度规范中的值，从 2025 版开始生效，适用于所有新部署 [资料《orbit_current_20261027_172403.md》#0]。\n\n这里最容易出错的地方是：迁移记录里还留着 12 秒，那是 2024 年及以前旧调度器的值，该版本已在 2025 年下线，记录自己也写明「不要把 12 秒当作现行值」[资料《orbit_legacy_20261027_172403.md》#0]。因此，12 秒只会作为历史值出现，不能当作现行配置。按现行规范的说法，如果监控告警显示 17 秒不符合预期，应当先核对部署版本，而不是改回旧值 [资料《orbit_current_20261027_172403.md》#0]。\n\n**仪表盘默认颜色：上传的资料里没有这部分内容。**\n\n两份文档都只涉及调度器的重试窗口和版本说明，没有提到任何仪表盘、配色或界面配置。所以我无法根据资料给出颜色值，也不应该随便说一个。如果你需要这个信息，得查仪表盘那部分的配置文档或产品说明。\n\n另外提一句边界：上面 17 秒和 12 秒的区分，只适用于「重试窗口」这个参数本身。资料没有说明其他参数是否也存在新旧版本差异，不要把这个结论直接套到别处。",
+      "citations": {
+        "providedLabels": [
+          "资料《orbit_current_20261027_172403.md》#0",
+          "资料《orbit_legacy_20261027_172403.md》#0"
+        ],
+        "total": 3,
+        "valid": 3,
+        "invalid": 0,
+        "illegalRate": 0.0,
+        "invalidLabels": [],
+        "malformedLabels": [],
+        "malformedCount": 0,
+        "syntaxValid": true,
+        "unsupportedCount": 0,
+        "numericConflictCount": 0,
+        "duplicateLabels": [
+          "资料《orbit_current_20261027_172403.md》#0"
+        ],
+        "citedDocuments": [
+          "orbit_current_20261027_172403.md",
+          "orbit_legacy_20261027_172403.md"
+        ],
+        "citations": [
+          {
+            "raw": "[资料《orbit_current_20261027_172403.md》#0]",
+            "documentName": "orbit_current_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 18,
+            "documentId": 20,
+            "claim": "这是现行调度规范中的值，从 2025 版开始生效，适用于所有新部署 [资料《orbit_current_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 当前调度规范\n\n本文是 ORBIT-4721 当前部署的现行规范，标记 P4-TARGET-7K2。\n\n当前调度器使用 17 秒的重试窗口（retry window）。该值从 2025 版开始生效，适用于所有新部署。校验种子是 0x7F3A。\n\n运维注意：不要使用历史迁移文档中的旧值。旧值只描述已经下线的调度器。如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "中的",
+              "于所",
+              "始生",
+              "度规",
+              "开始",
+              "所有",
+              "新部",
+              "有新",
+              "版开",
+              "现行",
+              "生效",
+              "用于"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_legacy_20261027_172403.md》#0]",
+            "documentName": "orbit_legacy_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 19,
+            "documentId": 21,
+            "claim": "这里最容易出错的地方是：迁移记录里还留着 12 秒，那是 2024 年及以前旧调度器的值，该版本已在 2025 年下线，记录自己也写明「不要把 12 秒当作现行值」[资料《orbit_legacy_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 历史迁移记录\n\n标记 P4-DISTRACTOR-3M8。2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口（retry window）。该版本已在 2025 年下线。\n\n本记录只用于迁移考古，不适用于当前部署。不要把 12 秒当作现行值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "下线",
+              "不要",
+              "以前",
+              "作现",
+              "及以",
+              "已在",
+              "年下",
+              "年及",
+              "度器",
+              "当作",
+              "旧调",
+              "本已"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_current_20261027_172403.md》#0]",
+            "documentName": "orbit_current_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 18,
+            "documentId": 20,
+            "claim": "按现行规范的说法，如果监控告警显示 17 秒不符合预期，应当先核对部署版本，而不是改回旧值 [资料《orbit_current_20261027_172403.md》#0]",
+            "sourceExcerpt": "ow）。该值从 2025 版开始生效，适用于所有新部署。校验种子是 0x7F3A。\n\n运维注意：不要使用历史迁移文档中的旧值。旧值只描述已经下线的调度器。如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "不是",
+              "不符",
+              "先核",
+              "合预",
+              "告警",
+              "回旧",
+              "如果",
+              "对部",
+              "控告",
+              "改回",
+              "旧值",
+              "是改"
+            ],
+            "numericConflict": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "insufficient_detail",
+      "trial": 2,
+      "question": "ORBIT-4721 当前重试窗口是多少？它的仪表盘默认颜色是什么？",
+      "knowledgeState": "SUCCESS",
+      "injectedChunkIds": [
+        18,
+        19
+      ],
+      "droppedChunkIds": [],
+      "contextTokens": 468,
+      "budgetTokens": 3000,
+      "providedLabels": [
+        "资料《orbit_current_20261027_172403.md》#0",
+        "资料《orbit_legacy_20261027_172403.md》#0"
+      ],
+      "answer": "**当前重试窗口：17 秒。**\n\n这是现行规范给出的值，从 2025 版开始适用于所有新部署，校验种子是 0x7F3A [资料《orbit_current_20261027_172403.md》#0]。\n\n需要注意：历史迁移记录里提到的 12 秒属于 2024 年及以前已经在 2025 年下线的旧调度器 [资料《orbit_legacy_20261027_172403.md》#0]。现行规范也特意提示，不要拿历史文档里的旧值来覆盖它；监控告警如果显示 17 秒与预期不符，先核对部署版本 [资料《orbit_current_20261027_172403.md》#0]。\n\n**仪表盘默认颜色：上传的资料里没有。**\n\n这两份文档都只讲调度器的重试窗口和版本迁移，没有任何关于仪表盘配色、主题或 UI 默认值的内容。因此这一点我无法根据资料给出答案，也不会随意编一个。如果你手上有 UI 配置文档、前端主题文件或仪表盘的部署说明，可以补上来，我再帮你从里面找。",
+      "citations": {
+        "providedLabels": [
+          "资料《orbit_current_20261027_172403.md》#0",
+          "资料《orbit_legacy_20261027_172403.md》#0"
+        ],
+        "total": 3,
+        "valid": 3,
+        "invalid": 0,
+        "illegalRate": 0.0,
+        "invalidLabels": [],
+        "malformedLabels": [],
+        "malformedCount": 0,
+        "syntaxValid": true,
+        "unsupportedCount": 0,
+        "numericConflictCount": 0,
+        "duplicateLabels": [
+          "资料《orbit_current_20261027_172403.md》#0"
+        ],
+        "citedDocuments": [
+          "orbit_current_20261027_172403.md",
+          "orbit_legacy_20261027_172403.md"
+        ],
+        "citations": [
+          {
+            "raw": "[资料《orbit_current_20261027_172403.md》#0]",
+            "documentName": "orbit_current_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 18,
+            "documentId": 20,
+            "claim": "这是现行规范给出的值，从 2025 版开始适用于所有新部署，校验种子是 0x7F3A [资料《orbit_current_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 当前调度规范\n\n本文是 ORBIT-4721 当前部署的现行规范，标记 P4-TARGET-7K2。\n\n当前调度器使用 17 秒的重试窗口（retry window）。该值从 2025 版开始生效，适用于所有新部署。校验种子是 0x7F3A。\n\n运维注意：不要使用历史迁移文档中的旧值。旧值只描述已经下线的调度器。如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "x7f3a",
+              "于所",
+              "子是",
+              "开始",
+              "所有",
+              "新部",
+              "有新",
+              "校验",
+              "版开",
+              "现行",
+              "用于",
+              "种子"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_legacy_20261027_172403.md》#0]",
+            "documentName": "orbit_legacy_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 19,
+            "documentId": 21,
+            "claim": "需要注意：历史迁移记录里提到的 12 秒属于 2024 年及以前已经在 2025 年下线的旧调度器 [资料《orbit_legacy_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 历史迁移记录\n\n标记 P4-DISTRACTOR-3M8。2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口（retry window）。该版本已在 2025 年下线。\n\n本记录只用于迁移考古，不适用于当前部署。不要把 12 秒当作现行值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "下线",
+              "以前",
+              "历史",
+              "及以",
+              "史迁",
+              "年下",
+              "年及",
+              "度器",
+              "旧调",
+              "移记",
+              "记录",
+              "调度"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_current_20261027_172403.md》#0]",
+            "documentName": "orbit_current_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 18,
+            "documentId": 20,
+            "claim": "监控告警如果显示 17 秒与预期不符，先核对部署版本 [资料《orbit_current_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 当前调度规范\n\n本文是 ORBIT-4721 当前部署的现行规范，标记 P4-TARGET-7K2。\n\n当前调度器使用 17 秒的重试窗口（retry window）。该值从 2025 版开始生效，适用于所有新部署。校验种子是 0x7F3A。\n\n运维注意：不要使用历史迁移文档中的旧值。旧值只描述已经下线的调度器。如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "不符",
+              "先核",
+              "告警",
+              "如果",
+              "对部",
+              "控告",
+              "显示",
+              "核对",
+              "版本",
+              "监控",
+              "署版",
+              "部署"
+            ],
+            "numericConflict": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "insufficient_detail",
+      "trial": 3,
+      "question": "ORBIT-4721 当前重试窗口是多少？它的仪表盘默认颜色是什么？",
+      "knowledgeState": "SUCCESS",
+      "injectedChunkIds": [
+        18,
+        19
+      ],
+      "droppedChunkIds": [],
+      "contextTokens": 468,
+      "budgetTokens": 3000,
+      "providedLabels": [
+        "资料《orbit_current_20261027_172403.md》#0",
+        "资料《orbit_legacy_20261027_172403.md》#0"
+      ],
+      "answer": "**当前重试窗口：17 秒。**\n\nORBIT-4721 当前部署的规范里，调度器使用的重试窗口是 17 秒，该值从 2025 版开始生效，适用于所有新部署 [资料《orbit_current_20261027_172403.md》#0]。\n\n这里有一个容易混进来的旧值需要注意：2024 年及以前的旧调度器用的是 12 秒，但该版本已在 2025 年下线，那份记录明确说明自己只用于迁移考古、不适用于当前部署 [资料《orbit_legacy_20261027_172403.md》#0]。所以 12 秒不是现行值。顺带一提，如果监控告警显示 17 秒不符合预期，规范给出的处理方向是先核对部署版本，而不是改回旧值 [资料《orbit_current_20261027_172403.md》#0]。\n\n**仪表盘的默认颜色：我无法从你上传的这两份资料里确认。**\n\n这两份文档只覆盖了调度规范和历史迁移记录，涉及重试窗口、生效版本、校验种子（0x7F3A）以及运维注意事项，没有出现任何关于仪表盘配色、主题或默认样式的内容。颜色属于文档特有的事实，我不能凭印象补一个给你——那样你拿到的会是一个看起来确定、实际上没有出处的数字。\n\n如果你需要这个信息，可以查部署环境的仪表盘主题配置文件（通常是前端主题变量或 UI 配置项），或者把包含界面规范的文档传给我，我再帮你定位。",
+      "citations": {
+        "providedLabels": [
+          "资料《orbit_current_20261027_172403.md》#0",
+          "资料《orbit_legacy_20261027_172403.md》#0"
+        ],
+        "total": 3,
+        "valid": 3,
+        "invalid": 0,
+        "illegalRate": 0.0,
+        "invalidLabels": [],
+        "malformedLabels": [],
+        "malformedCount": 0,
+        "syntaxValid": true,
+        "unsupportedCount": 0,
+        "numericConflictCount": 0,
+        "duplicateLabels": [
+          "资料《orbit_current_20261027_172403.md》#0"
+        ],
+        "citedDocuments": [
+          "orbit_current_20261027_172403.md",
+          "orbit_legacy_20261027_172403.md"
+        ],
+        "citations": [
+          {
+            "raw": "[资料《orbit_current_20261027_172403.md》#0]",
+            "documentName": "orbit_current_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 18,
+            "documentId": 20,
+            "claim": "ORBIT-4721 当前部署的规范里，调度器使用的重试窗口是 17 秒，该值从 2025 版开始生效，适用于所有新部署 [资料《orbit_current_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 当前调度规范\n\n本文是 ORBIT-4721 当前部署的现行规范，标记 P4-TARGET-7K2。\n\n当前调度器使用 17 秒的重试窗口（retry window）。该值从 2025 版开始生效，适用于所有新部署。校验种子是 0x7F3A。\n\n运维注意：不要使用历史迁移文档中的旧值。旧值只描述已经下线的调度器。如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "orbit-4721",
+              "于所",
+              "使用",
+              "值从",
+              "前部",
+              "器使",
+              "始生",
+              "度器",
+              "开始",
+              "当前",
+              "所有",
+              "新部"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_legacy_20261027_172403.md》#0]",
+            "documentName": "orbit_legacy_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 19,
+            "documentId": 21,
+            "claim": "这里有一个容易混进来的旧值需要注意：2024 年及以前的旧调度器用的是 12 秒，但该版本已在 2025 年下线，那份记录明确说明自己只用于迁移考古、不适用于当前部署 [资料《orbit_legacy_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 历史迁移记录\n\n标记 P4-DISTRACTOR-3M8。2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口（retry window）。该版本已在 2025 年下线。\n\n本记录只用于迁移考古，不适用于当前部署。不要把 12 秒当作现行值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "下线",
+              "不适",
+              "于当",
+              "于迁",
+              "以前",
+              "前的",
+              "前部",
+              "及以",
+              "只用",
+              "已在",
+              "年下",
+              "年及"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_current_20261027_172403.md》#0]",
+            "documentName": "orbit_current_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 18,
+            "documentId": 20,
+            "claim": "顺带一提，如果监控告警显示 17 秒不符合预期，规范给出的处理方向是先核对部署版本，而不是改回旧值 [资料《orbit_current_20261027_172403.md》#0]",
+            "sourceExcerpt": "ow）。该值从 2025 版开始生效，适用于所有新部署。校验种子是 0x7F3A。\n\n运维注意：不要使用历史迁移文档中的旧值。旧值只描述已经下线的调度器。如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "不是",
+              "不符",
+              "先核",
+              "合预",
+              "告警",
+              "回旧",
+              "如果",
+              "对部",
+              "控告",
+              "改回",
+              "旧值",
+              "是改"
+            ],
+            "numericConflict": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "legacy_only",
+      "trial": 1,
+      "question": "2024 年以前 ORBIT-4721 的旧调度器重试窗口是多少秒？",
+      "knowledgeState": "SUCCESS",
+      "injectedChunkIds": [
+        18,
+        19
+      ],
+      "droppedChunkIds": [],
+      "contextTokens": 464,
+      "budgetTokens": 3000,
+      "providedLabels": [
+        "资料《orbit_current_20261027_172403.md》#0",
+        "资料《orbit_legacy_20261027_172403.md》#0"
+      ],
+      "answer": "**12 秒。**\n\n2024 年及以前使用的旧调度器采用 12 秒的重试窗口，该版本已在 2025 年下线 [资料《orbit_legacy_20261027_172403.md》#0]。\n\n一个容易混淆的地方：这份历史记录明确说明，它只用于迁移考古，不适用于当前部署，不能把 12 秒当作现行值 [资料《orbit_legacy_20261027_172403.md》#0]。现行部署采用的是 17 秒的重试窗口，该值从 2025 版开始生效 [资料《orbit_current_20261027_172403.md》#0]。\n\n因此，你问的是「旧值」，答案是 12 秒；但当你在运维场景中看到重试窗口相关的配置或告警时，应当按 17 秒来理解。",
+      "citations": {
+        "providedLabels": [
+          "资料《orbit_current_20261027_172403.md》#0",
+          "资料《orbit_legacy_20261027_172403.md》#0"
+        ],
+        "total": 3,
+        "valid": 3,
+        "invalid": 0,
+        "illegalRate": 0.0,
+        "invalidLabels": [],
+        "malformedLabels": [],
+        "malformedCount": 0,
+        "syntaxValid": true,
+        "unsupportedCount": 0,
+        "numericConflictCount": 0,
+        "duplicateLabels": [
+          "资料《orbit_legacy_20261027_172403.md》#0"
+        ],
+        "citedDocuments": [
+          "orbit_legacy_20261027_172403.md",
+          "orbit_current_20261027_172403.md"
+        ],
+        "citations": [
+          {
+            "raw": "[资料《orbit_legacy_20261027_172403.md》#0]",
+            "documentName": "orbit_legacy_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 19,
+            "documentId": 21,
+            "claim": "2024 年及以前使用的旧调度器采用 12 秒的重试窗口，该版本已在 2025 年下线 [资料《orbit_legacy_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 历史迁移记录\n\n标记 P4-DISTRACTOR-3M8。2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口（retry window）。该版本已在 2025 年下线。\n\n本记录只用于迁移考古，不适用于当前部署。不要把 12 秒当作现行值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "下线",
+              "以前",
+              "使用",
+              "及以",
+              "已在",
+              "年下",
+              "年及",
+              "度器",
+              "旧调",
+              "本已",
+              "版本",
+              "的重"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_legacy_20261027_172403.md》#0]",
+            "documentName": "orbit_legacy_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 19,
+            "documentId": 21,
+            "claim": "一个容易混淆的地方：这份历史记录明确说明，它只用于迁移考古，不适用于当前部署，不能把 12 秒当作现行值 [资料《orbit_legacy_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 历史迁移记录\n\n标记 P4-DISTRACTOR-3M8。2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口（retry window）。该版本已在 2025 年下线。\n\n本记录只用于迁移考古，不适用于当前部署。不要把 12 秒当作现行值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "不适",
+              "于当",
+              "于迁",
+              "作现",
+              "前部",
+              "历史",
+              "只用",
+              "当作",
+              "当前",
+              "现行",
+              "用于",
+              "秒当"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_current_20261027_172403.md》#0]",
+            "documentName": "orbit_current_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 18,
+            "documentId": 20,
+            "claim": "现行部署采用的是 17 秒的重试窗口，该值从 2025 版开始生效 [资料《orbit_current_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 当前调度规范\n\n本文是 ORBIT-4721 当前部署的现行规范，标记 P4-TARGET-7K2。\n\n当前调度器使用 17 秒的重试窗口（retry window）。该值从 2025 版开始生效，适用于所有新部署。校验种子是 0x7F3A。\n\n运维注意：不要使用历史迁移文档中的旧值。旧值只描述已经下线的调度器。如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "值从",
+              "始生",
+              "开始",
+              "版开",
+              "现行",
+              "生效",
+              "的重",
+              "秒的",
+              "窗口",
+              "试窗",
+              "该值",
+              "部署"
+            ],
+            "numericConflict": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "legacy_only",
+      "trial": 2,
+      "question": "2024 年以前 ORBIT-4721 的旧调度器重试窗口是多少秒？",
+      "knowledgeState": "SUCCESS",
+      "injectedChunkIds": [
+        18,
+        19
+      ],
+      "droppedChunkIds": [],
+      "contextTokens": 464,
+      "budgetTokens": 3000,
+      "providedLabels": [
+        "资料《orbit_current_20261027_172403.md》#0",
+        "资料《orbit_legacy_20261027_172403.md》#0"
+      ],
+      "answer": "**12 秒** [资料《orbit_legacy_20261027_172403.md》#0]\n\n具体来说：2024 年及以前的 ORBIT-4721 旧调度器使用的重试窗口是 12 秒，该版本已在 2025 年下线 [资料《orbit_legacy_20261027_172403.md》#0]。这份记录本身也写明只用于迁移考古，不适用于当前部署 [资料《orbit_legacy_20261027_172403.md》#0]。\n\n顺带把边界划清楚，免得把两个值混用：现行部署用的是 17 秒的重试窗口，从 2025 版开始生效，适用于所有新部署 [资料《orbit_current_20261027_172403.md》#0]。所以如果你在排查当前环境的问题，12 秒只是历史值，不能拿来当现行配置 [资料《orbit_legacy_20261027_172403.md》#0]。\n\n还有一点值得记住：现行规范里特别提醒，如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值 [资料《orbit_current_20261027_172403.md》#0]。也就是说这两个数字的差别背后是「哪一代调度器」的问题，不是同一代里的参数调优。",
+      "citations": {
+        "providedLabels": [
+          "资料《orbit_current_20261027_172403.md》#0",
+          "资料《orbit_legacy_20261027_172403.md》#0"
+        ],
+        "total": 6,
+        "valid": 6,
+        "invalid": 0,
+        "illegalRate": 0.0,
+        "invalidLabels": [],
+        "malformedLabels": [],
+        "malformedCount": 0,
+        "syntaxValid": true,
+        "unsupportedCount": 2,
+        "numericConflictCount": 0,
+        "duplicateLabels": [
+          "资料《orbit_current_20261027_172403.md》#0",
+          "资料《orbit_legacy_20261027_172403.md》#0"
+        ],
+        "citedDocuments": [
+          "orbit_legacy_20261027_172403.md",
+          "orbit_current_20261027_172403.md"
+        ],
+        "citations": [
+          {
+            "raw": "[资料《orbit_legacy_20261027_172403.md》#0]",
+            "documentName": "orbit_legacy_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 19,
+            "documentId": 21,
+            "claim": "**12 秒** [资料《orbit_legacy_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 历史迁移记录\n\n标记 P4-DISTRACTOR-3M8。2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口（retry window）。该版本已在 2025 年下线。\n\n本记录只用于迁移考古，不适用于当前部署。不要把 12 秒当作现行值。",
+            "lexicalSupport": "none",
+            "overlapTerms": [],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_legacy_20261027_172403.md》#0]",
+            "documentName": "orbit_legacy_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 19,
+            "documentId": 21,
+            "claim": "具体来说：2024 年及以前的 ORBIT-4721 旧调度器使用的重试窗口是 12 秒，该版本已在 2025 年下线 [资料《orbit_legacy_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 历史迁移记录\n\n标记 P4-DISTRACTOR-3M8。2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口（retry window）。该版本已在 2025 年下线。\n\n本记录只用于迁移考古，不适用于当前部署。不要把 12 秒当作现行值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "orbit-4721",
+              "下线",
+              "以前",
+              "使用",
+              "前的",
+              "及以",
+              "器使",
+              "已在",
+              "年下",
+              "年及",
+              "度器",
+              "旧调"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_legacy_20261027_172403.md》#0]",
+            "documentName": "orbit_legacy_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 19,
+            "documentId": 21,
+            "claim": "这份记录本身也写明只用于迁移考古，不适用于当前部署 [资料《orbit_legacy_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 历史迁移记录\n\n标记 P4-DISTRACTOR-3M8。2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口（retry window）。该版本已在 2025 年下线。\n\n本记录只用于迁移考古，不适用于当前部署。不要把 12 秒当作现行值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "不适",
+              "于当",
+              "于迁",
+              "前部",
+              "只用",
+              "当前",
+              "用于",
+              "移考",
+              "考古",
+              "记录",
+              "迁移",
+              "适用"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_current_20261027_172403.md》#0]",
+            "documentName": "orbit_current_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 18,
+            "documentId": 20,
+            "claim": "顺带把边界划清楚，免得把两个值混用：现行部署用的是 17 秒的重试窗口，从 2025 版开始生效，适用于所有新部署 [资料《orbit_current_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 当前调度规范\n\n本文是 ORBIT-4721 当前部署的现行规范，标记 P4-TARGET-7K2。\n\n当前调度器使用 17 秒的重试窗口（retry window）。该值从 2025 版开始生效，适用于所有新部署。校验种子是 0x7F3A。\n\n运维注意：不要使用历史迁移文档中的旧值。旧值只描述已经下线的调度器。如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "于所",
+              "始生",
+              "开始",
+              "所有",
+              "新部",
+              "有新",
+              "版开",
+              "现行",
+              "生效",
+              "用于",
+              "的重",
+              "秒的"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_legacy_20261027_172403.md》#0]",
+            "documentName": "orbit_legacy_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 19,
+            "documentId": 21,
+            "claim": "所以如果你在排查当前环境的问题，12 秒只是历史值，不能拿来当现行配置 [资料《orbit_legacy_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 历史迁移记录\n\n标记 P4-DISTRACTOR-3M8。2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口（retry window）。该版本已在 2025 年下线。\n\n本记录只用于迁移考古，不适用于当前部署。不要把 12 秒当作现行值。",
+            "lexicalSupport": "none",
+            "overlapTerms": [
+              "历史",
+              "当前",
+              "现行"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_current_20261027_172403.md》#0]",
+            "documentName": "orbit_current_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 18,
+            "documentId": 20,
+            "claim": "还有一点值得记住：现行规范里特别提醒，如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值 [资料《orbit_current_20261027_172403.md》#0]",
+            "sourceExcerpt": "ow）。该值从 2025 版开始生效，适用于所有新部署。校验种子是 0x7F3A。\n\n运维注意：不要使用历史迁移文档中的旧值。旧值只描述已经下线的调度器。如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "不是",
+              "不符",
+              "先核",
+              "合预",
+              "告警",
+              "回旧",
+              "如果",
+              "对部",
+              "应先",
+              "控告",
+              "改回",
+              "旧值"
+            ],
+            "numericConflict": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "legacy_only",
+      "trial": 3,
+      "question": "2024 年以前 ORBIT-4721 的旧调度器重试窗口是多少秒？",
+      "knowledgeState": "SUCCESS",
+      "injectedChunkIds": [
+        18,
+        19
+      ],
+      "droppedChunkIds": [],
+      "contextTokens": 464,
+      "budgetTokens": 3000,
+      "providedLabels": [
+        "资料《orbit_current_20261027_172403.md》#0",
+        "资料《orbit_legacy_20261027_172403.md》#0"
+      ],
+      "answer": "**12 秒。**\n\n按照历史迁移记录，2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口，该版本已在 2025 年下线 [资料《orbit_legacy_20261027_172403.md》#0]。\n\n需要留意的是，这个值只适用于已下线的旧版本，不能当作现行配置使用；当前部署的调度器使用 17 秒 [资料《orbit_current_20261027_172403.md》#0]。如果是在做迁移考古或对照告警，记得先确认说的是哪一版调度器。",
+      "citations": {
+        "providedLabels": [
+          "资料《orbit_current_20261027_172403.md》#0",
+          "资料《orbit_legacy_20261027_172403.md》#0"
+        ],
+        "total": 2,
+        "valid": 2,
+        "invalid": 0,
+        "illegalRate": 0.0,
+        "invalidLabels": [],
+        "malformedLabels": [],
+        "malformedCount": 0,
+        "syntaxValid": true,
+        "unsupportedCount": 0,
+        "numericConflictCount": 0,
+        "duplicateLabels": [],
+        "citedDocuments": [
+          "orbit_legacy_20261027_172403.md",
+          "orbit_current_20261027_172403.md"
+        ],
+        "citations": [
+          {
+            "raw": "[资料《orbit_legacy_20261027_172403.md》#0]",
+            "documentName": "orbit_legacy_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 19,
+            "documentId": 21,
+            "claim": "按照历史迁移记录，2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口，该版本已在 2025 年下线 [资料《orbit_legacy_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 历史迁移记录\n\n标记 P4-DISTRACTOR-3M8。2024 年及以前的 ORBIT-4721 旧调度器使用 12 秒的重试窗口（retry window）。该版本已在 2025 年下线。\n\n本记录只用于迁移考古，不适用于当前部署。不要把 12 秒当作现行值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "orbit-4721",
+              "下线",
+              "以前",
+              "使用",
+              "前的",
+              "历史",
+              "及以",
+              "史迁",
+              "器使",
+              "已在",
+              "年下",
+              "年及"
+            ],
+            "numericConflict": false
+          },
+          {
+            "raw": "[资料《orbit_current_20261027_172403.md》#0]",
+            "documentName": "orbit_current_20261027_172403.md",
+            "chunkIndex": 0,
+            "valid": true,
+            "chunkId": 18,
+            "documentId": 20,
+            "claim": "当前部署的调度器使用 17 秒 [资料《orbit_current_20261027_172403.md》#0]",
+            "sourceExcerpt": "ORBIT-4721 当前调度规范\n\n本文是 ORBIT-4721 当前部署的现行规范，标记 P4-TARGET-7K2。\n\n当前调度器使用 17 秒的重试窗口（retry window）。该值从 2025 版开始生效，适用于所有新部署。校验种子是 0x7F3A。\n\n运维注意：不要使用历史迁移文档中的旧值。旧值只描述已经下线的调度器。如果监控告警显示 17 秒不符合预期，应先核对部署版本，而不是改回旧值。",
+            "lexicalSupport": "strong",
+            "overlapTerms": [
+              "使用",
+              "前部",
+              "器使",
+              "度器",
+              "当前",
+              "的调",
+              "署的",
+              "调度",
+              "部署"
+            ],
+            "numericConflict": false
+          }
+        ]
+      }
+    }
+  ],
+  "semanticReview": "PENDING"
+}

@@ -9,6 +9,7 @@ import com.ails.backend.entity.Document;
 import com.ails.backend.entity.DocumentChunk;
 import com.ails.backend.enums.DocumentStatus;
 import com.ails.backend.mapper.DocumentMapper;
+import com.ails.backend.security.InternalIdentitySigner;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -38,7 +39,10 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -46,6 +50,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
 
 /**
@@ -73,7 +78,13 @@ import static org.assertj.core.api.Assertions.fail;
                 "ails.document.index.max-pool-size=2",
                 "ails.document.index.queue-capacity=16",
                 "ails.document.index.parse-timeout-ms=5000",
-                "ails.document.index.index-timeout-ms=5000"
+                "ails.document.index.index-timeout-ms=5000",
+                "ails.document.index.stale-processing-timeout-ms=60000",
+                // 定时扫描在测试里不自动跑；每个用例直接调用 recoverStale(now)，
+                // 用可控时间点验证阈值边界。
+                "ails.document.index.recovery-interval-ms=3600000",
+                "ails.document.index.recovery-initial-delay-ms=3600000",
+                "ails.document.index.recovery-batch-size=100"
         })
 class DocumentIndexServiceIntegrationTest {
 
@@ -94,6 +105,9 @@ class DocumentIndexServiceIntegrationTest {
     private DocumentMapper documentMapper;
 
     @Autowired
+    private DocumentIndexRecoveryService recoveryService;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     private Long userId;
@@ -106,11 +120,14 @@ class DocumentIndexServiceIntegrationTest {
                         + "?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
                         + "&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true"));
         registry.add("spring.datasource.username", () -> env("AILS_IT_MYSQL_USER", "root"));
-        registry.add("spring.datasource.password", () -> env("AILS_IT_MYSQL_PASSWORD", "root"));
+        registry.add("spring.datasource.password", () -> env("AILS_IT_MYSQL_PASSWORD", ""));
         registry.add("ails.document.storage.root", STORAGE_ROOT::toString);
         registry.add("ails.document.storage.max-size-bytes", () -> 1024 * 1024);
         registry.add("ails.agent.base-url", AGENT::baseUrl);
         registry.add("ails.internal.token", () -> INTERNAL_TOKEN);
+        // AgentDocumentClient 会为文档请求签发代表用户的内部声明。
+        // 这是测试专用随机值，不是生产密钥。
+        registry.add("ails.internal.identity-secret", () -> "document-index-it-identity-secret");
     }
 
     @BeforeEach
@@ -291,7 +308,126 @@ class DocumentIndexServiceIntegrationTest {
         assertThat(failed.getIndexError()).hasSize(1024);
     }
 
+    // ===================== 超时 PROCESSING 回收 =====================
+
+    @Test
+    void freshProcessingIsNotRecovered() throws Exception {
+        Document document = insertDocument("hello content", DocumentStatus.PROCESSING);
+
+        int marked = recoveryService.recoverStale(LocalDateTime.now());
+
+        assertThat(marked).isZero();
+        Document stillProcessing = documentMapper.selectById(document.getId());
+        assertThat(stillProcessing.getStatus()).isEqualTo(DocumentStatus.PROCESSING);
+        assertThat(stillProcessing.getIndexError()).isNull();
+    }
+
+    @Test
+    void staleProcessingIsFailedWithTraceableErrorAndExcludedFromReady() throws Exception {
+        Document document = insertDocument("hello content", DocumentStatus.PROCESSING);
+        ageDocument(document.getId(), 2, "HOUR");
+
+        int marked = recoveryService.recoverStale(LocalDateTime.now());
+
+        assertThat(marked).isEqualTo(1);
+        Document failed = documentMapper.selectById(document.getId());
+        assertThat(failed.getStatus()).isEqualTo(DocumentStatus.FAILED);
+        assertThat(failed.getIndexError())
+                .contains("超过")
+                .contains("PROCESSING")
+                .contains("中断")
+                .contains("可重新提交索引");
+        // 回收不伪造索引次数，也不产生 chunk。
+        assertThat(failed.getIndexAttempts()).isZero();
+        assertThat(failed.getChunkCount()).isZero();
+        assertThat(chunkService.listByDocument(document.getId())).isEmpty();
+        assertThat(documentMapper.selectReadyIndexedIds(userId, spaceId, "hash-test"))
+                .doesNotContain(document.getId());
+    }
+
+    @Test
+    void restartScanRecoversAnInterruptedDocumentToAnExplicitTerminalState() throws Exception {
+        // 模拟进程在索引中被杀、重启后定时扫描走到生产入口 recoverStale()。
+        Document document = insertDocument("hello content", DocumentStatus.PROCESSING);
+        ageDocument(document.getId(), 2, "HOUR");
+
+        recoveryService.recoverStale();
+
+        Document failed = documentMapper.selectById(document.getId());
+        assertThat(failed.getStatus()).isEqualTo(DocumentStatus.FAILED);
+        assertThat(failed.getIndexError()).contains("中断").contains("可重新提交索引");
+        assertThat(documentMapper.selectReadyIndexedIds(userId, spaceId, "hash-test"))
+                .doesNotContain(document.getId());
+    }
+
+    @Test
+    void recoveryIsIdempotentAndDoesNotRewriteTheError() throws Exception {
+        Document document = insertDocument("hello content", DocumentStatus.PROCESSING);
+        ageDocument(document.getId(), 2, "HOUR");
+
+        assertThat(recoveryService.recoverStale(LocalDateTime.now())).isEqualTo(1);
+        Document failed = documentMapper.selectById(document.getId());
+        String firstError = failed.getIndexError();
+        assertThat(firstError).isNotBlank();
+
+        // 第二次扫描：状态已不是 PROCESSING，条件更新 0 行。
+        assertThat(recoveryService.recoverStale(LocalDateTime.now())).isZero();
+        Document afterSecondScan = documentMapper.selectById(document.getId());
+        assertThat(afterSecondScan.getStatus()).isEqualTo(DocumentStatus.FAILED);
+        assertThat(afterSecondScan.getIndexError()).isEqualTo(firstError);
+        assertThat(afterSecondScan.getIndexAttempts()).isZero();
+    }
+
+    @Test
+    void recoveryRespectsTheTimeoutBoundary() throws Exception {
+        Document document = insertDocument("hello content", DocumentStatus.PROCESSING);
+        // 阈值为 60 秒：30 秒前启动的任务仍在合法执行窗口内，不能被回收。
+        ageDocument(document.getId(), 30, "SECOND");
+
+        assertThat(recoveryService.recoverStale(LocalDateTime.now())).isZero();
+        assertThat(documentMapper.selectById(document.getId()).getStatus())
+                .isEqualTo(DocumentStatus.PROCESSING);
+
+        ageDocument(document.getId(), 10, "MINUTE");
+        assertThat(recoveryService.recoverStale(LocalDateTime.now())).isEqualTo(1);
+        assertThat(documentMapper.selectById(document.getId()).getStatus())
+                .isEqualTo(DocumentStatus.FAILED);
+    }
+
+    @Test
+    void lateCompletionCannotOverwriteARecoveredDocument() throws Exception {
+        Document document = insertDocument("hello content", DocumentStatus.PROCESSING);
+        ageDocument(document.getId(), 2, "HOUR");
+        assertThat(recoveryService.recoverStale(LocalDateTime.now())).isEqualTo(1);
+
+        // 模拟原任务晚到：状态已是 FAILED，complete 的条件更新必须失败。
+        assertThatThrownBy(() ->
+                indexService.complete(document.getId(), 1, "late-parser", "hash-test"))
+                .isInstanceOf(DocumentIndexException.class);
+
+        Document afterLateComplete = documentMapper.selectById(document.getId());
+        assertThat(afterLateComplete.getStatus()).isEqualTo(DocumentStatus.FAILED);
+        assertThat(afterLateComplete.getIndexedAt()).isNull();
+        assertThat(afterLateComplete.getChunkCount()).isZero();
+    }
+
     // ===================== helpers =====================
+
+    private void ageDocument(Long documentId, int amount, String unit) {
+        // 用 JVM 时钟而不是 MySQL NOW()：生产代码写入的 updated_at 与回收 cutoff
+        // 都来自 JVM；若测试库会话时区与 JVM 不同，NOW() 会把边界用例算错。
+        ChronoUnit chronoUnit = switch (unit) {
+            case "SECOND" -> ChronoUnit.SECONDS;
+            case "MINUTE" -> ChronoUnit.MINUTES;
+            case "HOUR" -> ChronoUnit.HOURS;
+            default -> throw new IllegalArgumentException("unsupported unit: " + unit);
+        };
+        LocalDateTime aged = LocalDateTime.now().minus(amount, chronoUnit);
+        jdbc.update(
+                "UPDATE document SET updated_at = ? WHERE id = ?",
+                Timestamp.valueOf(aged),
+                documentId);
+    }
 
     private Document insertDocument(String content, DocumentStatus status) throws IOException {
         String fileName = "doc-" + System.nanoTime() + ".md";
@@ -390,9 +526,11 @@ class DocumentIndexServiceIntegrationTest {
     @Import({
             DocumentService.class,
             DocumentIndexService.class,
+            DocumentIndexRecoveryService.class,
             DocumentChunkService.class,
             DocumentStorageService.class,
             AgentDocumentClient.class,
+            InternalIdentitySigner.class,
             LearningSpaceService.class,
             DocumentIndexConfig.class,
             MybatisPlusConfig.class,
