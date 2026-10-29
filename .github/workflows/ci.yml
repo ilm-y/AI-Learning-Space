@@ -73,6 +73,9 @@ jobs:
           AILS_TEST_RABBITMQ_URL: amqp://guest:guest@localhost:5672/
         run: python -m pytest -q
 
+      # 离线评测显式注入 FixtureRetriever；生产分析链路仍保持
+      # allow_degradation=False，不会因评测需要而放宽 fixture 限制。
+      # 回归见 agent/tests/test_evaluation_injection.py。
       - name: Offline evaluation
         working-directory: .
         env:
