@@ -57,10 +57,15 @@ analyze 返回的 Evidence / Proposal / Memory 都是**建议**：后端会再�
 按 `dedupe_key` 去重、走误区生命周期与 Memory 状态机。这样 Agent 的判断可以错、
 可以重放，但数据库不会因此出现重复或越权数据。
 
-**边界的落点是 token，不是 userId。** Agent 检索时不「以服务身份访问」，
-而是**拿着用户自己的 JWT** 去调后端读接口（`ChatAgentRequest.authToken`），
-所以后端的鉴权逻辑一行都不用为 Agent 开后门，越权访问在结构上就不可能。
-代价是后端必须把这个 token 一路带到生成线程 —— SSE 的生成线程上没有 `SecurityContext`。
+**边界的落点是凭据绑定的用户身份，不是请求体 userId。** 两条链路：
+
+- 同步 Chat：Agent 拿着**用户自己的 JWT**（`ChatAgentRequest.authToken`）调后端；
+- 异步 Worker：不带过期 JWT，改用 `X-Internal-Token` + Spring Boot 签发的
+  **短期 HMAC 身份声明**（`X-Internal-Identity`，`aud=learning-backend`）。
+  用户身份来自声明 `sub`，`X-Internal-User-Id` 只交叉核对。
+
+两条路径最终都落到后端的 `SecurityUtil.currentUserId()`，空间/对话归属校验只
+一份实现。没有签名身份时，只有 token 不会建立用户上下文。
 
 ---
 
@@ -102,7 +107,9 @@ python -m app.cli --preview "为什么你认为我理解了 TLB？"
 
 ```bash
 python -m app.main          # 或 uvicorn app.main:app --port 8000
-curl -s http://127.0.0.1:8000/health
+curl -s http://127.0.0.1:8000/health          # 存活探针：只回 {"status":"ok"}
+curl -s -H "X-Internal-Token: $AILS_INTERNAL_TOKEN" \
+  http://127.0.0.1:8000/health/diagnostics    # 受保护：当前生效的适配器
 ```
 
 ### 接真实后端数据
@@ -133,14 +140,18 @@ cd backend/backend
 ./mvnw spring-boot:run
 
 # 终端 3：自检
-curl -s http://127.0.0.1:8000/health
+curl -s http://127.0.0.1:8000/health          # 存活探针
+curl -s -H "X-Internal-Token: $AILS_INTERNAL_TOKEN" \
+  http://127.0.0.1:8000/health/diagnostics    # 适配器与检索配置
 ```
 
-`/health` 会直接告诉你当前生效的是哪套适配器，先看这个再看别的：
+`/health` 只回 `{"status":"ok"}`，不泄露配置；`/health/diagnostics` 需要内部凭据，
+会直接告诉你当前生效的是哪套适配器，先看这个再看别的：
 
 ```json
 {"status":"ok","llm_provider":"mock","retriever_mode":"auto",
- "backend_base_url":"http://localhost:8080","max_context_tokens":3000}
+ "backend_base_url":"http://localhost:8080","max_context_tokens":3000,
+ "internal_auth_configured":true}
 ```
 
 `retriever_mode` 是 `auto` 时：**带 `authToken` 走 HTTP，不带就退回 Fixture**。

@@ -27,6 +27,10 @@ api() { curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/
 
 jq_() { python -c "import sys,json;d=json.load(sys.stdin);$1"; }
 
+mint_identity() { # mint_identity <userId>
+  ( cd "$ROOT/agent" && python -m app.internal_identity --user "$1" )
+}
+
 # 从 gitignore 的 application-local.yml 里读密码，不在脚本里硬编码
 q() {
   local pwd_
@@ -39,8 +43,12 @@ step() { echo; echo "=== $* ==="; }
 # ---------------------------------------------------------------- 0. 前置
 
 step "0. 前置检查"
-curl -s "$AGENT/health" | jq_ "print('  agent:', d.get('llm_provider'), '| retriever:', d.get('retriever_mode'), '| backend:', d.get('backend_base_url'))" \
-  || { echo "  Python Agent 没起（$AGENT/health 无响应），先跑 cd agent && python -m app.main"; exit 1; }
+if [ -z "${AILS_INTERNAL_TOKEN:-}" ] || [ -z "${AILS_INTERNAL_IDENTITY_SECRET:-}" ]; then
+  echo "  需要 AILS_INTERNAL_TOKEN（诊断）与 AILS_INTERNAL_IDENTITY_SECRET（preview 身份签名）"; exit 1
+fi
+curl -s -m 3 -H "X-Internal-Token: $AILS_INTERNAL_TOKEN" \
+  "$AGENT/health/diagnostics" | jq_ "print('  agent:', d.get('llm_provider'), '| retriever:', d.get('retriever_mode'), '| backend:', d.get('backend_base_url'))" \
+  || { echo "  Python Agent 没起或诊断不可用（$AGENT/health/diagnostics）"; exit 1; }
 curl -s "$B/actuator/health" > /dev/null 2>&1 || true
 
 curl -s -X POST "$B/api/auth/register" -H 'Content-Type: application/json' \
@@ -102,6 +110,8 @@ step "5. 验收标准第 3 步：Agent 上下文里存在 understanding:{concept
 # 不落盘、直接管道给 python：Git Bash 的 /tmp 与原生 Windows Python 的 /tmp 不是同一个目录，
 # 中间转一手文件就会 FileNotFoundError（踩过一次）
 PREVIEW=$(api -X POST "$AGENT/agent/context/preview" -H 'Content-Type: application/json' \
+  -H "X-Internal-Token: ${AILS_INTERNAL_TOKEN:-}" -H "X-Internal-User-Id: 1" \
+  -H "X-Internal-Identity: $(mint_identity 1)" \
   -d "{\"runId\":1,\"userId\":1,\"conversationId\":$CA,\"learningSpaceId\":$SID,\"userMessage\":\"TLB Miss 和 Page Fault 什么关系\",\"authToken\":\"$TOKEN\"}")
 echo "$PREVIEW" | jq_ "
 ctx = d['data']['context']
@@ -234,6 +244,8 @@ LOG=${AGENT_LOG:-/tmp/agent.log}
 
 echo "  -- 显式带上 traceId/session 的 preview：字段是否原样落到 Agent 侧 --"
 api -X POST "$AGENT/agent/context/preview" -H 'Content-Type: application/json' \
+  -H "X-Internal-Token: ${AILS_INTERNAL_TOKEN:-}" -H "X-Internal-User-Id: 1" \
+  -H "X-Internal-Identity: $(mint_identity 1)" \
   -d "{\"runId\":1,\"userId\":1,\"conversationId\":$CA,\"learningSpaceId\":$SID,\"userMessage\":\"TLB\",\"authToken\":\"$TOKEN\",\"traceId\":\"0123456789abcdef0123456789abcdef\",\"session\":{\"id\":$CA_SESS_AFTER,\"title\":\"虚拟内存\",\"goal\":\"理解地址转换\",\"currentFocus\":\"卡在 TLB Miss\"}}" \
   | jq_ "
 print('  trace.traceId     =', d['data']['trace']['traceId'])

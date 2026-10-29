@@ -122,23 +122,45 @@ python -m app.main
 
 默认值：`AILS_LLM_PROVIDER=mock`、`AILS_RETRIEVER_MODE=auto`。
 `auto` 的含义是「请求带 `authToken` 走 HTTP 回查后端，不带则退回 Fixture」。
-这个降级是**静默的**：联调时先看 `/health` 和 `/agent/context/preview`，
-不要只看最终回答。
+这个降级现在会通过 `/agent/context/preview` 的 `fallbackVisible` / `fallbackReason`
+暴露出来；诊断配置时先看 `/health/diagnostics` 和 preview，不要只看最终回答。
 
 ```bash
-curl -s http://127.0.0.1:8000/health
+curl -s http://127.0.0.1:8000/health          # {"status":"ok"}
+curl -s -H "X-Internal-Token: $AILS_INTERNAL_TOKEN" \
+  http://127.0.0.1:8000/health/diagnostics
 # {"status":"ok","llm_provider":"mock","retriever_mode":"auto",...}
+
+# 用户级内部接口还需要签名身份；用与 Agent 相同的密钥在本地临时签发。
+IDENTITY=$(cd agent && AILS_INTERNAL_IDENTITY_SECRET="$AILS_INTERNAL_IDENTITY_SECRET" \
+  python -m app.internal_identity --user 1)
+curl -s -X POST http://127.0.0.1:8000/agent/context/preview \
+  -H 'Content-Type: application/json' \
+  -H "X-Internal-Token: $AILS_INTERNAL_TOKEN" \
+  -H "X-Internal-Identity: $IDENTITY" \
+  -d '{"runId":1,"userId":1,"conversationId":1,"learningSpaceId":1,"userMessage":"TLB"}'
 ```
+
+`X-Internal-User-Id` 可以继续携带，但只用于交叉核对；身份来自签名声明的 `sub`。
+只有共享 token、没有 `X-Internal-Identity` 的请求会被 401 拒绝。
 
 ### 2.6 MQ Worker（仅 MQ 模式）
 
 ```bash
 cd agent
-AILS_INTERNAL_TOKEN=<与后端一致> python -m app.worker
+AILS_INTERNAL_TOKEN=<与后端一致> \
+AILS_INTERNAL_IDENTITY_SECRET=<与后端一致> \
+  python -m app.worker
 ```
 
-`AILS_INTERNAL_TOKEN` 必须与后端 `ails.internal.token` 一致。为空时 Worker 的检索会被
-后端拒绝。没有 RabbitMQ 时 Worker 连接失败并退出，不影响 `app.main`。
+`AILS_INTERNAL_TOKEN` 必须与后端 `ails.internal.token` 一致；
+`AILS_INTERNAL_IDENTITY_SECRET` 必须与后端 `ails.internal.identity-secret` 一致，
+且建议与 token 使用不同值。它只用于校验后端发给 Agent 的 `learning-agent` 声明。
+
+Worker **不持有** `delegation-secret`，也不自行签发后端身份：后端投递任务时把
+`backendIdentity`（`aud=learning-backend`, `scope=analysis:read`）放进 MQ 消息，
+Worker 原样转发。缺少该字段的 v1 消息会被拒绝并转入死信。
+没有 RabbitMQ 时 Worker 连接失败并退出，不影响 `app.main`。
 
 ## 3. 后端环境变量
 
@@ -154,7 +176,13 @@ AILS_INTERNAL_TOKEN=<与后端一致> python -m app.worker
 | `AILS_AGENT_GATEWAY` | `stub` | `stub` / `http` |
 | `AILS_AGENT_BASE_URL` | `http://127.0.0.1:8000` | Agent 地址 |
 | `AILS_ANALYSIS_MODE` | `inline` | `inline` / `mq` |
-| `AILS_INTERNAL_TOKEN` | 空 | Worker 内部接口凭据；空表示禁用 |
+| `AILS_INTERNAL_TOKEN` | 空 | 共享服务凭据；空表示禁用内部入口 |
+| `AILS_INTERNAL_IDENTITY_SECRET` | 空 | 内部身份签名密钥；生产必须覆盖且与 token 不同 |
+| `AILS_INTERNAL_IDENTITY_AUDIENCE` | `learning-agent` | Spring → Agent 的声明接收方 |
+| `AILS_INTERNAL_DELEGATION_SECRET` | 空 | Spring → 后端读接口的委托密钥；**只给后端**，绝不下发给 Agent |
+| `AILS_BACKEND_IDENTITY_AUDIENCE` | `learning-backend` | 后端接受的委托声明接收方 |
+| `AILS_INTERNAL_IDENTITY_TTL_SECONDS` | `60` | Spring → Agent 声明有效期 |
+| `AILS_INTERNAL_DELEGATION_TTL_SECONDS` | `900` | 委托声明有效期（短期，仍可重放） |
 | `RABBITMQ_HOST` / `RABBITMQ_PORT` | `localhost` / `5672` | 仅 mq 模式 |
 | `AILS_DOCUMENT_STORAGE_ROOT` | `./data/documents` | 上传文件落盘目录 |
 | `AILS_DOCUMENT_MAX_SIZE_BYTES` | `10485760` | 10 MiB，必须小于 multipart 上限 |
@@ -177,6 +205,9 @@ AILS_INTERNAL_TOKEN=<与后端一致> python -m app.worker
 | `AILS_LLM_API_KEY` | 空 | **只从本地 gitignored `.env` 或环境变量读取** |
 | `AILS_RETRIEVER_MODE` | `auto` | `auto` / `http` / `fixture` |
 | `AILS_INTERNAL_TOKEN` | 空 | 与后端一致才可走内部文档接口 / Worker |
+| `AILS_INTERNAL_IDENTITY_SECRET` | 空 | 与后端一致才可校验用户级内部请求 / Worker 回访 |
+| `AILS_INTERNAL_IDENTITY_AUDIENCE` | `learning-agent` | Agent 只接受该接收方的声明 |
+| `AILS_INTERNAL_DELEGATION_SECRET` | **不设置** | Agent 不需要、也不应持有；设置后也不会改变转发语义 |
 | `AILS_RABBITMQ_URL` | `amqp://guest:guest@localhost:5672/` | Worker |
 | `AILS_EMBEDDING_PROVIDER` | `hash` | `hash` 仅开发；真实语义检索用 `openai` |
 | `AILS_EMBEDDING_MODEL` / `_DIMENSION` | `text-embedding-3-small` / `256` | 必须与模型实际维度一致 |
@@ -207,7 +238,10 @@ cd agent && python -m app.main
 cd backend/backend && ./mvnw spring-boot:run
 
 # 3) 自检
-curl -s http://127.0.0.1:8000/health
+curl -s http://127.0.0.1:8000/health          # 存活探针
+curl -s -H "X-Internal-Token: $AILS_INTERNAL_TOKEN" \
+  -H "X-Internal-User-Id: 1" \
+  http://127.0.0.1:8000/health/diagnostics    # 受保护诊断
 curl -s http://127.0.0.1:8080/api/auth/login -H 'Content-Type: application/json' \
   -d '{"username":"<用户>","password":"<密码>"}'
 ```
