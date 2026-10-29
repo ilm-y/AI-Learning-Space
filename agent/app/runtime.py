@@ -156,11 +156,24 @@ class PreparedRun:
     context: BuiltContext
     retriever_name: str
     degraded: bool
+    requested_mode: str = "auto"
+    fallback_reason: str | None = None
+    retriever_class: str = ""
 
     @property
     def trace(self) -> RunTrace:
         assert self.state.trace is not None
         return self.state.trace
+
+    def as_dict(self) -> dict[str, object]:
+        """结构化回退信息：调用方不依赖日志或「看一眼回答像不像样例」。"""
+        return {
+            "requestedMode": self.requested_mode,
+            "resolvedSource": self.retriever_name,
+            "degraded": self.degraded,
+            "fallbackVisible": self.degraded,
+            "fallbackReason": self.fallback_reason,
+        }
 
 
 class AgentRuntime:
@@ -204,6 +217,9 @@ class AgentRuntime:
                     "detectedConcepts": prepared.state.concept_names,
                     "estimatedTokens": prepared.context.estimated_tokens,
                     "warnings": prepared.context.warnings,
+                    "retrieverSource": prepared.retriever_name,
+                    "degraded": prepared.degraded,
+                    "fallbackReason": prepared.fallback_reason,
                 },
             )
 
@@ -275,7 +291,10 @@ class AgentRuntime:
                 prepared.state.response += delta
                 yield delta
 
-        status = prepared.state.knowledge_status
+        # Guard 只看预算后的最终状态。SUCCESS_BUT_DROPPED / SUCCESS_PARTIAL 不在
+        # GUARD_STATUSES 里：它们的说明已经在 Context Builder 阶段写进 Prompt，
+        # 这里再追加「没有可用资料」会与 Context 的真实状态矛盾。
+        status = prepared.context.knowledge_state
         if status not in GUARD_STATUSES:
             return
 
@@ -345,7 +364,19 @@ class AgentRuntime:
         prepared.trace.record(
             TraceEventType.HISTORY_GUARD,
             hasTrajectory=bool(state.trajectories),
-            evidenceCount=sum(len(item.evidences) for item in state.trajectories),
+            evidenceCount=len(
+                {
+                    evidence.id
+                    for evidence in [
+                        *[
+                            item
+                            for trajectory in state.trajectories
+                            for item in trajectory.evidences
+                        ],
+                        *state.evidences,
+                    ]
+                }
+            ),
             rawChars=len(raw),
             issues=[issue.as_dict() for issue in initial_issues],
             regenerated=regenerated,
@@ -474,6 +505,7 @@ class AgentRuntime:
                 self._settings,
                 request.auth_token,
                 user_id=request.user_id,
+                delegation_token=request.backend_identity,
                 knowledge_search=self._knowledge_search,
             )
         try:
@@ -483,17 +515,29 @@ class AgentRuntime:
                 TraceEventType.CONTEXT_BUILT,
                 estimatedTokens=state.context.estimated_tokens,
                 droppedSections=state.context.dropped_sections,
+                # 检索层状态与预算后的最终状态必须同时可见：只看前者会把
+                # 「检索成功但知识被全部丢弃」误读成模型拿到了资料。
+                knowledgeStatus=state.knowledge_status,
+                knowledgeState=state.context.knowledge_state,
+                knowledgeInjected=state.context.knowledge_injected_chunk_ids,
+                knowledgeDropped=state.context.knowledge_dropped_chunk_ids,
                 warnings=state.context.warnings,
             )
         finally:
             if owned_retriever:
                 await retriever.aclose()
 
+        requested_mode, degraded, fallback_reason = _retriever_selection(
+            retriever, self._settings
+        )
         return PreparedRun(
             state=state,
             context=state.context,
             retriever_name=retriever.name,
-            degraded=isinstance(retriever, FallbackRetriever) and retriever.degraded,
+            degraded=degraded,
+            requested_mode=requested_mode,
+            fallback_reason=fallback_reason,
+            retriever_class=type(retriever).__name__,
         )
 
     # ---------- 检索 ----------
@@ -625,6 +669,23 @@ class AgentRuntime:
 
     async def aclose(self) -> None:
         await self._llm.aclose()
+
+
+def _retriever_selection(retriever, settings: Settings) -> tuple[str, bool, str | None]:
+    """把「用了什么检索源、是否降级、为什么」变成结构化事实。
+
+    - auto 无凭据 → Fixture，reason=no_credentials；
+    - auto 有凭据但后端失败 → FallbackRetriever.degraded，reason=backend_unavailable；
+    - 显式 fixture → 不叫降级（这是调用方明确选择），但仍可从 resolvedSource 看出。
+    """
+    mode = settings.retriever_mode.strip().lower()
+    if isinstance(retriever, FallbackRetriever):
+        if retriever.degraded:
+            return mode, True, "backend_unavailable"
+        return mode, False, None
+    if mode == "auto" and retriever.name.startswith("fixture:"):
+        return mode, True, "no_credentials"
+    return mode, False, None
 
 
 def _wants_evidence(query: str) -> bool:

@@ -109,7 +109,7 @@ class DocumentIndexE2EIntegrationTest {
                         + "?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
                         + "&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true"));
         registry.add("spring.datasource.username", () -> env("AILS_IT_MYSQL_USER", "root"));
-        registry.add("spring.datasource.password", () -> env("AILS_IT_MYSQL_PASSWORD", "root"));
+        registry.add("spring.datasource.password", () -> env("AILS_IT_MYSQL_PASSWORD", ""));
         registry.add("ails.document.storage.root", STORAGE_ROOT::toString);
         registry.add("ails.document.storage.max-size-bytes", () -> 1024 * 1024);
         registry.add("ails.agent.base-url", () -> AGENT_URL);

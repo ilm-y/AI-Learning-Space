@@ -81,6 +81,12 @@ RENDER_ORDER = (
     "evidence",
 )
 
+# 检索层状态描述「检索发生了什么」；预算裁剪后的状态描述「模型最终看到了什么」。
+# 两者不能混为一谈：SUCCESS 只说明检索成功，不保证片段最后仍在 Prompt 里。
+KNOWLEDGE_STATE_SUCCESS = "SUCCESS"
+KNOWLEDGE_STATE_SUCCESS_PARTIAL = "SUCCESS_PARTIAL"
+KNOWLEDGE_STATE_SUCCESS_BUT_DROPPED = "SUCCESS_BUT_DROPPED"
+
 # 只有检索结果不是 SUCCESS 时才需要向模型解释「为什么没有知识片段」。
 # 每一种状态的措辞都必须区分「没有可用文档」「没有检索到支持」「检索失败无法确认」，
 # 不能让模型把「这次没检索到」说成「资料或世界上不存在」。
@@ -200,6 +206,22 @@ class BuiltContext:
     sections: list[ContextSection]
     estimated_tokens: int
     warnings: list[str] = field(default_factory=list)
+    # 预算口径（Phase 1.1 明确）：
+    # - `max_context_tokens` 约束的是**动态上下文**：区块标题/说明、section 内容、
+    #   历史消息与实际用户输入；固定的 BASE_SYSTEM_INSTRUCTION（教学契约）不计入。
+    # - `estimated_tokens` 是完整 prompt（含固定教学契约）的真实估算。
+    # - `context_tokens` 是动态上下文部分，也就是真正被预算约束的值。
+    # 这样 300 的测试预算仍可约束动态内容，同时报告不会把完整 prompt 伪装成 300。
+    budget_tokens: int = 0
+    context_tokens: int = 0
+    budget_exceeded: bool = False
+    budget_overrun_reason: str | None = None
+    # 检索前的原始状态，以及预算裁剪后模型真正看到的最终状态。
+    # 两者分开保存，避免把「检索成功」误报成「知识进入上下文」。
+    knowledge_status: str = "NOT_RETRIEVED"
+    knowledge_state: str = "NOT_RETRIEVED"
+    knowledge_injected_chunk_ids: list[int] = field(default_factory=list)
+    knowledge_dropped_chunk_ids: list[int] = field(default_factory=list)
 
     @property
     def dropped_sections(self) -> list[str]:
@@ -213,6 +235,14 @@ class BuiltContext:
         """给 `/agent/context/preview` 用：完整上下文，供人核对检索与裁剪是否正确。"""
         return {
             "estimatedTokens": self.estimated_tokens,
+            "contextTokens": self.context_tokens,
+            "budgetTokens": self.budget_tokens,
+            "budgetExceeded": self.budget_exceeded,
+            "budgetOverrunReason": self.budget_overrun_reason,
+            "knowledgeStatus": self.knowledge_status,
+            "knowledgeState": self.knowledge_state,
+            "knowledgeInjectedChunkIds": self.knowledge_injected_chunk_ids,
+            "knowledgeDroppedChunkIds": self.knowledge_dropped_chunk_ids,
             "droppedSections": self.dropped_sections,
             "warnings": self.warnings,
             "sections": [section.as_dict() for section in self.sections],
@@ -223,6 +253,11 @@ class BuiltContext:
 
 class ContextBuilder:
     def __init__(self, *, max_context_tokens: int = 3000, recent_history_limit: int = 12) -> None:
+        if max_context_tokens <= 0:
+            raise ValueError("max_context_tokens 必须为正数")
+        if recent_history_limit < 0:
+            # 契约：0 = 不注入历史，负数非法。不要用 [-0:] 这种切片把 0 解释成全部。
+            raise ValueError("recent_history_limit 不能为负数（0 表示不注入历史）")
         self._max_context_tokens = max_context_tokens
         self._recent_history_limit = recent_history_limit
 
@@ -235,13 +270,82 @@ class ContextBuilder:
         system_instruction = self._render_system_instruction(sections)
         messages = self._render_messages(sections, system_instruction)
 
-        used = sum(estimate_tokens(message.content) for message in messages)
+        # `_fit_budget` 只按 section 内容做一次快速裁剪；这里再按最终渲染结果
+        # （标题、说明、实际消息，不含固定教学契约）收紧，直到动态上下文装得下。
+        for _ in range(len(sections) + 2):
+            context_tokens = _context_tokens(system_instruction, messages)
+            if context_tokens <= self._max_context_tokens:
+                break
+            if not self._reduce_one(sections):
+                break
+            system_instruction = self._render_system_instruction(sections)
+            messages = self._render_messages(sections, system_instruction)
+
+        # 预算裁剪发生在检索之后。这里必须重新看「模型最终看到了哪些知识」，
+        # 不能把检索层的 SUCCESS 直接当作知识已进入上下文。
+        knowledge_state, injected_ids, dropped_ids = _final_knowledge_state(
+            state, sections
+        )
+        if knowledge_state in {
+            KNOWLEDGE_STATE_SUCCESS_PARTIAL,
+            KNOWLEDGE_STATE_SUCCESS_BUT_DROPPED,
+        }:
+            sections = _upsert_budget_knowledge_status(
+                sections,
+                raw_status=state.knowledge_status,
+                final_state=knowledge_state,
+                injected=len(injected_ids),
+                dropped=len(dropped_ids),
+            )
+            # 状态区块是预算裁剪后补上的；它的篇幅很小，但必须真的渲染给模型，
+            # 否则「检索到但没放下」与「没有检索到」在 Prompt 里仍然无法区分。
+            system_instruction = self._render_system_instruction(sections)
+            messages = self._render_messages(sections, system_instruction)
+
+        estimated = _prompt_tokens(messages)
+        context_tokens = _context_tokens(system_instruction, messages)
+        overrun_reason = None
+        if context_tokens > self._max_context_tokens:
+            overrun_reason = (
+                f"动态上下文约 {context_tokens} tokens，超过预算 "
+                f"{self._max_context_tokens}；完整 prompt 约 {estimated} tokens。"
+                "已无低优先级区块可继续裁剪，未伪造估算。"
+            )
+        warnings = self._collect_warnings(state, sections)
+        if knowledge_state == KNOWLEDGE_STATE_SUCCESS_BUT_DROPPED:
+            warnings.append(
+                "知识检索成功，但全部知识片段因 Token 预算未进入最终上下文；"
+                "已在 system instruction 中明确说明，不能改写成「没有检索到资料」。"
+            )
+        elif knowledge_state == KNOWLEDGE_STATE_SUCCESS_PARTIAL:
+            warnings.append(
+                f"知识检索成功，但只有 {len(injected_ids)} 个片段进入最终上下文，"
+                f"{len(dropped_ids)} 个因 Token 预算被丢弃；"
+                "已在 system instruction 中说明只能引用实际出现的片段。"
+            )
+        if estimated > self._max_context_tokens:
+            fixed = estimate_tokens(BASE_SYSTEM_INSTRUCTION)
+            warnings.append(
+                f"完整 prompt 约 {estimated} tokens，其中固定系统提示约 {fixed} tokens；"
+                f"max_context_tokens={self._max_context_tokens} 约束的是动态上下文"
+                f"（当前 {context_tokens} tokens），不是完整 prompt。"
+            )
+        if overrun_reason:
+            warnings.append(overrun_reason)
         return BuiltContext(
             system_instruction=system_instruction,
             messages=messages,
             sections=sections,
-            estimated_tokens=used,
-            warnings=self._collect_warnings(state, sections),
+            estimated_tokens=estimated,
+            warnings=warnings,
+            budget_tokens=self._max_context_tokens,
+            context_tokens=context_tokens,
+            budget_exceeded=overrun_reason is not None,
+            budget_overrun_reason=overrun_reason,
+            knowledge_status=state.knowledge_status,
+            knowledge_state=knowledge_state,
+            knowledge_injected_chunk_ids=injected_ids,
+            knowledge_dropped_chunk_ids=dropped_ids,
         )
 
     # ---------- 1. 收集 ----------
@@ -398,6 +502,10 @@ class ContextBuilder:
         return sections
 
     def _usable_history(self, state: AgentState) -> list:
+        if self._recent_history_limit <= 0:
+            # 契约：0 = 不注入任何历史。`[-0:]` 会等于 `[0:]`，把 0 解释成全部，
+            # 这是 Python 切片的一个安静陷阱。
+            return []
         history = list(state.history)[-self._recent_history_limit :]
         # 防御性去重：后端已经保证 history 不含本轮输入（ChatService 用 userMessage.getId()
         # 把它排掉了），所以这段代码在正常情况下不会生效。
@@ -457,6 +565,32 @@ class ContextBuilder:
                 continue
             section.dropped = True
 
+    def _reduce_one(self, sections: list[ContextSection]) -> bool:
+        """按优先级从低到高再收紧一段；返回 False 表示已无可删内容。
+
+        优先截断允许截断的区块，其次整段丢弃。`user_input` 永不丢弃 ——
+        模型看不到问题，这次回答就没有意义。
+        """
+        candidates = [
+            section
+            for section in sections
+            if not section.dropped
+            and section.name not in {"user_input", "session"}
+        ]
+        if not candidates:
+            return False
+        section = min(candidates, key=lambda item: item.priority)
+        if section.allow_truncate and section.estimated_tokens > MIN_USEFUL_SECTION_TOKENS:
+            before = section.estimated_tokens
+            target = max(MIN_USEFUL_SECTION_TOKENS, before // 2)
+            section.content = truncate_to_tokens(section.content, target)
+            section.estimated_tokens = estimate_tokens(section.content)
+            section.truncated = True
+            if section.estimated_tokens < before:
+                return True
+        section.dropped = True
+        return True
+
     # ---------- 4/5. 渲染 ----------
 
     def _render_system_instruction(self, sections: list[ContextSection]) -> str:
@@ -473,11 +607,32 @@ class ContextBuilder:
         # 这句话只描述「历史认知记录」。知识状态 / 知识片段 / 判定依据都不属于
         # 学习者认知记录，不能让它们把「没有历史认知」这句话顶掉。
         cognitive_kinds = {"session", "understanding", "trajectory", "memory"}
-        if not any(
+        kept_cognitive = any(
             _kind(section) in cognitive_kinds and not section.dropped
             for section in sections
-        ):
+        )
+        dropped_records = [
+            section
+            for section in sections
+            if _kind(section) in {"understanding", "trajectory", "memory"}
+            and section.dropped
+        ]
+        kept_records = any(
+            _kind(section) in {"understanding", "trajectory", "memory"}
+            and not section.dropped
+            for section in sections
+        )
+        if not kept_cognitive and not dropped_records:
+            # 真的什么都没检索到，才是「没有历史认知记录」。
             blocks.append("## 学习者背景\n（本次没有检索到任何历史认知记录，按新知识正常教学。）")
+        elif dropped_records and not kept_records:
+            # 检索到了，只是被预算丢掉：不能对用户谎称「没有历史」。
+            names = "、".join(section.name for section in dropped_records)
+            blocks.append(
+                "## 学习者背景\n"
+                f"（本次检索到了历史认知记录，但以下区块超出上下文预算、未包含在本次 prompt 中：{names}。"
+                "回答时不要说「没有历史记录」或「没有检索到记录」；需要时说明本次上下文未包含这些记录。）"
+            )
         return "\n\n".join(blocks)
 
     def _render_messages(
@@ -552,8 +707,9 @@ _BLOCK_HEADINGS = {
     "knowledge": (
         "参考资料（来自用户上传的文档）",
         "> 这些是检索到的文档片段，不是绝对真理。只能引用这里实际出现的来源标注，"
-        "不要编造文件名或片段序号；资料不足时明确说明。与学习者认知冲突时，"
-        "先确认是不是误区，再决定怎么讲。",
+        "不要编造文件名或片段序号；资料不足时明确说明。不同资料/版本的事实要拆句，"
+        "并分别标注各自来源；不要把两个来源的数字合并成一句后只标一个来源。"
+        "与学习者认知冲突时，先确认是不是误区，再决定怎么讲。",
     ),
     "evidence": (
         "判定依据",
@@ -565,6 +721,21 @@ _BLOCK_HEADINGS = {
 def _kind(section: ContextSection) -> str:
     """`understanding:10` → `understanding`。历史消息是 `history:3`。"""
     return section.name.split(":", 1)[0]
+
+
+def _prompt_tokens(messages: list[ChatMessage]) -> int:
+    """完整 prompt 的估算：system instruction + 所有实际消息。"""
+    return sum(estimate_tokens(message.content) for message in messages)
+
+
+def _context_tokens(system_instruction: str, messages: list[ChatMessage]) -> int:
+    """动态上下文：完整 prompt 减去固定教学契约。
+
+    固定契约（BASE_SYSTEM_INSTRUCTION）不是可裁剪内容，也不算进
+    `max_context_tokens`；但区块标题/说明、section 内容和实际消息都要算。
+    """
+    fixed = estimate_tokens(BASE_SYSTEM_INSTRUCTION)
+    return max(0, _prompt_tokens(messages) - fixed)
 
 
 def _render_session(session: SessionContext) -> str:
@@ -721,6 +892,108 @@ def _render_trajectory_evidence(evidence: EvidenceItem) -> str:
 
 def _format_time(value: datetime | None) -> str:
     return value.strftime("%Y-%m-%d %H:%M") if value else ""
+
+
+def _final_knowledge_state(
+    state: AgentState, sections: list[ContextSection]
+) -> tuple[str, list[int], list[int]]:
+    """把「检索状态」和「预算后的实际注入」合成一个最终状态。
+
+    返回 `(state, injected_chunk_ids, dropped_chunk_ids)`。只有检索层状态为
+    SUCCESS 时才可能被改写成 PARTIAL / BUT_DROPPED；其他状态保持检索层原值，
+    它们本来就表示「没有知识片段」，预算不可能把不存在的片段再丢掉。
+    """
+    raw = str(state.knowledge_status or "NOT_RETRIEVED")
+    knowledge_sections = [
+        section for section in sections if _kind(section) == "knowledge"
+    ]
+    kept = [section for section in knowledge_sections if not section.dropped]
+    dropped = [section for section in knowledge_sections if section.dropped]
+    injected_ids = [_chunk_id(section) for section in kept]
+    dropped_ids = [_chunk_id(section) for section in dropped]
+
+    if raw != "SUCCESS":
+        return raw, injected_ids, dropped_ids
+    if not knowledge_sections:
+        return KNOWLEDGE_STATE_SUCCESS, injected_ids, dropped_ids
+    if not kept:
+        return KNOWLEDGE_STATE_SUCCESS_BUT_DROPPED, injected_ids, dropped_ids
+    if dropped:
+        return KNOWLEDGE_STATE_SUCCESS_PARTIAL, injected_ids, dropped_ids
+    return KNOWLEDGE_STATE_SUCCESS, injected_ids, dropped_ids
+
+
+def _chunk_id(section: ContextSection) -> int:
+    try:
+        return int(section.name.split(":", 1)[1])
+    except (IndexError, ValueError):
+        return 0
+
+
+def _upsert_budget_knowledge_status(
+    sections: list[ContextSection],
+    *,
+    raw_status: str,
+    final_state: str,
+    injected: int,
+    dropped: int,
+) -> list[ContextSection]:
+    """在预算裁剪后补上（或替换）知识状态区块。
+
+    该区块不参与前面的预算分配：它正是用来解释「为什么没有知识片段」的，
+    如果也因为没有预算而被丢掉，模型就永远看不到真实原因。
+    """
+    content = _budget_knowledge_status_note(final_state, injected, dropped)
+    for section in sections:
+        if section.name == "knowledge_status":
+            section.content = content
+            section.estimated_tokens = estimate_tokens(content)
+            section.dropped = False
+            section.source_ids = [
+                f"knowledge-status:{final_state}",
+                f"knowledge-retrieval:{raw_status}",
+            ]
+            return sections
+    return [
+        *sections,
+        ContextSection(
+            name="knowledge_status",
+            title="知识检索状态",
+            content=content,
+            priority=PRIORITY_KNOWLEDGE_STATUS,
+            source_ids=[
+                f"knowledge-status:{final_state}",
+                f"knowledge-retrieval:{raw_status}",
+            ],
+            dedupe_key="knowledge_status",
+        ),
+    ]
+
+
+def _budget_knowledge_status_note(
+    final_state: str, injected: int, dropped: int
+) -> str:
+    total = injected + dropped
+    if final_state == KNOWLEDGE_STATE_SUCCESS_BUT_DROPPED:
+        return "\n".join(
+            [
+                "- 状态：SUCCESS_BUT_DROPPED",
+                f"- 检索结果：检索成功，找到 {total} 个可用资料片段。",
+                "- 预算结果：这些片段全部因上下文 Token 预算未能放入本次 Prompt。",
+                "- 说明：这不等于「没有检索到资料」，也不等于「资料中没有答案」。"
+                "不要声称本轮没有检索到资料；如果依据不足，请说明本轮上下文未能包含"
+                "已检索到的资料，并明确区分通用知识；不要编造资料引用。",
+            ]
+        )
+    return "\n".join(
+        [
+            "- 状态：SUCCESS_PARTIAL",
+            f"- 检索结果：检索成功，找到 {total} 个资料片段。",
+            f"- 预算结果：{injected} 个已放入本次 Prompt，{dropped} 个因 Token 预算未放入。",
+            "- 说明：只能依据「参考资料」中实际出现的片段；不要声称本轮没有检索到资料，"
+            "也不要把未放入的片段当作依据或编造引用。",
+        ]
+    )
 
 
 def _render_knowledge_status(status: str, warning: str | None) -> str:

@@ -413,3 +413,105 @@ def test_understanding_block_handles_missing_trajectory_explicitly():
     assert "如果本轮没有提供历史轨迹" in system
     assert "不要从当前状态反推过去" in system
     assert "没有看到错误记录" in system
+
+
+# ---------- Phase 4.1：检索状态 vs 预算后的最终状态 ----------
+
+
+def test_success_with_injected_knowledge_stays_success():
+    chunk = KnowledgeChunk(
+        id=210,
+        document_name="orbit_current.md",
+        chunk_index=0,
+        content="ORBIT-4721 当前调度器使用 17 秒的重试窗口。",
+    )
+    context = ContextBuilder().build(
+        make_state(
+            "ORBIT-4721 当前重试窗口是多少？",
+            knowledge_status="SUCCESS",
+            knowledge=[chunk],
+        )
+    )
+
+    assert context.knowledge_status == "SUCCESS"
+    assert context.knowledge_state == "SUCCESS"
+    assert context.knowledge_injected_chunk_ids == [210]
+    assert context.knowledge_dropped_chunk_ids == []
+    assert "knowledge_status" not in [section.name for section in context.sections]
+    assert "[资料《orbit_current.md》#0]" in context.messages[0].content
+
+
+def test_success_but_all_knowledge_dropped_is_not_reported_as_no_match():
+    chunk = KnowledgeChunk(
+        id=211,
+        document_name="orbit_current.md",
+        chunk_index=0,
+        content="ORBIT-4721 当前调度器使用 17 秒的重试窗口。" * 40,
+    )
+    context = ContextBuilder(max_context_tokens=60).build(
+        make_state(
+            "ORBIT-4721 当前重试窗口是多少？",
+            knowledge_status="SUCCESS",
+            knowledge=[chunk],
+        )
+    )
+
+    assert context.knowledge_state == "SUCCESS_BUT_DROPPED"
+    assert context.knowledge_injected_chunk_ids == []
+    assert context.knowledge_dropped_chunk_ids == [211]
+
+    system = context.messages[0].content
+    assert "SUCCESS_BUT_DROPPED" in system
+    assert "检索成功" in system
+    assert "全部因上下文 Token 预算未能放入本次 Prompt" in system
+    assert "不等于「没有检索到资料」" in system
+    # 不能退化成「没有可用文档 / 没有命中」的说明。
+    assert "没有可用且已就绪的上传文档" not in system
+    assert "没有找到可用的文档片段" not in system
+    assert any("知识检索成功，但全部知识片段" in warning for warning in context.warnings)
+
+
+def test_partial_drop_reports_counts_and_only_injected_chunks_are_usable():
+    injected = KnowledgeChunk(
+        id=212,
+        document_name="orbit_current.md",
+        chunk_index=0,
+        content="当前值 17 秒。",
+    )
+    dropped = KnowledgeChunk(
+        id=213,
+        document_name="orbit_legacy.md",
+        chunk_index=0,
+        content="旧调度器使用 12 秒。" * 120,
+    )
+    context = ContextBuilder(max_context_tokens=300).build(
+        make_state(
+            "ORBIT-4721 当前重试窗口是多少？",
+            knowledge_status="SUCCESS",
+            knowledge=[injected, dropped],
+        )
+    )
+
+    assert context.knowledge_state == "SUCCESS_PARTIAL"
+    assert context.knowledge_injected_chunk_ids == [212]
+    assert context.knowledge_dropped_chunk_ids == [213]
+
+    system = context.messages[0].content
+    assert "SUCCESS_PARTIAL" in system
+    assert "1 个已放入本次 Prompt" in system
+    assert "1 个因 Token 预算未放入" in system
+    assert "只能依据「参考资料」中实际出现的片段" in system
+    assert "[资料《orbit_current.md》#0]" in system
+    assert "[资料《orbit_legacy.md》#0]" not in system
+
+
+def test_no_match_keeps_retrieval_state_and_has_no_knowledge_chunks():
+    context = ContextBuilder().build(
+        make_state("镓的熔点是多少？", knowledge_status="NO_MATCH")
+    )
+
+    assert context.knowledge_status == "NO_MATCH"
+    assert context.knowledge_state == "NO_MATCH"
+    assert context.knowledge_injected_chunk_ids == []
+    assert context.knowledge_dropped_chunk_ids == []
+    assert "本轮知识检索没有找到可用的文档片段" in context.messages[0].content

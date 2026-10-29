@@ -4,7 +4,9 @@ import com.ails.backend.entity.Document;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface DocumentMapper extends BaseMapper<Document> {
@@ -52,4 +54,48 @@ public interface DocumentMapper extends BaseMapper<Document> {
             @Param("userId") Long userId,
             @Param("spaceId") Long spaceId,
             @Param("embeddingModel") String embeddingModel);
+
+    /**
+     * 找出超时仍停在 PROCESSING 的文档。
+     *
+     * <p>用 {@code updated_at} 作为索引启动时间的近似值：进入 PROCESSING 的那次更新会
+     * 刷新它，索引运行期间不再更新 document 行。阈值必须大于正常索引的最坏耗时，
+     * 否则会误伤仍在运行的任务。</p>
+     */
+    @Select("""
+            <script>
+            SELECT d.id
+            FROM document d
+            WHERE d.status = 'PROCESSING'
+              AND d.deleted_at IS NULL
+              AND d.updated_at &lt; #{cutoff}
+            ORDER BY d.updated_at ASC, d.id ASC
+            LIMIT #{limit}
+            </script>
+            """)
+    List<Long> selectStaleProcessingIds(
+            @Param("cutoff") LocalDateTime cutoff,
+            @Param("limit") int limit);
+
+    /**
+     * 条件更新：只有仍是 PROCESSING、未删除、且启动时间早于 cutoff 的行才转 FAILED。
+     *
+     * <p>这是回收的幂等性边界：重复扫描、多个实例并发扫描、或索引任务刚好完成，
+     * 都只会有一次更新成功；其余更新 0 行，不会覆盖 READY 或重复写错误。</p>
+     */
+    @Update("""
+            <script>
+            UPDATE document
+            SET status = 'FAILED',
+                index_error = #{error}
+            WHERE id = #{id}
+              AND status = 'PROCESSING'
+              AND deleted_at IS NULL
+              AND updated_at &lt; #{cutoff}
+            </script>
+            """)
+    int markStaleProcessingFailed(
+            @Param("id") Long id,
+            @Param("cutoff") LocalDateTime cutoff,
+            @Param("error") String error);
 }
