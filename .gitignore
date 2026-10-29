@@ -13,6 +13,15 @@ evaluation/phase1/artifacts/
 # Phase 3 的 B05/smoke 是重复运行目录；baseline/repeats 被盲评表逐条引用，保留。
 evaluation/phase3/artifacts/B05/
 evaluation/phase3/artifacts/phase3-smoke-d09/
-# 本地日志默认不提交；仅保留 Phase 4.1 索引回收这一条关键证据日志。
+# Phase 5 的逐条 runs.jsonl 约 5MB，可由 run_budget_queries.py 重跑生成；
+# queries、summary、复现脚本与日志仍提交。
+evaluation/phase5_budget/reports/**/runs*.jsonl
+# 个人面试准备笔记：不进入仓库（本文件由本地维护）。
+docs/interview-project-deep-dive.md
+# 本地日志默认不提交；仅保留关键证据日志（Phase 4.1 索引回收、Phase 6–9 交付验证）。
 evaluation/**/*.log
 !evaluation/phase4_1/index-recovery-it.log
+!evaluation/reports/phase6-20261029/*.log
+!evaluation/reports/phase7-20261029/*.log
+!evaluation/reports/phase8-20261029/*.log
+!evaluation/reports/phase9-20261029/*.log

@@ -8,7 +8,9 @@
 ```text
 构造 Settings(fixture + 指定 LLM)
     ↓
-AgentRuntime.analyze(AnalyzeRequest)
+显式构造 FixtureRetriever（评测替身，由本执行器关闭）
+    ↓
+AgentRuntime.analyze(AnalyzeRequest, retriever=...)
     ↓
 把 AnalyzeResult 摊平成断言友好的 dict
     ↓
@@ -25,6 +27,7 @@ from typing import Any
 
 from app.config import Settings
 from app.llm.mock import MockLLMAdapter
+from app.retriever.fixture import FixtureRetriever
 from app.runtime import AgentRuntime
 from app.schemas import AnalyzeRequest, HistoryMessage, SessionContext
 
@@ -69,6 +72,7 @@ async def _run_one(
         description=case.description,
     )
     runtime: AgentRuntime | None = None
+    retriever: FixtureRetriever | None = None
     try:
         settings = _settings_for(case.fixture, fixtures_dir, datasets_dir)
         adapter = (
@@ -79,8 +83,15 @@ async def _run_one(
         runtime = AgentRuntime(settings, adapter)
         request = _build_request(case.request, index)
 
+        # 评测替身必须显式注入：生产分析链路的默认分支仍然禁止 fixture 降级
+        # （``allow_degradation=False``），这里的注入不会改变那个安全策略。
+        retriever = FixtureRetriever(Path(settings.fixture_path))
+
         try:
-            analyzed = await asyncio.wait_for(runtime.analyze(request), timeout=timeout)
+            analyzed = await asyncio.wait_for(
+                runtime.analyze(request, retriever=retriever),
+                timeout=timeout,
+            )
             error: BaseException | None = None
         except Exception as exc:  # noqa: BLE001 —— 用例要能断言「这里应该失败」
             analyzed = None
@@ -109,6 +120,11 @@ async def _run_one(
         return result
     finally:
         result.duration_ms = int((time.perf_counter() - started) * 1000)
+        if retriever is not None:
+            try:
+                await retriever.aclose()
+            except Exception:  # noqa: BLE001 - 关闭失败不该覆盖用例结论
+                pass
         if runtime is not None:
             try:
                 await runtime.aclose()

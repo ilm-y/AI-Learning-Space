@@ -206,12 +206,14 @@ curl -s -X POST http://127.0.0.1:8000/agent/context/preview \
 ### 测试
 
 ```bash
-python -m pytest -q          # 232 passed, 5 skipped（2026-10-27）
+python -m pytest -q          # 382 passed, 5 skipped, 1 xfailed（2026-10-29）
 ```
 
 5 个 skip 都是环境门控，**跳过不等于通过**：真实 Qdrant（2）、真实 broker（2）、
-真实知识 E2E（1）。完整口径见
-[../docs/delivery/TEST_MATRIX.md](../docs/delivery/TEST_MATRIX.md)。
+真实知识 E2E（1）。1 个 strict xfail 记录「模型用自然语言误述检索状态」
+这一架构边界，不是已修复。完整口径见
+[../docs/delivery/TEST_MATRIX.md](../docs/delivery/TEST_MATRIX.md) 与
+[../docs/testing/phase9-evidence-boundary.md](../docs/testing/phase9-evidence-boundary.md)。
 
 ---
 
@@ -395,9 +397,15 @@ Fixture 与 HTTP 用的是**同一套 Pydantic 模型**，所以切换不需要�
 ```text
 meta    { runId, detectedConcepts, estimatedTokens, warnings }
 delta   { delta }
-done    { runId, detectedConcepts, estimatedTokens, elapsedMs }
+done    { runId, detectedConcepts, estimatedTokens, elapsedMs,
+          finishReason, truncated }   # finishReason=length ⇒ truncated=true
 error   { runId, code, message }     code: 500 内部错误 / 502 模型上游失败 / 503 后端检索不可用
 ```
+
+`done` 的 `truncated=true` 表示模型因 Token 上限停止，已经推送的文本是部分内容。
+后端不能把它当成正常完成：截断回答仍可展示并落库，但会标记为 `TRUNCATED`
+且不触发后续学习分析。只实现旧 `stream_chat`、不提供终态信息的适配器按正常完成
+处理（`finishReason=null`、`truncated=false`）。
 
 `error` 里的 `code` 是 int，直接喂给后端的 `AgentStreamHandler.onError(int, String)` ——
 网关在这一跳上不要再自己编一个常量，否则「谁的错」就丢了。
@@ -505,19 +513,19 @@ error   { runId, code, message }     code: 500 内部错误 / 502 模型上游�
 - **异步分析（可选）**：`python -m app.worker` 消费 `learning.analysis.request`，
   使用服务端凭据回访后端检索，结果经 `learning.analysis.result` 回到 Spring Boot。
   拓扑、契约与失败处理见 [../docs/analysis-mq.md](../docs/analysis-mq.md)；
-- 232 个不依赖数据库与网络的测试已通过；另有 5 个环境门控用例（真实 Qdrant / 真实
-  broker / 真实知识 E2E）本轮跳过。端到端验收见 `scripts/phase51-e2e.sh`、
-  `scripts/phase52-e2e.sh` 与 `evaluation/`。
+- 382 个不依赖数据库与网络的测试已通过；另有 5 个环境门控用例（真实 Qdrant / 真实
+  broker / 真实知识 E2E）本轮跳过，1 个 strict xfail 记录自然语言误述风险。
+  端到端验收见 `scripts/phase51-e2e.sh`、`scripts/phase52-e2e.sh` 与 `evaluation/`。
 
 **明确没做**：
 
 | 项目                                        | 现状                                     | 计划阶段 |
 | ------------------------------------------- | ---------------------------------------- | -------- |
 | 语义概念识别                                | 规则版匹配名称 + 别名 + 历史回看         | M2       |
-| 向量检索 / RAG                              | 无。`get_knowledge` 走 HTTP 时固定返回空 | M6       |
+| 向量检索 / RAG                              | 已实现：Qdrant + 后端 HTTP 回查 + Fixture；真实 Qdrant 集成测试需 `AILS_QDRANT_IT=true` | 已完成 |
 | 主动验证的执行闭环                          | Agent 给出 `ASK_NOW / ASK_LATER / SKIP`，TestTask 由后端创建；作答判分仍是后端启发式 | M5 |
 | 真实模型的记忆收敛                          | Memory 候选已能落库，冲突合并规则在后端  | M3       |
 | 多轮工具调用（Agent Tools）                 | 无。analyze 是一次线性结构化输出         | 后续     |
-| 异步分析队列（RabbitMQ）                    | 无。后端在 SSE 关闭后用线程池同步执行    | M7       |
+| 异步分析队列（RabbitMQ）                    | 已实现（可选）：`AILS_ANALYSIS_MODE=mq` + `python -m app.worker`；默认仍是 inline 线程池 | 已完成（Testcontainers E2E 未验证） |
 
 细节与优先级见 [docs/progress.md](docs/progress.md)。

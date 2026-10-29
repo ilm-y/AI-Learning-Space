@@ -53,6 +53,18 @@ bad_cases/          线上问题 → 根因 → 修复 → 回归用例
 也可以直接写 JSON 对象（runner 会序列化）。被替换的只有「模型说了什么」，
 其余全部是生产代码。
 
+### 评测替身与生产检索安全
+
+离线执行器不会让生产分析链路默认回退到 fixture。每条用例显式构造
+`FixtureRetriever`，通过 `AgentRuntime.analyze(..., retriever=...)` 注入；
+不传该参数时，生产入口仍走 `build_retriever(..., allow_degradation=False)`，
+遇到 fixture 会抛 `RetrievalError`。
+
+这个边界由 `agent/tests/test_evaluation_injection.py` 钉住：显式注入可以跑通
+fixture 用例，而同一配置下的默认分析路径仍然 fail closed、且在调用模型前拒绝。
+评测注入只影响当次调用，不改变全局依赖选择或安全策略。当前结果见
+`docs/testing/phase6-offline-baseline.md`。
+
 ### live：测「状态真的变了」
 
 每个用例独立注册用户（用户名带时间戳），建空间 / 概念，然后执行 step：

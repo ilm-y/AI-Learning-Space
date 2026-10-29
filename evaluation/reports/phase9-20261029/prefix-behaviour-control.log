@@ -1,0 +1,32 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.11, pytest-7.4.3, pluggy-1.6.0 -- E:\app\Python\python\python.exe
+cachedir: .pytest_cache
+rootdir: D:\learningMatiarials\AI-Learning-Space\agent
+configfile: pyproject.toml
+plugins: anyio-3.7.1, asyncio-0.21.1, cov-4.1.0
+asyncio: mode=auto
+collecting ... collected 7 items / 5 deselected / 2 selected
+
+tests/test_runtime_budget_contract.py::test_runtime_must_not_deliver_dropped_chunk_citation FAILED [ 50%]
+tests/test_runtime_budget_contract.py::test_runtime_must_not_deliver_no_retrieval_claim_when_chunks_dropped XFAIL [100%]
+
+================================== FAILURES ===================================
+____________ test_runtime_must_not_deliver_dropped_chunk_citation _____________
+
+    async def test_runtime_must_not_deliver_dropped_chunk_citation() -> None:
+        """越界引用不得交付用户：生成阶段就过滤，而不是事后只写 trace。"""
+    
+        runtime, prepared = await _prepare(
+            [_injected_chunk(), _dropped_chunk()], budget=300
+        )
+        try:
+            delivered = await _deliver(runtime, prepared)
+>           assert DROPPED_CITATION not in delivered
+E           AssertionError: assert '[资料《orbit_c...nt_p5.md》#0]' not in '本轮没有检索到任何相关...nt_p5.md》#0]'
+E             '[资料《orbit_current_p5.md》#0]' is contained here:
+E               本轮没有检索到任何相关资料，因此无法确认 ORBIT-4721 的重试窗口。[资料《orbit_current_p5.md》#0]
+
+tests\test_runtime_budget_contract.py:305: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_runtime_budget_contract.py::test_runtime_must_not_deliver_dropped_chunk_citation
+================= 1 failed, 5 deselected, 1 xfailed in 0.24s ==================

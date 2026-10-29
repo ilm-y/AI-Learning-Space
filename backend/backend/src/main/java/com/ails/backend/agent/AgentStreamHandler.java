@@ -42,6 +42,9 @@ public interface AgentStreamHandler {
      * 调用方收到后会把这轮攒下的全文落库成一条助手消息、推 {@code message.end}、
      * 把 agent_run 置 COMPLETED，并触发学习分析。
      * <p>
+     * 若实现方知道终态有截断，应调用 {@link #onComplete(StreamCompletion)} 而不是
+     * 本方法；本方法只表示「没有更多文本」，不保证内容是完整的。
+     * <p>
      * <b>这个方法不得抛异常。</b>它是「正常结束」的声明，不是执行动作的地方 ——
      * 调用方在 onComplete 里已经占掉了终局名额，抛出去的异常既不会变成前端的
      * {@code message.error}（转调 onError 会因为终局已定而被丢弃），也不会被重试，
@@ -50,6 +53,21 @@ public interface AgentStreamHandler {
      * 但那是它自己的实现细节，不是实现方可以依赖的。
      */
     void onComplete();
+
+    /**
+     * 流结束，并带上 Agent 归一化的终态元数据。
+     * <p>
+     * {@code completion.truncated()} 为 {@code true} 时，已经推送的文本只是部分
+     * 内容：调用方可以保留并展示它，但不能把这一轮当成完整回答继续触发学习分析。
+     * <p>
+     * 默认实现退回 {@link #onComplete()}，让只关心「正常结束」的旧实现保持可用。
+     * 需要区分截断的调用方覆盖本方法即可。
+     *
+     * @param completion 终态元数据，不应为 {@code null}
+     */
+    default void onComplete(StreamCompletion completion) {
+        onComplete();
+    }
 
     /**
      * 流异常结束：这次生成失败了。

@@ -132,24 +132,39 @@ class LearningAnalyzer:
         self._settings = settings
         self._llm = llm
 
-    async def analyze(self, request: AnalyzeRequest, trace: RunTrace) -> AnalyzeResult:
+    async def analyze(
+        self,
+        request: AnalyzeRequest,
+        trace: RunTrace,
+        *,
+        retriever=None,
+    ) -> AnalyzeResult:
+        """分析一轮对话。
+
+        ``retriever`` 只给评测/测试注入受控检索源（例如固定的
+        ``FixtureRetriever``）；不传时仍走生产默认的 ``build_retriever``，
+        并保持 ``allow_degradation=False``。传入的检索源归调用方关闭 ——
+        与 ``AgentRuntime.prepare`` 的约定一致。
+        """
         if not (request.user_message or "").strip():
             # 空消息也要留下终态，否则 trace 只有 RUN_START、没有 RUN_END，
             # 排查时无法区分「没跑」与「跑了但立刻结束」。
             trace.record(TraceEventType.RUN_END, status="COMPLETED", reason="empty_message")
             return self._empty_result()
 
-        # allow_degradation=False：分析结果会写进长期认知，不能拿 fixture 顶替真实检索。
-        # 后端不可用时这里抛 RetrievalError → HTTP 503，后端回退 rules-v1。
-        retriever = build_retriever(
-            self._settings,
-            request.auth_token,
-            allow_degradation=False,
-            # 异步 Worker 没有用户 JWT，用 Spring 放进任务里的委托声明。
-            # Agent 不自己签发：没有 backend_identity 时 build_retriever 直接 fail closed。
-            user_id=request.user_id,
-            delegation_token=request.backend_identity,
-        )
+        owned_retriever = retriever is None
+        if retriever is None:
+            # allow_degradation=False：分析结果会写进长期认知，不能拿 fixture 顶替真实检索。
+            # 后端不可用时这里抛 RetrievalError → HTTP 503，后端回退 rules-v1。
+            retriever = build_retriever(
+                self._settings,
+                request.auth_token,
+                allow_degradation=False,
+                # 异步 Worker 没有用户 JWT，用 Spring 放进任务里的委托声明。
+                # Agent 不自己签发：没有 backend_identity 时 build_retriever 直接 fail closed。
+                user_id=request.user_id,
+                delegation_token=request.backend_identity,
+            )
         try:
             concepts = await retriever.list_concepts(request.learning_space_id)
             detected = detect_concepts(request.user_message, request.history, concepts)
@@ -207,7 +222,8 @@ class LearningAnalyzer:
             )
             return result
         finally:
-            await retriever.aclose()
+            if owned_retriever:
+                await retriever.aclose()
 
     # ================= LLM 路径 =================
 

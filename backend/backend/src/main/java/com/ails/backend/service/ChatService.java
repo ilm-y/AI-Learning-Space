@@ -2,6 +2,7 @@ package com.ails.backend.service;
 
 import com.ails.backend.agent.AgentGateway;
 import com.ails.backend.agent.AgentStreamHandler;
+import com.ails.backend.agent.StreamCompletion;
 import com.ails.backend.common.BusinessException;
 import com.ails.backend.dto.agent.ChatAgentRequest;
 import com.ails.backend.entity.AgentRun;
@@ -247,23 +248,49 @@ public class ChatService {
 
                 @Override
                 public void onComplete() {
-                    // Agent 正常发完全部文本。
+                    onComplete(StreamCompletion.normal());
+                }
+
+                @Override
+                public void onComplete(StreamCompletion completion) {
+                    // Agent 发完了文本。completion.truncated=true 表示模型因 Token
+                    // 上限停止：文本仍可展示，但这一轮不是完整回答。
                     // CAS 抢终局名额：本回调与 onError / 外层 catch 竞争，抢不到说明终局已写过
                     // （这次回调只是迟到），直接丢弃 —— 否则同一条 agent_run 会被写两次状态。
                     if (!finished.compareAndSet(false, true)) {
                         return;
                     }
+                    StreamCompletion terminal =
+                            completion == null ? StreamCompletion.normal() : completion;
+                    boolean truncated = terminal.truncated();
                     Message assistantMessage = null;
                     try {
-                        // 把 buffer 里的全文存成一条助手消息 —— 从这一刻起 GET /messages 才能看到 AI 回复
-                        assistantMessage = messageService.appendAssistantMessage(
-                                conversation.getId(), buffer.toString());
-                        // 结束事件：messageId 让前端把「刚流式出来的那段字」锚定到消息列表的具体行上
-                        send(emitter, "message.end", Map.of(
-                                "messageId", assistantMessage.getId(),
-                                "runId", run.getId()));
-                        // agent_run 置 COMPLETED，outputSummary 记一下输出规模，便于统计
-                        finishRun(run, AgentRunStatus.COMPLETED, "chars=" + buffer.length(), null, startedAt);
+                        // 把 buffer 里的全文存成一条助手消息 —— 从这一刻起 GET /messages 才能看到 AI 回复。
+                        // 截断时保留已经生成的部分内容，但持久化层同时记下「不完整」。
+                        assistantMessage = truncated
+                                ? messageService.appendAssistantMessage(
+                                        conversation.getId(), buffer.toString(), true)
+                                : messageService.appendAssistantMessage(
+                                        conversation.getId(), buffer.toString());
+                        // 结束事件：messageId 让前端把「刚流式出来的那段字」锚定到消息列表的具体行上。
+                        // 正常完成保持原有字段不变；截断时追加明确标记，旧客户端可忽略。
+                        Map<String, Object> end = new LinkedHashMap<>();
+                        end.put("messageId", assistantMessage.getId());
+                        end.put("runId", run.getId());
+                        if (truncated) {
+                            end.put("truncated", true);
+                            end.put("finishReason", terminal.finishReason());
+                        }
+                        send(emitter, "message.end", end);
+                        // agent_run 用独立状态记录「内容不完整」，不与正常 COMPLETED 混用。
+                        finishRun(
+                                run,
+                                truncated ? AgentRunStatus.TRUNCATED : AgentRunStatus.COMPLETED,
+                                truncated
+                                        ? "chars=" + buffer.length() + ",truncated=true"
+                                        : "chars=" + buffer.length(),
+                                null,
+                                startedAt);
                     } catch (Exception e) {
                         // 落库失败等价于这次回复不存在，前端必须收到明确的失败事件 ——
                         // 不能让它只看到流被干净地关掉、然后在等 message.end 里挂到超时。
@@ -282,8 +309,9 @@ public class ChatService {
                         completeQuietly(emitter);
                         // 只有助手消息真正落库后才启动分析。appendAssistantMessage 失败时
                         // assistantMessage 为 null，此时不拿内存里的 buffer 冒充已持久化消息。
-                        // 落库成功但 complete() 失败时，分析照常执行。
-                        if (assistantMessage != null) {
+                        // 截断回答是不完整的学习证据，不能触发要求完整回答的后续分析。
+                        // 落库成功但 complete() 失败时，正常回答的分析照常执行。
+                        if (assistantMessage != null && !truncated) {
                             analyzeQuietly(conversation, userMessage, buffer.toString(),
                                     assistantMessage.getId(), authToken, opening);
                         }

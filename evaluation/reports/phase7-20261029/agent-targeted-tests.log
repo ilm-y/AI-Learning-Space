@@ -1,0 +1,42 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.11, pytest-7.4.3, pluggy-1.6.0 -- E:\app\Python\python\python.exe
+cachedir: .pytest_cache
+rootdir: D:\learningMatiarials\AI-Learning-Space\agent
+configfile: pyproject.toml
+plugins: anyio-3.7.1, asyncio-0.21.1, cov-4.1.0
+asyncio: mode=auto
+collecting ... collected 31 items
+
+tests/test_stream_truncation.py::test_normal_completion_stays_completed_and_untruncated PASSED [  3%]
+tests/test_stream_truncation.py::test_partial_answer_before_length_is_kept_but_marked_truncated PASSED [  6%]
+tests/test_stream_truncation.py::test_model_failure_still_uses_error_path PASSED [  9%]
+tests/test_stream_truncation.py::test_empty_output_still_becomes_explicit_error PASSED [ 12%]
+tests/test_stream_truncation.py::test_adapter_without_completion_metadata_keeps_legacy_behavior PASSED [ 16%]
+tests/test_llm_openai_compatible.py::test_complete_parses_content_and_sends_payload PASSED [ 19%]
+tests/test_llm_openai_compatible.py::test_stream_parses_deltas_and_ignores_keepalive PASSED [ 22%]
+tests/test_llm_openai_compatible.py::test_stream_diagnostics_capture_finish_reason_usage_and_provider_id PASSED [ 25%]
+tests/test_llm_openai_compatible.py::test_stream_completion_exposes_final_finish_reason_for_truncation PASSED [ 29%]
+tests/test_llm_openai_compatible.py::test_stream_completion_is_normal_after_stop PASSED [ 32%]
+tests/test_llm_openai_compatible.py::test_empty_stream_is_identifiable[response0-empty_choices] PASSED [ 35%]
+tests/test_llm_openai_compatible.py::test_empty_stream_is_identifiable[response1-reasoning_only] PASSED [ 38%]
+tests/test_llm_openai_compatible.py::test_empty_stream_is_identifiable[response2-format_incompatible] PASSED [ 41%]
+tests/test_llm_openai_compatible.py::test_empty_stream_is_identifiable[response3-no_data_events] PASSED [ 45%]
+tests/test_llm_openai_compatible.py::test_empty_stream_retries_once_then_succeeds PASSED [ 48%]
+tests/test_llm_openai_compatible.py::test_empty_complete_is_an_identifiable_failure PASSED [ 51%]
+tests/test_llm_openai_compatible.py::test_complete_reasoning_exhausting_token_budget_is_classified PASSED [ 54%]
+tests/test_llm_openai_compatible.py::test_complete_null_or_blank_content_never_returns_empty_string[None] PASSED [ 58%]
+tests/test_llm_openai_compatible.py::test_complete_null_or_blank_content_never_returns_empty_string[] PASSED [ 61%]
+tests/test_llm_openai_compatible.py::test_complete_null_or_blank_content_never_returns_empty_string[   \n] PASSED [ 64%]
+tests/test_llm_openai_compatible.py::test_empty_stream_retry_is_bounded PASSED [ 67%]
+tests/test_llm_openai_compatible.py::test_stream_error_payload_is_not_silently_swallowed PASSED [ 70%]
+tests/test_llm_openai_compatible.py::test_http_error_maps_to_llm_error PASSED [ 74%]
+tests/test_llm_openai_compatible.py::test_timeout_maps_to_llm_error_for_complete_and_stream PASSED [ 77%]
+tests/test_llm_openai_compatible.py::test_invalid_json_response_maps_to_llm_error PASSED [ 80%]
+tests/test_llm_openai_compatible.py::test_malformed_complete_payload_maps_to_llm_error[payload0] PASSED [ 83%]
+tests/test_llm_openai_compatible.py::test_malformed_complete_payload_maps_to_llm_error[payload1] PASSED [ 87%]
+tests/test_llm_openai_compatible.py::test_malformed_complete_payload_maps_to_llm_error[payload2] PASSED [ 90%]
+tests/test_llm_openai_compatible.py::test_malformed_complete_payload_maps_to_llm_error[payload3] PASSED [ 93%]
+tests/test_llm_openai_compatible.py::test_factory_requires_key_for_openai_instead_of_falling_back_to_mock PASSED [ 96%]
+tests/test_llm_openai_compatible.py::test_factory_defaults_to_mock_and_builds_openai_with_key PASSED [100%]
+
+============================= 31 passed in 3.73s ==============================

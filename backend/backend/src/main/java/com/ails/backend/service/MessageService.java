@@ -69,11 +69,24 @@ public class MessageService {
      */
     @Transactional
     public Message appendAssistantMessage(Long conversationId, String content) {
+        return appendAssistantMessage(conversationId, content, false);
+    }
+
+    /**
+     * 落一条助手消息，并记录它是否因 Token 上限被截断。
+     * <p>
+     * 截断内容仍然保存：用户已经看到了这部分回答，丢掉反而让对话出现空洞。
+     * {@code truncated=true} 只表示「内容不完整」，由调用方决定不把它当作
+     * 完整学习证据继续分析。
+     */
+    @Transactional
+    public Message appendAssistantMessage(Long conversationId, String content, boolean truncated) {
         Conversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
             throw BusinessException.notFound("对话不存在");
         }
-        return append(conversation, MessageRole.ASSISTANT, MessageType.TEXT, content);
+        return append(conversation, MessageRole.ASSISTANT, MessageType.TEXT, content,
+                truncated ? Boolean.TRUE : null);
     }
 
     /**
@@ -149,11 +162,18 @@ public class MessageService {
     // ================= 内部实现 =================
 
     private Message append(Conversation conversation, MessageRole role, MessageType type, String content) {
+        return append(conversation, role, type, content, null);
+    }
+
+    private Message append(Conversation conversation, MessageRole role, MessageType type,
+                           String content, Boolean truncated) {
         Message message = new Message();
         message.setConversationId(conversation.getId());
         message.setRole(role);
         message.setMessageType(type);
         message.setContent(content);
+        // 只在截断时写 true；普通消息保持 null，交给数据库默认值 0。
+        message.setTruncated(truncated);
         message.setTokens(estimateTokens(content));
         message.setSequenceNo(nextSequenceNo(conversation));
         messageMapper.insert(message);

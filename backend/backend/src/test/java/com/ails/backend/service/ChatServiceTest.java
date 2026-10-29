@@ -2,6 +2,7 @@ package com.ails.backend.service;
 
 import com.ails.backend.agent.AgentGateway;
 import com.ails.backend.agent.AgentStreamHandler;
+import com.ails.backend.agent.StreamCompletion;
 import com.ails.backend.dto.agent.ChatAgentRequest;
 import com.ails.backend.entity.AgentRun;
 import com.ails.backend.entity.Conversation;
@@ -158,6 +159,33 @@ class ChatServiceTest {
         verify(analysisDispatchService, times(1)).dispatch(
                 conversation, userMessage, ANSWER, ASSISTANT_MESSAGE_ID, "token", opening);
         assertThat(completedRun().getStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+    }
+
+    @Test
+    @DisplayName("截断回答：部分内容落库并标记 truncated，run=TRUNCATED，不触发分析")
+    void truncatedStreamPersistsPartialButSkipsAnalysis() {
+        when(messageService.appendAssistantMessage(CONVERSATION_ID, ANSWER, true))
+                .thenReturn(assistantMessage());
+        doAnswer(invocation -> {
+            AgentStreamHandler handler = invocation.getArgument(1);
+            handler.onDelta(ANSWER);
+            handler.onComplete(new StreamCompletion("length", true));
+            return null;
+        }).when(agentGateway).streamReply(any(ChatAgentRequest.class), any(AgentStreamHandler.class));
+
+        TestEmitter emitter = new TestEmitter(false, false);
+        chatService = serviceWith(emitter);
+
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
+
+        // 已生成的部分仍要保存，用户重进对话时不会看到空洞
+        verify(messageService).appendAssistantMessage(CONVERSATION_ID, ANSWER, true);
+        // 不完整回答不能作为完整学习证据
+        verifyNoInteractions(analysisDispatchService);
+        assertThat(emitter.sendCount).isEqualTo(3); // start / delta / end
+        assertThat(emitter.completed).isTrue();
+        assertThat(completedRun().getStatus()).isEqualTo(AgentRunStatus.TRUNCATED);
+        assertThat(completedRun().getOutputSummary()).contains("truncated=true");
     }
 
     @Test

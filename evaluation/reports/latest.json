@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-27T13:20:06+08:00",
-  "commit": "67172e4",
+  "generatedAt": "2026-10-29T20:33:29+08:00",
+  "commit": "6d05486",
   "mode": "offline",
   "environment": {
     "backend": null,
@@ -97,7 +97,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型把 JSON 包在 ```json 围栏里时，仍能取出对象并解析",
-      "durationMs": 6,
+      "durationMs": 5,
       "checks": [
         {
           "path": "evidence.count",
@@ -244,7 +244,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "未知的 evidenceType 属于契约违约：整份结果作废，不能把半份写进库",
-      "durationMs": 4,
+      "durationMs": 3,
       "checks": [
         {
           "path": "error",
@@ -264,7 +264,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "模型把结果多包一层（{\"result\": {...}}）时必须报错：AnalyzeResult 全字段有默认值，放行就变成「成功但零候选」",
-      "durationMs": 3,
+      "durationMs": 4,
       "checks": [
         {
           "path": "error",
@@ -284,7 +284,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "空白消息直接返回空结果，不检索、不调用模型",
-      "durationMs": 2,
+      "durationMs": 3,
       "checks": [
         {
           "path": "evidence.count",
@@ -389,7 +389,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "闲聊不命中任何 Concept 时返回空结果（没有可挂证据的对象）",
-      "durationMs": 3,
+      "durationMs": 4,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -606,7 +606,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "本轮消息不含概念名时，从最近的用户历史里找回 TLB（跨轮上下文）",
-      "durationMs": 3,
+      "durationMs": 4,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -745,7 +745,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "用户与 AI 的历史都提到概念时，优先采信用户自己说的（避免被 AI 的措辞带偏）",
-      "durationMs": 3,
+      "durationMs": 4,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -852,7 +852,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "回看窗口只有最近 4 条：更早提到的概念不再影响本轮识别",
-      "durationMs": 3,
+      "durationMs": 4,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -933,7 +933,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "用户历史没有线索时才回看 AI 历史：虚拟内存仍能被识别",
-      "durationMs": 3,
+      "durationMs": 5,
       "checks": [
         {
           "path": "detectedConcepts",
@@ -1250,7 +1250,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "单个概念最多保留 2 条证据，防止一次分析把状态刷屏",
-      "durationMs": 4,
+      "durationMs": 3,
       "checks": [
         {
           "path": "evidence.count",
@@ -1356,7 +1356,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "整份结果最多 6 条证据：三个概念各 3 条，最后只留下 6 条",
-      "durationMs": 3,
+      "durationMs": 4,
       "checks": [
         {
           "path": "evidence.count",
@@ -3039,7 +3039,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "空提案（全是空列表 / 空白文本）不产生 Revision，也不能制造一次假的理解变化",
-      "durationMs": 3,
+      "durationMs": 4,
       "checks": [
         {
           "path": "proposal.present",
@@ -3279,7 +3279,7 @@
       "mode": "offline",
       "status": "passed",
       "description": "过长的用户自述被截断到 500 字（保留省略号），防止 prompt 与数据库字段被撑爆",
-      "durationMs": 3,
+      "durationMs": 4,
       "checks": [
         {
           "path": "proposal.present",

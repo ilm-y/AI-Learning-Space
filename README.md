@@ -3,7 +3,7 @@
 > 一个能跨对话保留「学习者当前怎么理解某个知识点」、并用这些记录调整后续回答的
 > AI Learning Agent。
 
-**交付快照：** 2026-10-27（阶段 6，功能冻结）
+**交付快照：** 2026-10-29（阶段 9，证据边界收口；功能冻结）
 
 **状态：** 可本地复现的开发基线；**不是**已完成真实模型验收的产品版本。
 
@@ -135,6 +135,18 @@ Flutter 目录目前只有 `flutter create` 的计数器模板，没有登录、
 `THRESHOLD_FILTERED` / `DEGRADED` 会作为状态说明进入上下文，`evidence_guard`
 只在知识问句上追加资料状态说明，不重写回答。
 
+来源标注另有两条硬边界：
+
+- 可引用集合只包含**本轮实际进入 system instruction** 的片段；被 Token 预算
+  裁掉的片段即使还在检索结果里，它的 `资料《文件名》#序号` 也会被判非法；
+- Runtime 在**流式生成阶段**就过滤越界 / 残缺标注（`agent/app/citation_filter.py`），
+  不需要等整段回答完成；跨 delta 的标注会先缓冲拼完再判定，普通方括号文本
+  不受影响。模型原本输出了什么仍记在 trace 的 `CITATION_FILTER` 事件里。
+
+边界：过滤只处理可机器核对的来源标签，**不纠正自然语言误述**。检索成功但片段
+被裁掉时，模型若仍说「没有检索到资料」，Runtime 不会用关键词规则改写它；
+这一剩余风险见第 10 节。
+
 ---
 
 ## 6. inline 与 RabbitMQ 两条分析路径
@@ -241,10 +253,20 @@ Agent 关键环境变量：
 ### 7.3 建表与迁移
 
 - 正常启动：`spring.sql.init` 每次执行 `schema.sql`，全部 `CREATE TABLE IF NOT EXISTS`，幂等；
-- **已有库升级**：`CREATE TABLE IF NOT EXISTS` 不会给旧表加列，必须手工执行
-  `schema-migration-document-rag.sql`；
+- **已有库升级**：`CREATE TABLE IF NOT EXISTS` 不会给旧表加列，必须按版本手工执行：
+  1. `schema-migration-document-rag.sql`（文档 RAG 相关表 / 列）；
+  2. `schema-migration-phase7-truncation.sql`（`message.truncated` 与
+     `agent_run.status=TRUNCATED`；可重复执行，末尾带只读核对查询）；
+- 执行示例（密码不要写进命令历史时改用 `MYSQL_PWD` 或本地配置文件）：
+
+  ```bash
+  mysql -h 127.0.0.1 -u root -p < backend/backend/src/main/resources/schema-migration-phase7-truncation.sql
+  ```
+
+  漏跑第二个脚本时，新版 MyBatis 查询 `message.truncated` 会报
+  `Unknown column 'truncated' in 'field list'`；
 - 清库重建：`schema-dev-reset.sql`（只 DROP）→ `schema.sql`，只能用于开发库；
-- 没有 Flyway / Liquibase。
+- 没有 Flyway / Liquibase；迁移脚本不会被 Spring 自动执行。
 
 ### 7.4 MQ 模式（可选）
 
@@ -270,10 +292,14 @@ AILS_INTERNAL_TOKEN=<token> python -m app.worker
 **不要把不同时间、不同评分规则、不同测试语义的通过率相加。**
 
 ```bash
-# Agent 单元 / 集成（当前 232 passed, 5 skipped）
+# Agent 单元 / 集成（当前 382 passed, 5 skipped, 1 xfailed）
 cd agent && python -m pytest -q
 
-# Spring 单元（当前 189 passed, 29 skipped, 0 failed）
+# 来源过滤定向回归
+cd agent && python -m pytest tests/test_citation_filter.py \
+  tests/test_runtime_budget_contract.py tests/test_runtime_citations.py -q
+
+# Spring 单元 / 集成（当前 255 条：182 执行通过 / 73 跳过 / 0 失败）
 cd backend/backend && ./mvnw test
 
 # Spring MQ Testcontainers 集成（需要 Docker；本轮未执行）
@@ -302,8 +328,8 @@ bash scripts/phase6-demo.sh
 
 | 层级 | 最近结果 | 性质 |
 | --- | --- | --- |
-| Agent | 232 passed / 5 skipped | Mock + 单元；5 个 skip 是环境门控 |
-| Spring | 189 passed / 29 skipped / 0 failed | 单元；29 个 skip 需要真实 MySQL / Docker |
+| Agent | 382 passed / 5 skipped / 1 xfailed | Mock + 单元；5 个 skip 是环境门控；1 个 xfail 是已记录的自然语言误述风险 |
+| Spring | 255 条（182 执行通过 / 73 跳过 / 0 失败） | Surefire 的 `Tests run` 含 skip，不能写成 255 passed；73 个 skip 需要真实 MySQL / Docker |
 | 5.1 inline E2E | 101 / 0 / 0 | Mock |
 | 5.1 MQ E2E | 27 / 0 / 0 | Mock LLM + 真 RabbitMQ + 真 Worker |
 | 5.2 学习轨迹 E2E | 94 / 0 / 0 | Mock |
@@ -322,7 +348,7 @@ bash scripts/phase6-demo.sh
 | RAG 评测（2026-10-26） | 真实 `qwen-plus` | 检索与引用表现；不是教学效果 |
 | 5.3 真实模型行为 | 8 次调用 | A/D 通过，B `PARTIAL`，C `FAIL` |
 | 5.3.2 历史回答复验 | **0 次真实调用** | 只有离线回放和 Mock SSE；不能声称 C 已通过 |
-| 真实 Qdrant / broker / MySQL 集成 | 5 + 29 个环境门控 skip | 本轮未执行 |
+| 真实 Qdrant / broker / MySQL 集成 | 5（Agent）+ 73（Spring）个环境门控 skip | 本轮未执行 |
 
 真实模型切换方式：
 
@@ -354,6 +380,13 @@ Embedding 同理，不会从 `openai` 静默退回 `hash`。
   inline 分析与聊天共用线程池；复习调度是硬编码状态映射；
 - **检索限制**：`top_k=5`、`min_score=0.35`，没有 Reranker / Hybrid Search；
   引用校验是格式 + 词面启发式，不是事实正确性证明；
+- **来源交付边界已收口，但语义误述仍开放**：越界引用在流式阶段被丢弃，
+  被裁剪片段不能作为有效来源；但「检索成功、片段被裁掉」时模型仍可能用自然语言
+  说「没有检索到资料」。Runtime 只能保证确定性的检索 / 注入状态与引用 ID，
+  不能在不做关键词拦截的前提下识别任意同义表述；该风险以 strict XFAIL 记录，
+  **不声称已修复**；
+- **流式过滤的代价**：越界标注被丢弃后，标注前的空白不会被回撤（已发送的文本
+  无法撤回），可能出现「字 空格。」这类轻微排版痕迹；标注本身不会泄漏；
 - **数据库 / 部署**：没有迁移框架；单进程假设；RabbitMQ 只有本地 compose；
 - **测试限制**：GitHub Actions CI 本轮未触发；`--mode all` 与
   `scripts/regress-closed-loop.sh` 本轮未重跑；Flutter 测试未执行。
@@ -370,6 +403,7 @@ Embedding 同理，不会从 `openai` 静默退回 `hash`。
 | [docs/delivery/ENVIRONMENT.md](docs/delivery/ENVIRONMENT.md) | 依赖、启动顺序、环境变量、建表 / 迁移 |
 | [docs/delivery/TEST_MATRIX.md](docs/delivery/TEST_MATRIX.md) | 测试 / 质量矩阵与报告索引 |
 | [docs/delivery/KNOWN_LIMITATIONS.md](docs/delivery/KNOWN_LIMITATIONS.md) | 已知限制、未完成验收、不要做的事 |
+| [docs/testing/phase9-evidence-boundary.md](docs/testing/phase9-evidence-boundary.md) | Phase 9：来源过滤、知识状态边界、测试与契约清单 |
 | [docs/delivery/GIT_WORKSPACE.md](docs/delivery/GIT_WORKSPACE.md) | 文件分类、工作区风险、提交建议（不自动提交） |
 | [docs/delivery/INTERVIEW.md](docs/delivery/INTERVIEW.md) | 面试讲解提纲：核心设计、关键缺陷、修复 |
 | [docs/analysis-mq.md](docs/analysis-mq.md) | 分析队列拓扑与可靠性 |

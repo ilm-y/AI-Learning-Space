@@ -1,0 +1,34 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.11, pytest-7.4.3, pluggy-1.6.0 -- E:\app\Python\python\python.exe
+cachedir: .pytest_cache
+rootdir: D:\learningMatiarials\AI-Learning-Space\agent
+configfile: pyproject.toml
+plugins: anyio-3.7.1, asyncio-0.21.1, cov-4.1.0
+asyncio: mode=auto
+collecting ... collected 23 items
+
+tests/test_citation_filter.py::test_valid_citation_passes_through PASSED [  4%]
+tests/test_citation_filter.py::test_out_of_scope_citation_is_dropped_but_reported PASSED [  8%]
+tests/test_citation_filter.py::test_citation_split_across_deltas_is_reassembled PASSED [ 13%]
+tests/test_citation_filter.py::test_out_of_scope_citation_split_across_deltas_is_dropped PASSED [ 17%]
+tests/test_citation_filter.py::test_malformed_citation_like_is_dropped PASSED [ 21%]
+tests/test_citation_filter.py::test_plain_brackets_are_not_citations PASSED [ 26%]
+tests/test_citation_filter.py::test_unclosed_citation_prefix_is_not_delivered PASSED [ 30%]
+tests/test_citation_filter.py::test_incomplete_short_bracket_at_stream_end_is_delivered PASSED [ 34%]
+tests/test_citation_filter.py::test_filter_is_per_request_no_cross_request_reuse PASSED [ 39%]
+tests/test_citation_filter.py::test_filter_text_matches_streaming_behaviour PASSED [ 43%]
+tests/test_citation_filter.py::test_runtime_delivers_valid_citation_from_injected_source PASSED [ 47%]
+tests/test_citation_filter.py::test_runtime_drops_citation_split_across_deltas PASSED [ 52%]
+tests/test_citation_filter.py::test_runtime_does_not_reuse_source_set_between_requests PASSED [ 56%]
+tests/test_citation_filter.py::test_runtime_with_no_retrieval_drops_citation PASSED [ 60%]
+tests/test_runtime_budget_contract.py::test_success_but_dropped_state_reaches_final_model_context PASSED [ 65%]
+tests/test_runtime_budget_contract.py::test_partial_budget_exposes_only_injected_chunk_as_source PASSED [ 69%]
+tests/test_runtime_budget_contract.py::test_partial_budget_delivers_only_injected_citation PASSED [ 73%]
+tests/test_runtime_budget_contract.py::test_budget_states_do_not_trigger_no_material_guard PASSED [ 78%]
+tests/test_runtime_budget_contract.py::test_validate_citations_rejects_dropped_chunk_as_source PASSED [ 82%]
+tests/test_runtime_budget_contract.py::test_runtime_must_not_deliver_dropped_chunk_citation PASSED [ 86%]
+tests/test_runtime_budget_contract.py::test_runtime_must_not_deliver_no_retrieval_claim_when_chunks_dropped XFAIL [ 91%]
+tests/test_runtime_citations.py::test_runtime_filters_invalid_citation_and_records_it_in_trace PASSED [ 95%]
+tests/test_runtime_citations.py::test_runtime_accepts_valid_citation PASSED [100%]
+
+======================== 22 passed, 1 xfailed in 3.01s ========================

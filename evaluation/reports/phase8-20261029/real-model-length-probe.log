@@ -1,0 +1,69 @@
+########## max_tokens=64 ##########
+provider=openai
+base_url=https://api.deepseek.com/v1
+model=deepseek-flash
+request_max_tokens=64
+Traceback (most recent call last):
+  File "D:\learningMatiarials\AI-Learning-Space\evaluation\phase8_migration\real_model_length_probe.py", line 60, in <module>
+    sys.exit(asyncio.run(main()))
+  File "E:\app\Python\python\lib\asyncio\runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "E:\app\Python\python\lib\asyncio\base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "D:\learningMatiarials\AI-Learning-Space\evaluation\phase8_migration\real_model_length_probe.py", line 39, in main
+    async for delta in stream:
+  File "D:\learningMatiarials\AI-Learning-Space\agent\app\llm\base.py", line 77, in __anext__
+    return await self._inner.__anext__()
+  File "D:\learningMatiarials\AI-Learning-Space\agent\app\llm\openai_compatible.py", line 251, in _stream_chat
+    raise LLMError(
+app.llm.base.LLMError: 模型返回空流（reason=reasoning_only, status=200, attempts=2）
+EXIT=1
+########## max_tokens=128 ##########
+provider=openai
+base_url=https://api.deepseek.com/v1
+model=deepseek-flash
+request_max_tokens=128
+Traceback (most recent call last):
+  File "D:\learningMatiarials\AI-Learning-Space\evaluation\phase8_migration\real_model_length_probe.py", line 60, in <module>
+    sys.exit(asyncio.run(main()))
+  File "E:\app\Python\python\lib\asyncio\runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "E:\app\Python\python\lib\asyncio\base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "D:\learningMatiarials\AI-Learning-Space\evaluation\phase8_migration\real_model_length_probe.py", line 39, in main
+    async for delta in stream:
+  File "D:\learningMatiarials\AI-Learning-Space\agent\app\llm\base.py", line 77, in __anext__
+    return await self._inner.__anext__()
+  File "D:\learningMatiarials\AI-Learning-Space\agent\app\llm\openai_compatible.py", line 251, in _stream_chat
+    raise LLMError(
+app.llm.base.LLMError: 模型返回空流（reason=reasoning_only, status=200, attempts=2）
+EXIT=1
+########## max_tokens=256 ##########
+provider=openai
+base_url=https://api.deepseek.com/v1
+model=deepseek-flash
+request_max_tokens=256
+Traceback (most recent call last):
+  File "D:\learningMatiarials\AI-Learning-Space\evaluation\phase8_migration\real_model_length_probe.py", line 60, in <module>
+    sys.exit(asyncio.run(main()))
+  File "E:\app\Python\python\lib\asyncio\runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "E:\app\Python\python\lib\asyncio\base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "D:\learningMatiarials\AI-Learning-Space\evaluation\phase8_migration\real_model_length_probe.py", line 39, in main
+    async for delta in stream:
+  File "D:\learningMatiarials\AI-Learning-Space\agent\app\llm\base.py", line 77, in __anext__
+    return await self._inner.__anext__()
+  File "D:\learningMatiarials\AI-Learning-Space\agent\app\llm\openai_compatible.py", line 251, in _stream_chat
+    raise LLMError(
+app.llm.base.LLMError: 模型返回空流（reason=reasoning_only, status=200, attempts=2）
+EXIT=1
+provider=openai
+base_url=https://api.deepseek.com/v1
+model=deepseek-flash
+request_max_tokens=1024
+deltas=590 chars=972
+metadata_available=True
+finish_reason='length'
+truncated=True
+RESULT: PASS —— 真实模型在 Token 上限处返回 length，适配器标记为截断

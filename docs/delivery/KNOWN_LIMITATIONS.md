@@ -81,13 +81,21 @@ Mock 结果或历史报告当成已完成验收。
 - Embedding 默认 `hash` 只能用于开发；真实语义检索必须显式用 `openai`；
 - 引用校验是格式 + 上下文标签 + 词面来源支持，不是事实正确性证明；
 - 来源支持度是同义改写敏感的词面启发式，会误报；
+- 越界 / 残缺来源标签会在流式生成阶段被丢弃（`citation_filter.py`），
+  被 Token 预算裁剪的片段不能作为有效来源；这解决的是**标签可核对性**，
+  不是「回答内容一定由来源支持」；
+- **语义误述仍是开放风险**：检索成功但片段被裁剪时，模型仍可能用自然语言说
+  「没有检索到资料」。Runtime 不做关键词拦截，也不改写模型原文；该行为以
+  strict XFAIL 记录，不能写成「已解决」；
+- 过滤丢弃标注后，标注前的空白已经发送、无法回撤，可能出现轻微排版痕迹；
 - RAG 评测的通过率不能直接当成「回答正确率」，也不能把 v1 / v2 合并。
 
 ## 6. 数据库与部署限制
 
 - 表结构用 `schema.sql` 手工维护，没有 Flyway / Liquibase；
-- `CREATE TABLE IF NOT EXISTS` 不会给已有表加列；升级必须手工执行
-  `schema-migration-document-rag.sql` 或清库重建；
+- `CREATE TABLE IF NOT EXISTS` 不会给已有表加列；升级必须按版本手工执行
+  `schema-migration-document-rag.sql` 与 `schema-migration-phase7-truncation.sql`，
+  或清库重建；漏跑 Phase 7 脚本会报 `Unknown column 'truncated'`；
 - `schema-dev-reset.sql` 会 DROP 数据，只能在开发库使用；
 - `application-local.yml` 与 `agent/.env` 含本机凭证，绝不能提交；
 - 当前没有多实例部署的分布式协调；SSE 连接、分析线程池都是单进程假设；
@@ -95,9 +103,10 @@ Mock 结果或历史报告当成已完成验收。
 
 ## 7. 测试口径限制
 
-- 本轮的 Agent 232 / Spring 189 / E2E 101 / MQ E2E 27 / E2E 94 / Demo 23
-  全部是 **Mock LLM** 或纯单元测试；
-- 真实 Qdrant、真实 broker、真实 MySQL 集成测试有 5 + 29 个环境门控 skip；
+- 当前 Agent 382 passed / 5 skipped / 1 xfailed；Spring 255 条（182 执行通过 /
+  73 跳过）；E2E 101 / MQ E2E 27 / E2E 94 / Demo 23 是 2026-10-27 的 Mock 结果；
+- 1 个 xfail 是语义误述风险，不是通过，也不是普通跳过；
+- 真实 Qdrant、真实 broker、真实 MySQL 集成测试有 5 + 73 个环境门控 skip；
 - `AnalysisMqIntegrationTest` 默认 0 个用例执行；本轮 MQ E2E 另起真实 broker + Worker 验证，
   但它不等于 Testcontainers 集成测试；
 - `python -m evaluation --mode all` 本轮未重跑；49/49 是 2026-10-21、`34b59b5` 的历史结果；

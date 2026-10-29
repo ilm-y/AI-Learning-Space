@@ -27,7 +27,7 @@ from __future__ import annotations
 from typing import AsyncIterator
 
 from app.context.builder import BuiltContext
-from app.llm.base import ChatMessage, LLMAdapter, LLMError
+from app.llm.base import ChatMessage, LLMAdapter, LLMError, StreamCompletion
 
 # 模型一个字都没吐出来时，宁可明确报错，也不要给用户一条空消息
 EMPTY_REPLY_HINT = "模型没有返回任何内容"
@@ -47,12 +47,17 @@ class Tutor:
         *,
         extra_instruction: str | None = None,
         temperature: float | None = None,
+        completion: StreamCompletion | None = None,
     ) -> AsyncIterator[str]:
         """把上下文交给模型。
 
         `extra_instruction` 只追加到 system message 尾部，用于显式复盘的一次受限
         重生成；它不改变消息结构（仍是一条 system + 对话 + 最后一条 user），
         也不会把上次的错误回答重新喂给模型。
+
+        `completion` 是调用方提供的可变终态槽：适配器支持时，流正常耗尽后在这里
+        写入 ``finish_reason``，供 Runtime 在最终 SSE 事件里标记截断。适配器没提供
+        终态方法时保持 ``metadata_available=False``，不推断截断。
         """
         messages = self._validated(context.messages)
         if extra_instruction:
@@ -60,14 +65,26 @@ class Tutor:
                 ChatMessage("system", f"{messages[0].content}\n\n{extra_instruction}"),
                 *messages[1:],
             ]
+        stream = self._open_stream(messages, temperature=temperature)
         produced = False
-        async for delta in self._llm.stream_chat(messages, temperature=temperature):
+        async for delta in stream:
             if not delta:
                 continue
             produced = True
             yield delta
+        if completion is not None:
+            terminal = getattr(stream, "completion", None)
+            if isinstance(terminal, StreamCompletion):
+                completion.copy_from(terminal)
         if not produced:
             raise LLMError(EMPTY_REPLY_HINT)
+
+    def _open_stream(self, messages: list, *, temperature: float | None):
+        """优先使用带终态元数据的流；旧适配器退回纯文本流。"""
+        opener = getattr(self._llm, "stream_chat_with_completion", None)
+        if callable(opener):
+            return opener(messages, temperature=temperature)
+        return self._llm.stream_chat(messages, temperature=temperature)
 
     async def complete(self, context: BuiltContext) -> str:
         """一次性产出。给不需要流式的场景（将来的结构化任务）留的入口。"""

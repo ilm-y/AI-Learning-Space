@@ -91,6 +91,64 @@ class HttpPythonAgentGatewayTest {
         assertThat(handler.errors).isEmpty();
         // meta 不产生任何回调，也不该被当成 delta 漏出去
         assertThat(handler.deltas).noneMatch(d -> d.contains("detectedConcepts"));
+        assertThat(handler.completions.get(0).truncated()).isFalse();
+    }
+
+    @Test
+    @DisplayName("done 携带 finishReason=length：保留 delta，但终态标记为截断")
+    void translatesTruncatedDone() throws IOException {
+        HttpServer server = startServer(200, """
+                event: delta
+                data: {"delta":"TLB 缓存的是页表项，"}
+
+                event: done
+                data: {"runId":1,"finishReason":"length","truncated":true}
+
+                """);
+
+        RecordingHandler handler = new RecordingHandler();
+        gateway(server).streamReply(sampleRequest(), handler);
+
+        // 部分文本仍然送达，前端可以展示；但 onComplete 必须带截断元数据，
+        // 不能把「被 Token 上限切断」压缩成一次普通正常结束。
+        assertThat(handler.deltas).containsExactly("TLB 缓存的是页表项，");
+        assertThat(handler.completes.get()).isEqualTo(1);
+        assertThat(handler.errors).isEmpty();
+        assertThat(handler.completions.get(0).truncated()).isTrue();
+        assertThat(handler.completions.get(0).finishReason()).isEqualTo("length");
+    }
+
+    @Test
+    @DisplayName("done 缺少 truncated 但 finishReason=length：仍按截断处理")
+    void infersTruncationFromFinishReason() throws IOException {
+        HttpServer server = startServer(200, """
+                event: done
+                data: {"runId":1,"finishReason":"length"}
+
+                """);
+
+        RecordingHandler handler = new RecordingHandler();
+        gateway(server).streamReply(sampleRequest(), handler);
+
+        assertThat(handler.completes.get()).isEqualTo(1);
+        assertThat(handler.completions.get(0).truncated()).isTrue();
+    }
+
+    @Test
+    @DisplayName("done 明确写 truncated=false 但 finishReason=length：length 仍然优先")
+    void finishReasonLengthOverridesContradictoryFlag() throws IOException {
+        HttpServer server = startServer(200, """
+                event: done
+                data: {"runId":1,"finishReason":"length","truncated":false}
+
+                """);
+
+        RecordingHandler handler = new RecordingHandler();
+        gateway(server).streamReply(sampleRequest(), handler);
+
+        assertThat(handler.completes.get()).isEqualTo(1);
+        assertThat(handler.completions.get(0).truncated()).isTrue();
+        assertThat(handler.completions.get(0).finishReason()).isEqualTo("length");
     }
 
     @Test
@@ -339,6 +397,7 @@ class HttpPythonAgentGatewayTest {
 
         private final List<String> deltas = new ArrayList<>();
         private final List<Error> errors = new ArrayList<>();
+        private final List<StreamCompletion> completions = new ArrayList<>();
         private final AtomicInteger completes = new AtomicInteger();
 
         @Override
@@ -349,6 +408,13 @@ class HttpPythonAgentGatewayTest {
         @Override
         public void onComplete() {
             completes.incrementAndGet();
+            completions.add(StreamCompletion.normal());
+        }
+
+        @Override
+        public void onComplete(StreamCompletion completion) {
+            completes.incrementAndGet();
+            completions.add(completion);
         }
 
         @Override

@@ -38,6 +38,11 @@ from dataclasses import dataclass
 from typing import AsyncIterator
 
 from app.analysis import LearningAnalyzer
+from app.citation_filter import (
+    CitationFilterReport,
+    StreamingCitationFilter,
+    filter_text,
+)
 from app.citations import (
     CitationReport,
     provided_labels_from_context,
@@ -56,7 +61,7 @@ from app.history_guard import (
     check_history_answer,
     retry_instruction,
 )
-from app.llm.base import LLMAdapter, LLMError
+from app.llm.base import LLMAdapter, LLMError, StreamCompletion
 from app.retriever import build_retriever, detect_concepts
 from app.retriever.base import (
     KnowledgeQuery,
@@ -125,7 +130,7 @@ class StreamEvent:
     | --- | --- |
     | `meta`  | 无对应回调，`HttpPythonAgentGateway` 自己用（记录命中概念、上下文规模） |
     | `delta` | `onDelta(text)` |
-    | `done`  | `onComplete()` |
+    | `done`  | `onComplete(StreamCompletion)`；`truncated=true` 表示回答不完整 |
     | `error` | `onError(code, message)` |
 
     所以 `error` 的 data 里必须带 **int 类型的 code** —— `onError` 的签名收的是 int，
@@ -205,6 +210,9 @@ class AgentRuntime:
     async def stream(self, request: ChatRequest) -> AsyncIterator[StreamEvent]:
         trace = RunTrace(run_id=request.run_id, trace_id=request.trace_id)
         prepared: PreparedRun | None = None
+        # 终态槽每次请求独立创建。适配器的 finish_reason 只能通过这一个对象
+        # 进入 SSE，不能把截断信息丢在「最后一个 delta」或共享诊断字段里。
+        completion = StreamCompletion()
         try:
             prepared = await self.prepare(request, trace)
 
@@ -223,17 +231,24 @@ class AgentRuntime:
                 },
             )
 
-            async for delta in self.generate(prepared):
+            async for delta in self.generate(prepared, completion=completion):
                 yield StreamEvent("delta", {"delta": delta})
 
-            # 只记录、不改变已经产生的回答：当前 SSE 契约没有「引用校验失败」
-            # 这个事件，直接从流里截断会破坏前端体验。真正的硬失败仍由评估集
-            # 与 trace 告警承担。
+            # 非法来源已在 generate() 的流式过滤里被丢弃，这里的校验对象是
+            # **实际交付文本**，正常应为 0 invalid；它仍写入 trace，供离线评估
+            # 复核「过滤后是否还有漏网标注」。模型原本产出的越界标注记录在
+            # CITATION_FILTER，不会因为交付文本被清洗而丢失证据。
             self.validate_citations(prepared)
 
+            # finish_reason=length 意味着模型因 Token 上限停止：已经产出的文本可以
+            # 保留展示，但这一轮不能被当作正常完成。终态信息随 done 一起下发，
+            # 由后端决定持久化状态并跳过只适合完整回答的后续分析。
+            truncated = completion.truncated
             trace.record(
                 TraceEventType.RUN_END,
-                status="COMPLETED",
+                status="TRUNCATED" if truncated else "COMPLETED",
+                finishReason=completion.finish_reason,
+                truncated=truncated,
                 responseChars=len(prepared.state.response),
             )
             yield StreamEvent(
@@ -243,6 +258,8 @@ class AgentRuntime:
                     "detectedConcepts": prepared.state.concept_names,
                     "estimatedTokens": prepared.context.estimated_tokens,
                     "elapsedMs": trace.elapsed_ms,
+                    "finishReason": completion.finish_reason,
+                    "truncated": truncated,
                 },
             )
         except (RetrievalError, LLMError) as exc:
@@ -269,7 +286,12 @@ class AgentRuntime:
             if prepared is not None:
                 log.info("run %s 结束：%s", request.run_id, prepared.trace.as_dict())
 
-    async def generate(self, prepared: PreparedRun) -> AsyncIterator[str]:
+    async def generate(
+        self,
+        prepared: PreparedRun,
+        *,
+        completion: StreamCompletion | None = None,
+    ) -> AsyncIterator[str]:
         """把一次已组装好的上下文交给模型，逐个产出增量。
 
         单独抽出来是为了让离线评估能复用同一条生成链路：评估需要拿到完整
@@ -278,18 +300,35 @@ class AgentRuntime:
         两条路径的分界只有一条：**显式复盘**回答需要先完成生成后校验再推送。
         普通对话仍然边生成边推送，不缓冲、不增加首字延迟。
 
+        两条路径都会经过 `StreamingCitationFilter`：非法来源标注在离开
+        Runtime 之前就被丢掉，而不是等 `validate_citations` 事后记一条 trace。
+        普通对话只扣住「可能是标注开头」的尾巴，不缓冲整段回答；复盘路径
+        本来就已经缓冲，直接对完整文本过滤。
+
         非成功检索状态下的兜底也在这里：模型输出结束后、`done` 之前，如果
         本轮没有知识片段且模型自己没说明资料状态，就追加一条固定说明。
         它是一个普通 delta，不删除、不覆盖模型已经产出的内容，
         因此 SSE 事件序列与引用校验入口都不变。
         """
         if prepared.state.history_review_requested:
-            async for delta in self._generate_history_review(prepared):
+            async for delta in self._generate_history_review(
+                prepared, completion=completion
+            ):
                 yield delta
         else:
-            async for delta in self._tutor.stream(prepared.context):
-                prepared.state.response += delta
-                yield delta
+            citation_filter = StreamingCitationFilter(_provided_labels(prepared))
+            async for delta in self._tutor.stream(
+                prepared.context, completion=completion
+            ):
+                safe = citation_filter.feed(delta)
+                if safe:
+                    prepared.state.response += safe
+                    yield safe
+            tail = citation_filter.finish()
+            if tail:
+                prepared.state.response += tail
+                yield tail
+            self._record_citation_filter(prepared, citation_filter.report)
 
         # Guard 只看预算后的最终状态。SUCCESS_BUT_DROPPED / SUCCESS_PARTIAL 不在
         # GUARD_STATUSES 里：它们的说明已经在 Context Builder 阶段写进 Prompt，
@@ -317,7 +356,12 @@ class AgentRuntime:
             prepared.state.response += addition
             yield addition
 
-    async def _generate_history_review(self, prepared: PreparedRun) -> AsyncIterator[str]:
+    async def _generate_history_review(
+        self,
+        prepared: PreparedRun,
+        *,
+        completion: StreamCompletion | None = None,
+    ) -> AsyncIterator[str]:
         """复盘回答：先完整生成并校验，再推送给用户。
 
         首字延迟因此等于一次完整生成（需要重生成时再加一次），这是显式复盘
@@ -328,11 +372,13 @@ class AgentRuntime:
         """
         state = prepared.state
         started = time.monotonic()
-        raw = await self._collect_history_answer(prepared)
+        first_completion = StreamCompletion()
+        raw = await self._collect_history_answer(prepared, completion=first_completion)
         initial_issues = check_history_answer(raw, state)
         issues = initial_issues
 
         final = raw
+        delivered_completion = first_completion
         regenerated = False
         regeneration_error: str | None = None
         remaining_issues: list = []
@@ -341,10 +387,12 @@ class AgentRuntime:
         if issues:
             regenerated = True
             retry = ""
+            retry_completion = StreamCompletion()
             try:
                 retry = await self._collect_history_answer(
                     prepared,
                     extra_instruction=retry_instruction(issues),
+                    completion=retry_completion,
                 )
             except LLMError as exc:
                 # 第一次调用已经成功，重生成失败时用确定性回退比把
@@ -354,10 +402,21 @@ class AgentRuntime:
                 remaining_issues = check_history_answer(retry, state)
                 if not remaining_issues:
                     final = retry
+                    delivered_completion = retry_completion
                     issues = []
             if issues:
                 final = build_history_fallback(state)
+                # 回退文本是确定性拼出的完整内容，不继承被丢弃模型流的截断状态。
+                delivered_completion = StreamCompletion(metadata_available=True)
                 fallback_used = True
+
+        if completion is not None:
+            completion.copy_from(delivered_completion)
+
+        # 复盘路径已经缓冲了完整回答，这里直接做一次完整过滤；
+        # 与普通路径共用同一套「本轮实际注入来源」判定。
+        final, filter_report = filter_text(final, _provided_labels(prepared))
+        self._record_citation_filter(prepared, filter_report)
 
         state.response = final
         first_delta_ms = int((time.monotonic() - started) * 1000)
@@ -394,13 +453,40 @@ class AgentRuntime:
         prepared: PreparedRun,
         *,
         extra_instruction: str | None = None,
+        completion: StreamCompletion | None = None,
     ) -> str:
         parts: list[str] = []
         async for delta in self._tutor.stream(
-            prepared.context, extra_instruction=extra_instruction
+            prepared.context,
+            extra_instruction=extra_instruction,
+            completion=completion,
         ):
             parts.append(delta)
         return "".join(parts)
+
+    def _record_citation_filter(
+        self, prepared: PreparedRun, report: CitationFilterReport
+    ) -> None:
+        """把「被过滤掉什么」写进 trace。
+
+        过滤后 `state.response` 里已经没有非法标注，`CITATION_CHECK` 会显示 0；
+        真正的问题样本必须在 `CITATION_FILTER` 里可见，否则等于把证据藏起来。
+        """
+        if not report.removed:
+            return
+        prepared.trace.record(
+            TraceEventType.CITATION_FILTER,
+            droppedLabels=report.dropped,
+            malformedLabels=report.malformed,
+            removed=report.removed,
+            providedLabels=report.provided_labels,
+        )
+        log.warning(
+            "run %s 过滤非法来源标注：dropped=%s malformed=%s",
+            prepared.state.run_id,
+            report.dropped,
+            report.malformed,
+        )
 
     def validate_citations(self, prepared: PreparedRun) -> CitationReport:
         """校验本轮回答里的来源标注，并把结果写进 trace。
@@ -409,7 +495,7 @@ class AgentRuntime:
         所以入口兜住异常，只记录一条带 error 的 trace。
         """
         try:
-            labels = provided_labels_from_context(prepared.context, prepared.state.knowledge)
+            labels = _provided_labels(prepared)
             report = validate_citations(
                 prepared.state.response,
                 prepared.state.knowledge,
@@ -450,12 +536,20 @@ class AgentRuntime:
 
     # ---------- 分析路径 ----------
 
-    async def analyze(self, request: AnalyzeRequest) -> AnalyzeResult:
+    async def analyze(
+        self,
+        request: AnalyzeRequest,
+        *,
+        retriever=None,
+    ) -> AnalyzeResult:
         """从一轮已经完成的对话里抽取学习候选。
 
         与 `stream` 的关系是**前后脚**：后端在助手回复落库、SSE 结束后调用这里，
         拿到结果再写 Evidence / Understanding / Memory。它不产生用户可见的流，
         失败时由调用方决定是否退回本地规则（而不是把错误展示给用户）。
+
+        `retriever` 只给评估/测试注入受控检索源；不传时仍按生产配置构造，
+        保持分析链路的 ``allow_degradation=False``。传入的检索源归调用方关闭。
         """
         trace = RunTrace(run_id=request.run_id, trace_id=request.trace_id)
         trace.record(
@@ -468,7 +562,7 @@ class AgentRuntime:
             messageChars=len(request.user_message or ""),
         )
         try:
-            return await self._analyzer.analyze(request, trace)
+            return await self._analyzer.analyze(request, trace, retriever=retriever)
         except Exception as exc:
             trace.record(TraceEventType.RUN_ERROR, error=repr(exc))
             log.warning("analyze run %s 失败：%s", request.run_id, exc)
@@ -722,3 +816,12 @@ def _is_history_review(query: str) -> bool:
     return any(marker in query for marker in _PERSONAL_HISTORY_MARKERS) or any(
         marker in query for marker in _HISTORY_ERROR_MARKERS
     )
+
+
+def _provided_labels(prepared: PreparedRun) -> list[str]:
+    """当前请求实际注入的合法来源。
+
+    每次调用都从这一个 `prepared` 的 context / knowledge 计算，不读缓存，
+    因此不会跨请求、跨用户或跨 Space 复用上一轮的来源集合。
+    """
+    return provided_labels_from_context(prepared.context, prepared.state.knowledge)

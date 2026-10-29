@@ -1,0 +1,65 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------------< com.ails:backend >--------------------------
+[INFO] Building backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ backend ---
+[INFO] Copying 2 resources from src\main\resources to target\classes
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ backend ---
+[INFO] skip non existing resourceDirectory D:\learningMatiarials\AI-Learning-Space\backend\backend\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ backend ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.ails.backend.mq.AnalysisMqIntegrationTest
+19:37:20.570 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.NpipeSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+19:37:20.857 [main] INFO org.testcontainers.dockerclient.DockerMachineClientProviderStrategy -- docker-machine executable was not found on PATH ([C:\Users\yangsy\bin, D:\myApp\git\mingw64\bin, D:\myApp\git\usr\local\bin, D:\myApp\git\usr\bin, D:\myApp\git\usr\bin, D:\myApp\git\mingw64\bin, D:\myApp\git\usr\bin, C:\Users\yangsy\bin, E:\app\VMware\VMware Workstation\bin, E:\app\Idea\jdk\jdk-17.0.12_windows-x64_bin\jdk-17.0.12\bin, C:\WINDOWS\system32, C:\WINDOWS, C:\WINDOWS\System32\Wbem, C:\WINDOWS\System32\WindowsPowerShell\v1.0, C:\WINDOWS\System32\OpenSSH, D:\myApp\Git\cmd, C:\Program Files\dotnet, E:\app\weixin_kaifa\微信web开发者工具\dll, C:\Program Files\MySQL\MySQL Server 5.7\bin, E:\app\apache-maven-3.9.9-bin\apache-maven-3.9.9\bin, E:\app\Python\python, E:\app\Python\python\Scripts, E:\app\MYSQL\MySQL Server 8.0\bin, E:\app\nvm\nvm, E:\app\nvm\nodejs, E:\app\docker\resources\bin, E:\app\AtomCode, E:\app\uv, E:\app\cursor\cursor\resources\app\codeBin, E:\app\VMware\VMware Workstation\bin, E:\app\Idea\jdk\jdk-17.0.12_windows-x64_bin\jdk-17.0.12\bin, C:\WINDOWS\system32, C:\WINDOWS, C:\WINDOWS\System32\Wbem, C:\WINDOWS\System32\WindowsPowerShell\v1.0, C:\WINDOWS\System32\OpenSSH, D:\myApp\Git\cmd, C:\Program Files\dotnet, C:\Program Files\Microsoft SQL Server\150\Tools\Binn, E:\Windows Kits\10\Windows Performance Toolkit, E:\app\weixin_kaifa\微信web开发者工具\dll, E:\app\visual studio code\Microsoft VS Code\bin, C:\Program Files\MySQL\MySQL Server 5.7\bin, E:\app\apache-maven-3.9.9-bin\apache-maven-3.9.9\bin, E:\app\Python\python, E:\app\Python\python\Scripts, E:\app\MYSQL\MySQL Server 8.0\bin, E:\app\cursor\cursor\resources\app\bin, E:\app\nvm\nvm, E:\app\nvm\nodejs, E:\app\docker\resources\bin, E:\app\MYSQL\MySQL Shell 8.0\bin, C:\Users\yangsy\AppData\Local\Microsoft\WindowsApps, E:\app\devecostudio-windows-6.0.2.642\6.0.2\DevEco Studio\bin, E:\app\visual studio code\Microsoft VS Code\bin, E:\app\nvm\nvm, E:\app\nvm\nodejs, D:\myApp\flutter\flutter_flutter\bin, E:\app\devecostudio-windows-6.0.2.642\6.0.2.642\DevEco Studio\tools\ohpm\bin, E:\app\devecostudio-windows-6.0.2.642\6.0.2.642\DevEco Studio\tools\hvigor\bin, E:\app\devecostudio-windows-6.0.2.642\6.0.2.642\DevEco Studio\sdk\default\openharmony\toolchains, E:\app\Mingw\MinGW\bin, E:\app\AtomCode, D:\myApp\Android-Command-line-tool\commandlinetools-win-14742923_latest\cmdline-tools\latest\bin, D:\myApp\Android-Command-line-tool\commandlinetools-win-14742923_latest\platform-tools, D:\myApp\git\usr\bin\vendor_perl, D:\myApp\git\usr\bin\core_perl])
+19:37:20.858 [main] ERROR org.testcontainers.dockerclient.DockerClientProviderStrategy -- Could not find a valid Docker environment. Please check configuration. Attempted configurations were:
+	EnvironmentAndSystemPropertyClientProviderStrategy: failed with exception BadRequestException (Status 400: {"ID":"","Containers":0,"ContainersRunning":0,"ContainersPaused":0,"ContainersStopped":0,"Images":0,"Driver":"","DriverStatus":null,"Plugins":{"Volume":null,"Network":null,"Authorization":null,"Log":null},"MemoryLimit":false,"SwapLimit":false,"CpuCfsPeriod":false,"CpuCfsQuota":false,"CPUShares":false,"CPUSet":false,"PidsLimit":false,"IPv4Forwarding":false,"Debug":false,"NFd":0,"OomKillDisable":false,"NGoroutines":0,"SystemTime":"","LoggingDriver":"","CgroupDriver":"","NEventsListener":0,"KernelVersion":"","OperatingSystem":"","OSVersion":"","OSType":"","Architecture":"","IndexServerAddress":"","RegistryConfig":null,"NCPU":0,"MemTotal":0,"GenericResources":null,"DockerRootDir":"","HttpProxy":"","HttpsProxy":"","NoProxy":"","Name":"","Labels":["com.docker.desktop.address=npipe://\\\\.\\pipe\\docker_cli"],"ExperimentalBuild":false,"ServerVersion":"","Runtimes":null,"DefaultRuntime":"","Swarm":{"NodeID":"","NodeAddr":"","LocalNodeState":"","ControlAvailable":false,"Error":"","RemoteManagers":null},"LiveRestoreEnabled":false,"Isolation":"","InitBinary":"","ContainerdCommit":{"ID":""},"RuncCommit":{"ID":""},"InitCommit":{"ID":""},"SecurityOptions":null,"CDISpecDirs":null,"Warnings":null})
+	NpipeSocketClientProviderStrategy: failed with exception BadRequestException (Status 400: {"ID":"","Containers":0,"ContainersRunning":0,"ContainersPaused":0,"ContainersStopped":0,"Images":0,"Driver":"","DriverStatus":null,"Plugins":{"Volume":null,"Network":null,"Authorization":null,"Log":null},"MemoryLimit":false,"SwapLimit":false,"CpuCfsPeriod":false,"CpuCfsQuota":false,"CPUShares":false,"CPUSet":false,"PidsLimit":false,"IPv4Forwarding":false,"Debug":false,"NFd":0,"OomKillDisable":false,"NGoroutines":0,"SystemTime":"","LoggingDriver":"","CgroupDriver":"","NEventsListener":0,"KernelVersion":"","OperatingSystem":"","OSVersion":"","OSType":"","Architecture":"","IndexServerAddress":"","RegistryConfig":null,"NCPU":0,"MemTotal":0,"GenericResources":null,"DockerRootDir":"","HttpProxy":"","HttpsProxy":"","NoProxy":"","Name":"","Labels":["com.docker.desktop.address=npipe://\\\\.\\pipe\\docker_cli"],"ExperimentalBuild":false,"ServerVersion":"","Runtimes":null,"DefaultRuntime":"","Swarm":{"NodeID":"","NodeAddr":"","LocalNodeState":"","ControlAvailable":false,"Error":"","RemoteManagers":null},"LiveRestoreEnabled":false,"Isolation":"","InitBinary":"","ContainerdCommit":{"ID":""},"RuncCommit":{"ID":""},"InitCommit":{"ID":""},"SecurityOptions":null,"CDISpecDirs":null,"Warnings":null})As no valid configuration was found, execution cannot continue.
+See https://java.testcontainers.org/on_failure.html for more details.
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.732 s <<< FAILURE! -- in com.ails.backend.mq.AnalysisMqIntegrationTest
+[ERROR] com.ails.backend.mq.AnalysisMqIntegrationTest -- Time elapsed: 0.732 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: 要求真实 RabbitMQ Broker（-Pmq-integration），但本机 Docker 不可用。请启动 Docker 后重跑；直接跳过会把「没验证」伪装成「通过」。
+	at com.ails.backend.mq.AnalysisMqIntegrationTest.setUp(AnalysisMqIntegrationTest.java:75)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   AnalysisMqIntegrationTest.setUp:75 要求真实 RabbitMQ Broker（-Pmq-integration），但本机 Docker 不可用。请启动 Docker 后重跑；直接跳过会把「没验证」伪装成「通过」。
+[INFO] 
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  3.892 s
+[INFO] Finished at: 2026-10-29T19:37:21+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test (default-test) on project backend: There are test failures.
+[ERROR] 
+[ERROR] Please refer to D:\learningMatiarials\AI-Learning-Space\backend\backend\target\surefire-reports for the individual test results.
+[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

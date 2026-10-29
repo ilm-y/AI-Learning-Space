@@ -1,0 +1,746 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------------< com.ails:backend >--------------------------
+[INFO] Building backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ backend ---
+[INFO] Copying 2 resources from src\main\resources to target\classes
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ backend ---
+[INFO] skip non existing resourceDirectory D:\learningMatiarials\AI-Learning-Space\backend\backend\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ backend ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.ails.backend.service.ChatSseIntegrationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.3.5)
+
+2026-10-29T19:22:25.159+08:00  INFO 23040 --- [backend] [           main] c.a.b.service.ChatSseIntegrationTest     : Starting ChatSseIntegrationTest using Java 17.0.12 with PID 23040 (started by yangsy in D:\learningMatiarials\AI-Learning-Space\backend\backend)
+2026-10-29T19:22:25.161+08:00 DEBUG 23040 --- [backend] [           main] c.a.b.service.ChatSseIntegrationTest     : Running with Spring Boot v3.3.5, Spring v6.1.14
+2026-10-29T19:22:25.162+08:00  INFO 23040 --- [backend] [           main] c.a.b.service.ChatSseIntegrationTest     : No active profile set, falling back to 1 default profile: "default"
+2026-10-29T19:22:26.832+08:00  INFO 23040 --- [backend] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 0 (http)
+2026-10-29T19:22:26.846+08:00  INFO 23040 --- [backend] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-10-29T19:22:26.846+08:00  INFO 23040 --- [backend] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.31]
+2026-10-29T19:22:26.933+08:00  INFO 23040 --- [backend] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-10-29T19:22:26.933+08:00  INFO 23040 --- [backend] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1756 ms
+2026-10-29T19:22:27.005+08:00 DEBUG 23040 --- [backend] [           main] c.a.b.security.JwtAuthenticationFilter   : Filter 'jwtAuthenticationFilter' configured for use
+2026-10-29T19:22:27.005+08:00 DEBUG 23040 --- [backend] [           main] .b.s.InternalServiceAuthenticationFilter : Filter 'internalServiceAuthenticationFilter' configured for use
+2026-10-29T19:22:27.440+08:00  INFO 23040 --- [backend] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-10-29T19:22:27.626+08:00  INFO 23040 --- [backend] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@2aac8ad7
+2026-10-29T19:22:27.629+08:00  INFO 23040 --- [backend] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+2026-10-29T19:22:29.441+08:00  INFO 23040 --- [backend] [           main] c.a.b.service.DocumentStorageService     : Document storage root=D:\learningMatiarials\AI-Learning-Space\backend\backend\data\documents, maxSizeBytes=10485760
+2026-10-29T19:22:29.664+08:00  WARN 23040 --- [backend] [           main] .s.s.UserDetailsServiceAutoConfiguration : 
+
+Using generated security password: ce32fdbf-6b24-4531-b93f-b4b6dbb9d289
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-10-29T19:22:29.674+08:00  INFO 23040 --- [backend] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-10-29T19:22:30.426+08:00  INFO 23040 --- [backend] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 56913 (http) with context path '/'
+2026-10-29T19:22:30.444+08:00  INFO 23040 --- [backend] [           main] c.a.b.service.ChatSseIntegrationTest     : Started ChatSseIntegrationTest in 5.643 seconds (process running for 6.732)
+2026-10-29T19:22:30.865+08:00  INFO 23040 --- [backend] [o-auto-1-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-10-29T19:22:30.866+08:00  INFO 23040 --- [backend] [o-auto-1-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-10-29T19:22:30.867+08:00  INFO 23040 --- [backend] [o-auto-1-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-10-29T19:22:31.099+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.150+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.211+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:31.215+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.215+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 177(Long)
+2026-10-29T19:22:31.218+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:31.233+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.235+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.240+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:31.242+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.242+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 177(Long)
+2026-10-29T19:22:31.244+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:31.321+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:31.321+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.323+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:31.324+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:31.324+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.325+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 0
+2026-10-29T19:22:31.331+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.332+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 100(Long), USER(String), TEXT(String), TLB 缓存的是什么？(String), 7(Integer), 1(Integer), 2026-10-29T19:22:31.329622400(LocalDateTime)
+2026-10-29T19:22:31.338+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:31.344+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.345+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 177(Long), 177(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:31.340629400(LocalDateTime), 2026-10-29T19:22:30(LocalDateTime), 2026-10-29T19:22:30(LocalDateTime), 100(Long)
+2026-10-29T19:22:31.346+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:31.354+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.mapper.ConceptMapper.selectList    : ==>  Preparing: SELECT id,learning_space_id,canonical_name,display_name,description,difficulty_level,deleted_at,created_at,updated_at FROM concept WHERE deleted_at IS NULL AND (learning_space_id = ?) ORDER BY id ASC
+2026-10-29T19:22:31.355+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.mapper.ConceptMapper.selectList    : ==> Parameters: 177(Long)
+2026-10-29T19:22:31.357+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.mapper.ConceptMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:31.361+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.L.selectList                     : ==>  Preparing: SELECT id,user_id,learning_space_id,title,goal,current_focus,status,started_at,last_active_at,completed_at FROM learning_session WHERE (user_id = ? AND learning_space_id = ? AND status IN (?,?)) ORDER BY last_active_at DESC
+2026-10-29T19:22:31.362+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.L.selectList                     : ==> Parameters: 177(Long), 177(Long), ACTIVE(String), PAUSED(String)
+2026-10-29T19:22:31.363+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.L.selectList                     : <==      Total: 0
+2026-10-29T19:22:31.369+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.LearningSessionMapper.insert     : ==>  Preparing: INSERT INTO learning_session ( user_id, learning_space_id, title, goal, status, started_at, last_active_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.369+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.LearningSessionMapper.insert     : ==> Parameters: 177(Long), 177(Long), TLB(String), 围绕「TLB」的学习(String), ACTIVE(String), 2026-10-29T19:22:31.367149300(LocalDateTime), 2026-10-29T19:22:31.367149300(LocalDateTime)
+2026-10-29T19:22:31.371+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.LearningSessionMapper.insert     : <==    Updates: 1
+2026-10-29T19:22:31.372+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.373+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 177(Long), 177(Long), 78(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:30(LocalDateTime), 2026-10-29T19:22:30(LocalDateTime), 100(Long)
+2026-10-29T19:22:31.373+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:31.374+08:00  INFO 23040 --- [backend] [o-auto-1-exec-1] c.ails.backend.service.SessionService    : 新建学习活动, sessionId=78, conversationId=100, concepts=[TLB]
+2026-10-29T19:22:31.380+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.383+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 177(Long), 100(Long), 78(Long), CHAT(String), RUNNING(String), TLB 缓存的是什么？(String), 82335c0cbcddaf04df300e6ccb889436(String), 2026-10-29T19:22:31.380411800(LocalDateTime)
+2026-10-29T19:22:31.387+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-1] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:31.400+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.MessageMapper.selectList    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE deleted_at IS NULL AND (conversation_id = ? AND message_type = ? AND id NOT IN (?)) ORDER BY sequence_no DESC,id DESC LIMIT 20
+2026-10-29T19:22:31.401+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.MessageMapper.selectList    : ==> Parameters: 100(Long), TEXT(String), 144(Long)
+2026-10-29T19:22:31.402+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.MessageMapper.selectList    : <==      Total: 0
+2026-10-29T19:22:31.414+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.414+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.417+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:31.418+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:31.419+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.421+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:31.422+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:31.422+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.423+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 1
+2026-10-29T19:22:31.423+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.424+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 100(Long), ASSISTANT(String), TEXT(String), TLB 缓存的是页表项。它让地址翻译不必每次访问内存。(String), 22(Integer), 2(Integer), 2026-10-29T19:22:31.423640600(LocalDateTime)
+2026-10-29T19:22:31.425+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:31.425+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.426+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 177(Long), 177(Long), 78(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:31.425641100(LocalDateTime), 2026-10-29T19:22:30(LocalDateTime), 2026-10-29T19:22:30(LocalDateTime), 100(Long)
+2026-10-29T19:22:31.427+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:31.433+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET status=?, output_summary=?, duration_ms=?, finished_at=? WHERE id=?
+2026-10-29T19:22:31.434+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: COMPLETED(String), chars=27(String), 42(Integer), 2026-10-29T19:22:31.430639800(LocalDateTime), 133(Long)
+2026-10-29T19:22:31.437+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:31.507+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.507+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.508+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:31.511+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.511+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 177(Long), 100(Long), 78(Long), ANALYSIS(String), RUNNING(String), analyze message#144(String), 2026-10-29T19:22:31.511421800(LocalDateTime)
+2026-10-29T19:22:31.512+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:31.514+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_understanding WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:31.514+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 177(Long), 89(Long)
+2026-10-29T19:22:31.515+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 0
+2026-10-29T19:22:31.522+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.insert                         : ==>  Preparing: INSERT INTO learning_understanding ( user_id, concept_id, known_parts, misconceptions, uncertain_parts, status, updated_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.523+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.insert                         : ==> Parameters: 177(Long), 89(Long), [](String), [](String), [](String), UNKNOWN(String), 2026-10-29T19:22:31.522058800(LocalDateTime)
+2026-10-29T19:22:31.524+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.insert                         : <==    Updates: 1
+2026-10-29T19:22:31.528+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.selectList                     : ==>  Preparing: SELECT id,user_id,concept_id,understanding_id,evidence_type,observation,correctness,reasoning_quality,specificity,ai_confidence,need_follow_up,follow_up_status,follow_up_conversation_id,first_seen_run_id,last_seen_run_id,analyzer_version,dedupe_key,created_at,updated_at FROM learning_evidence WHERE (dedupe_key = ?) LIMIT 1
+2026-10-29T19:22:31.528+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.selectList                     : ==> Parameters: 14c0f821723196102d6083a98f3bf9360ece7443ad7189de989dc082d5778208(String)
+2026-10-29T19:22:31.529+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.selectList                     : <==      Total: 0
+2026-10-29T19:22:31.533+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.LearningEvidenceMapper.insert    : ==>  Preparing: INSERT INTO learning_evidence ( user_id, concept_id, understanding_id, evidence_type, observation, correctness, need_follow_up, follow_up_status, first_seen_run_id, last_seen_run_id, analyzer_version, dedupe_key, created_at, updated_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.534+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.LearningEvidenceMapper.insert    : ==> Parameters: 177(Long), 89(Long), 34(Long), OBSERVATION(String), TLB 缓存的是什么(String), UNKNOWN(String), true(Boolean), PENDING(String), 134(Long), 134(Long), rules-v1(String), 14c0f821723196102d6083a98f3bf9360ece7443ad7189de989dc082d5778208(String), 2026-10-29T19:22:31.532560600(LocalDateTime), 2026-10-29T19:22:31.532560600(LocalDateTime)
+2026-10-29T19:22:31.535+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.LearningEvidenceMapper.insert    : <==    Updates: 1
+2026-10-29T19:22:31.538+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.E.selectCount                    : ==>  Preparing: SELECT COUNT( * ) AS total FROM evidence_source WHERE (evidence_id = ? AND source_type = ? AND source_id = ?)
+2026-10-29T19:22:31.539+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.E.selectCount                    : ==> Parameters: 45(Long), MESSAGE(String), 144(Long)
+2026-10-29T19:22:31.541+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.E.selectCount                    : <==      Total: 1
+2026-10-29T19:22:31.545+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.EvidenceSourceMapper.insert      : ==>  Preparing: INSERT INTO evidence_source ( evidence_id, source_type, source_id, created_at ) VALUES ( ?, ?, ?, ? )
+2026-10-29T19:22:31.545+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.EvidenceSourceMapper.insert      : ==> Parameters: 45(Long), MESSAGE(String), 144(Long), 2026-10-29T19:22:31.545341200(LocalDateTime)
+2026-10-29T19:22:31.547+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.EvidenceSourceMapper.insert      : <==    Updates: 1
+2026-10-29T19:22:31.547+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_understanding WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:31.548+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 177(Long), 89(Long)
+2026-10-29T19:22:31.549+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 1
+2026-10-29T19:22:31.566+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.updateById                     : ==>  Preparing: UPDATE learning_understanding SET user_id=?, concept_id=?, known_parts=?, misconceptions=?, uncertain_parts=?, status=?, updated_at=? WHERE id=?
+2026-10-29T19:22:31.567+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.updateById                     : ==> Parameters: 177(Long), 89(Long), [](String), [](String), [](String), EXPOSED(String), 2026-10-29T19:22:31.563587700(LocalDateTime), 34(Long)
+2026-10-29T19:22:31.568+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.updateById                     : <==    Updates: 1
+2026-10-29T19:22:31.569+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.U.selectMaxRevisionNoForUpdate   : ==>  Preparing: SELECT COALESCE(MAX(revision_no), 0) FROM understanding_revision WHERE understanding_id = ? FOR UPDATE
+2026-10-29T19:22:31.569+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.U.selectMaxRevisionNoForUpdate   : ==> Parameters: 34(Long)
+2026-10-29T19:22:31.569+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.U.selectMaxRevisionNoForUpdate   : <==      Total: 1
+2026-10-29T19:22:31.571+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.U.insert                         : ==>  Preparing: INSERT INTO understanding_revision ( understanding_id, revision_no, known_parts, misconceptions, uncertain_parts, status, trigger_evidence_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.572+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.U.insert                         : ==> Parameters: 34(Long), 1(Integer), [](String), [](String), [](String), EXPOSED(String), 45(Long), 2026-10-29T19:22:31.563587700(LocalDateTime)
+2026-10-29T19:22:31.573+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.U.insert                         : <==    Updates: 1
+2026-10-29T19:22:31.574+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.updateById                     : ==>  Preparing: UPDATE learning_understanding SET user_id=?, concept_id=?, known_parts=?, misconceptions=?, uncertain_parts=?, status=?, current_revision_id=?, updated_at=? WHERE id=?
+2026-10-29T19:22:31.575+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.updateById                     : ==> Parameters: 177(Long), 89(Long), [](String), [](String), [](String), EXPOSED(String), 34(Long), 2026-10-29T19:22:31.563587700(LocalDateTime), 34(Long)
+2026-10-29T19:22:31.576+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.m.L.updateById                     : <==    Updates: 1
+2026-10-29T19:22:31.576+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_state WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:31.576+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 177(Long), 89(Long)
+2026-10-29T19:22:31.577+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 0
+2026-10-29T19:22:31.581+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.LearningStateMapper.insert  : ==>  Preparing: INSERT INTO learning_state ( user_id, concept_id, status, next_review_at, review_priority, last_evidence_at, updated_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.582+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.LearningStateMapper.insert  : ==> Parameters: 177(Long), 89(Long), EXPOSED(String), 2026-10-31T19:22:31.532560600(LocalDateTime), 4(Integer), 2026-10-29T19:22:31.532560600(LocalDateTime), 2026-10-29T19:22:31.581592600(LocalDateTime)
+2026-10-29T19:22:31.584+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.LearningStateMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:31.585+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET user_id=?, conversation_id=?, session_id=?, run_type=?, status=?, input_summary=?, output_summary=?, duration_ms=?, created_at=?, finished_at=? WHERE id=?
+2026-10-29T19:22:31.585+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: 177(Long), 100(Long), 78(Long), ANALYSIS(String), COMPLETED(String), analyze message#144(String), evidence=1(String), 73(Integer), 2026-10-29T19:22:31.511421800(LocalDateTime), 2026-10-29T19:22:31.584593900(LocalDateTime), 134(Long)
+2026-10-29T19:22:31.587+08:00 DEBUG 23040 --- [backend] [  chat-stream-1] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:31.632+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.633+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.634+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:31.634+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.634+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 177(Long)
+2026-10-29T19:22:31.635+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:31.637+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.mapper.MessageMapper.selectList    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE deleted_at IS NULL AND (conversation_id = ?) ORDER BY sequence_no ASC,id ASC
+2026-10-29T19:22:31.638+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.mapper.MessageMapper.selectList    : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.639+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.mapper.MessageMapper.selectList    : <==      Total: 2
+2026-10-29T19:22:31.665+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.666+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.668+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:31.668+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.668+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 177(Long)
+2026-10-29T19:22:31.670+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:31.670+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.mapper.MessageMapper.selectList    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE deleted_at IS NULL AND (conversation_id = ?) ORDER BY sequence_no ASC,id ASC
+2026-10-29T19:22:31.670+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.mapper.MessageMapper.selectList    : ==> Parameters: 100(Long)
+2026-10-29T19:22:31.672+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.mapper.MessageMapper.selectList    : <==      Total: 2
+2026-10-29T19:22:31.779+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.780+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 101(Long)
+2026-10-29T19:22:31.781+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:31.781+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.781+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 179(Long)
+2026-10-29T19:22:31.782+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:31.784+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.784+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 101(Long)
+2026-10-29T19:22:31.785+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:31.785+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.786+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 179(Long)
+2026-10-29T19:22:31.787+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:31.788+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:31.788+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 101(Long)
+2026-10-29T19:22:31.789+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:31.789+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:31.789+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 101(Long)
+2026-10-29T19:22:31.790+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 0
+2026-10-29T19:22:31.790+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.791+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 101(Long), USER(String), TEXT(String), TLB 缓存的是什么？(String), 7(Integer), 1(Integer), 2026-10-29T19:22:31.790369500(LocalDateTime)
+2026-10-29T19:22:31.791+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:31.792+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.792+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 179(Long), 179(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:31.792519500(LocalDateTime), 2026-10-29T19:22:31(LocalDateTime), 2026-10-29T19:22:31(LocalDateTime), 101(Long)
+2026-10-29T19:22:31.793+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:31.796+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.mapper.ConceptMapper.selectList    : ==>  Preparing: SELECT id,learning_space_id,canonical_name,display_name,description,difficulty_level,deleted_at,created_at,updated_at FROM concept WHERE deleted_at IS NULL AND (learning_space_id = ?) ORDER BY id ASC
+2026-10-29T19:22:31.797+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.mapper.ConceptMapper.selectList    : ==> Parameters: 179(Long)
+2026-10-29T19:22:31.798+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.mapper.ConceptMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:31.800+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.L.selectList                     : ==>  Preparing: SELECT id,user_id,learning_space_id,title,goal,current_focus,status,started_at,last_active_at,completed_at FROM learning_session WHERE (user_id = ? AND learning_space_id = ? AND status IN (?,?)) ORDER BY last_active_at DESC
+2026-10-29T19:22:31.801+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.L.selectList                     : ==> Parameters: 179(Long), 179(Long), ACTIVE(String), PAUSED(String)
+2026-10-29T19:22:31.801+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.L.selectList                     : <==      Total: 0
+2026-10-29T19:22:31.803+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.LearningSessionMapper.insert     : ==>  Preparing: INSERT INTO learning_session ( user_id, learning_space_id, title, goal, status, started_at, last_active_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.804+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.LearningSessionMapper.insert     : ==> Parameters: 179(Long), 179(Long), TLB(String), 围绕「TLB」的学习(String), ACTIVE(String), 2026-10-29T19:22:31.802517600(LocalDateTime), 2026-10-29T19:22:31.802517600(LocalDateTime)
+2026-10-29T19:22:31.805+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.LearningSessionMapper.insert     : <==    Updates: 1
+2026-10-29T19:22:31.806+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.807+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 179(Long), 179(Long), 79(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:31(LocalDateTime), 2026-10-29T19:22:31(LocalDateTime), 101(Long)
+2026-10-29T19:22:31.807+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:31.807+08:00  INFO 23040 --- [backend] [o-auto-1-exec-5] c.ails.backend.service.SessionService    : 新建学习活动, sessionId=79, conversationId=101, concepts=[TLB]
+2026-10-29T19:22:31.810+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.811+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 179(Long), 101(Long), 79(Long), CHAT(String), RUNNING(String), TLB 缓存的是什么？(String), ad786f304c10295f85250e84474285f0(String), 2026-10-29T19:22:31.810744900(LocalDateTime)
+2026-10-29T19:22:31.814+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-5] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:31.819+08:00 DEBUG 23040 --- [backend] [  chat-stream-2] c.a.b.mapper.MessageMapper.selectList    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE deleted_at IS NULL AND (conversation_id = ? AND message_type = ? AND id NOT IN (?)) ORDER BY sequence_no DESC,id DESC LIMIT 20
+2026-10-29T19:22:31.819+08:00 DEBUG 23040 --- [backend] [  chat-stream-2] c.a.b.mapper.MessageMapper.selectList    : ==> Parameters: 101(Long), TEXT(String), 146(Long)
+2026-10-29T19:22:31.820+08:00 DEBUG 23040 --- [backend] [  chat-stream-2] c.a.b.mapper.MessageMapper.selectList    : <==      Total: 0
+2026-10-29T19:22:31.824+08:00 ERROR 23040 --- [backend] [  chat-stream-2] com.ails.backend.service.ChatService     : persist assistant message failed, runId=135
+
+java.lang.RuntimeException: database unavailable
+	at com.ails.backend.service.MessageService.appendAssistantMessage(MessageService.java:72) ~[classes/:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568) ~[na:na]
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355) ~[spring-aop-6.1.14.jar:6.1.14]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.invokeJoinpoint(ReflectiveMethodInvocation.java:196) ~[spring-aop-6.1.14.jar:6.1.14]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:163) ~[spring-aop-6.1.14.jar:6.1.14]
+	at org.springframework.aop.framework.CglibAopProxy$CglibMethodInvocation.proceed(CglibAopProxy.java:768) ~[spring-aop-6.1.14.jar:6.1.14]
+	at org.springframework.transaction.interceptor.TransactionAspectSupport.invokeWithinTransaction(TransactionAspectSupport.java:379) ~[spring-tx-6.1.14.jar:6.1.14]
+	at org.springframework.transaction.interceptor.TransactionInterceptor.invoke(TransactionInterceptor.java:119) ~[spring-tx-6.1.14.jar:6.1.14]
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184) ~[spring-aop-6.1.14.jar:6.1.14]
+	at org.springframework.aop.framework.CglibAopProxy$CglibMethodInvocation.proceed(CglibAopProxy.java:768) ~[spring-aop-6.1.14.jar:6.1.14]
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:720) ~[spring-aop-6.1.14.jar:6.1.14]
+	at com.ails.backend.service.MessageService$$SpringCGLIB$$0.appendAssistantMessage(<generated>) ~[classes/:na]
+	at com.ails.backend.service.ChatService$1.onComplete(ChatService.java:273) ~[classes/:na]
+	at com.ails.backend.service.ChatService$1.onComplete(ChatService.java:251) ~[classes/:na]
+	at com.ails.backend.service.ChatSseIntegrationTest$ControllableAgentGateway.streamReply(ChatSseIntegrationTest.java:609) ~[test-classes/:na]
+	at com.ails.backend.service.ChatService.streamReply(ChatService.java:238) ~[classes/:na]
+	at com.ails.backend.service.ChatService.lambda$stream$2(ChatService.java:160) ~[classes/:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:842) ~[na:na]
+
+2026-10-29T19:22:31.829+08:00 DEBUG 23040 --- [backend] [  chat-stream-2] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET status=?, duration_ms=?, error_message=?, finished_at=? WHERE id=?
+2026-10-29T19:22:31.830+08:00 DEBUG 23040 --- [backend] [  chat-stream-2] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: FAILED(String), 13(Integer), java.lang.RuntimeException: database unavailable(String), 2026-10-29T19:22:31.828752(LocalDateTime), 135(Long)
+2026-10-29T19:22:31.833+08:00 DEBUG 23040 --- [backend] [  chat-stream-2] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:31.911+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.912+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 102(Long)
+2026-10-29T19:22:31.913+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:31.914+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.914+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 181(Long)
+2026-10-29T19:22:31.915+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:31.916+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.916+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 102(Long)
+2026-10-29T19:22:31.917+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:31.917+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.918+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 181(Long)
+2026-10-29T19:22:31.920+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:31.920+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:31.921+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 102(Long)
+2026-10-29T19:22:31.921+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:31.922+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:31.922+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 102(Long)
+2026-10-29T19:22:31.922+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 0
+2026-10-29T19:22:31.923+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.923+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 102(Long), USER(String), TEXT(String), TLB 缓存的是什么？(String), 7(Integer), 1(Integer), 2026-10-29T19:22:31.922365800(LocalDateTime)
+2026-10-29T19:22:31.924+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:31.925+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.925+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 181(Long), 181(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:31.925366800(LocalDateTime), 2026-10-29T19:22:31(LocalDateTime), 2026-10-29T19:22:31(LocalDateTime), 102(Long)
+2026-10-29T19:22:31.927+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:31.930+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.mapper.ConceptMapper.selectList    : ==>  Preparing: SELECT id,learning_space_id,canonical_name,display_name,description,difficulty_level,deleted_at,created_at,updated_at FROM concept WHERE deleted_at IS NULL AND (learning_space_id = ?) ORDER BY id ASC
+2026-10-29T19:22:31.930+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.mapper.ConceptMapper.selectList    : ==> Parameters: 181(Long)
+2026-10-29T19:22:31.931+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.mapper.ConceptMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:31.933+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.L.selectList                     : ==>  Preparing: SELECT id,user_id,learning_space_id,title,goal,current_focus,status,started_at,last_active_at,completed_at FROM learning_session WHERE (user_id = ? AND learning_space_id = ? AND status IN (?,?)) ORDER BY last_active_at DESC
+2026-10-29T19:22:31.934+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.L.selectList                     : ==> Parameters: 181(Long), 181(Long), ACTIVE(String), PAUSED(String)
+2026-10-29T19:22:31.934+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.L.selectList                     : <==      Total: 0
+2026-10-29T19:22:31.935+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.LearningSessionMapper.insert     : ==>  Preparing: INSERT INTO learning_session ( user_id, learning_space_id, title, goal, status, started_at, last_active_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.935+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.LearningSessionMapper.insert     : ==> Parameters: 181(Long), 181(Long), TLB(String), 围绕「TLB」的学习(String), ACTIVE(String), 2026-10-29T19:22:31.935368600(LocalDateTime), 2026-10-29T19:22:31.935368600(LocalDateTime)
+2026-10-29T19:22:31.936+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.LearningSessionMapper.insert     : <==    Updates: 1
+2026-10-29T19:22:31.937+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:31.937+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 181(Long), 181(Long), 80(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:31(LocalDateTime), 2026-10-29T19:22:31(LocalDateTime), 102(Long)
+2026-10-29T19:22:31.938+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:31.938+08:00  INFO 23040 --- [backend] [o-auto-1-exec-8] c.ails.backend.service.SessionService    : 新建学习活动, sessionId=80, conversationId=102, concepts=[TLB]
+2026-10-29T19:22:31.941+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:31.943+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 181(Long), 102(Long), 80(Long), CHAT(String), RUNNING(String), TLB 缓存的是什么？(String), aadd9c49d9c0c1c9c3776e91bc0f3d53(String), 2026-10-29T19:22:31.941365900(LocalDateTime)
+2026-10-29T19:22:31.946+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-8] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:31.950+08:00 DEBUG 23040 --- [backend] [  chat-stream-3] c.a.b.mapper.MessageMapper.selectList    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE deleted_at IS NULL AND (conversation_id = ? AND message_type = ? AND id NOT IN (?)) ORDER BY sequence_no DESC,id DESC LIMIT 20
+2026-10-29T19:22:31.951+08:00 DEBUG 23040 --- [backend] [  chat-stream-3] c.a.b.mapper.MessageMapper.selectList    : ==> Parameters: 102(Long), TEXT(String), 147(Long)
+2026-10-29T19:22:31.952+08:00 DEBUG 23040 --- [backend] [  chat-stream-3] c.a.b.mapper.MessageMapper.selectList    : <==      Total: 0
+2026-10-29T19:22:31.954+08:00 DEBUG 23040 --- [backend] [  chat-stream-3] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET status=?, duration_ms=?, error_message=?, finished_at=? WHERE id=?
+2026-10-29T19:22:31.955+08:00 DEBUG 23040 --- [backend] [  chat-stream-3] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: FAILED(String), 6(Integer), 模型服务错误（quota exceeded）(String), 2026-10-29T19:22:31.953365500(LocalDateTime), 136(Long)
+2026-10-29T19:22:31.958+08:00 DEBUG 23040 --- [backend] [  chat-stream-3] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:32.014+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.014+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.015+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.016+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.016+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 183(Long)
+2026-10-29T19:22:32.017+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:32.019+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.019+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.022+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.022+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.022+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 183(Long)
+2026-10-29T19:22:32.024+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:32.025+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:32.025+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.026+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.026+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:32.026+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.027+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 0
+2026-10-29T19:22:32.027+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.028+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 103(Long), USER(String), TEXT(String), TLB 缓存的是什么？(String), 7(Integer), 1(Integer), 2026-10-29T19:22:32.027965900(LocalDateTime)
+2026-10-29T19:22:32.029+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:32.029+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.029+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 183(Long), 183(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32.029964(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 103(Long)
+2026-10-29T19:22:32.031+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.034+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.ConceptMapper.selectList    : ==>  Preparing: SELECT id,learning_space_id,canonical_name,display_name,description,difficulty_level,deleted_at,created_at,updated_at FROM concept WHERE deleted_at IS NULL AND (learning_space_id = ?) ORDER BY id ASC
+2026-10-29T19:22:32.035+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.ConceptMapper.selectList    : ==> Parameters: 183(Long)
+2026-10-29T19:22:32.035+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.ConceptMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.036+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.L.selectList                     : ==>  Preparing: SELECT id,user_id,learning_space_id,title,goal,current_focus,status,started_at,last_active_at,completed_at FROM learning_session WHERE (user_id = ? AND learning_space_id = ? AND status IN (?,?)) ORDER BY last_active_at DESC
+2026-10-29T19:22:32.037+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.L.selectList                     : ==> Parameters: 183(Long), 183(Long), ACTIVE(String), PAUSED(String)
+2026-10-29T19:22:32.037+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.L.selectList                     : <==      Total: 0
+2026-10-29T19:22:32.038+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSessionMapper.insert     : ==>  Preparing: INSERT INTO learning_session ( user_id, learning_space_id, title, goal, status, started_at, last_active_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.038+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSessionMapper.insert     : ==> Parameters: 183(Long), 183(Long), TLB(String), 围绕「TLB」的学习(String), ACTIVE(String), 2026-10-29T19:22:32.037253100(LocalDateTime), 2026-10-29T19:22:32.037253100(LocalDateTime)
+2026-10-29T19:22:32.039+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSessionMapper.insert     : <==    Updates: 1
+2026-10-29T19:22:32.040+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.040+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 183(Long), 183(Long), 81(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 103(Long)
+2026-10-29T19:22:32.041+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.041+08:00  INFO 23040 --- [backend] [o-auto-1-exec-4] c.ails.backend.service.SessionService    : 新建学习活动, sessionId=81, conversationId=103, concepts=[TLB]
+2026-10-29T19:22:32.045+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.045+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 183(Long), 103(Long), 81(Long), CHAT(String), RUNNING(String), TLB 缓存的是什么？(String), 60b3a883399909bf3da6d8c68ef61fa6(String), 2026-10-29T19:22:32.045254(LocalDateTime)
+2026-10-29T19:22:32.048+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:32.053+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.MessageMapper.selectList    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE deleted_at IS NULL AND (conversation_id = ? AND message_type = ? AND id NOT IN (?)) ORDER BY sequence_no DESC,id DESC LIMIT 20
+2026-10-29T19:22:32.053+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.MessageMapper.selectList    : ==> Parameters: 103(Long), TEXT(String), 148(Long)
+2026-10-29T19:22:32.054+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.MessageMapper.selectList    : <==      Total: 0
+2026-10-29T19:22:32.057+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.057+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.058+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.059+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:32.059+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.060+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.060+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:32.060+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.061+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 1
+2026-10-29T19:22:32.062+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.063+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 103(Long), ASSISTANT(String), TEXT(String), TLB 缓存的是页表项。它让地址翻译不必每次访问内存。(String), 22(Integer), 2(Integer), 2026-10-29T19:22:32.062254200(LocalDateTime)
+2026-10-29T19:22:32.064+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:32.065+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.065+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 183(Long), 183(Long), 81(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32.064254100(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 103(Long)
+2026-10-29T19:22:32.066+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.071+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET status=?, output_summary=?, duration_ms=?, finished_at=? WHERE id=?
+2026-10-29T19:22:32.071+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: COMPLETED(String), chars=27(String), 22(Integer), 2026-10-29T19:22:32.070259900(LocalDateTime), 137(Long)
+2026-10-29T19:22:32.075+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:32.076+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.076+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.077+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.077+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.078+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.079+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.079+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.079+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 183(Long), 103(Long), 81(Long), ANALYSIS(String), RUNNING(String), analyze message#148(String), 2026-10-29T19:22:32.079259500(LocalDateTime)
+2026-10-29T19:22:32.079+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.079+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 183(Long)
+2026-10-29T19:22:32.080+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:32.080+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:32.080+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_understanding WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:32.080+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 183(Long), 92(Long)
+2026-10-29T19:22:32.080+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 0
+2026-10-29T19:22:32.081+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.081+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.082+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.insert                         : ==>  Preparing: INSERT INTO learning_understanding ( user_id, concept_id, known_parts, misconceptions, uncertain_parts, status, updated_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.082+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.insert                         : ==> Parameters: 183(Long), 92(Long), [](String), [](String), [](String), UNKNOWN(String), 2026-10-29T19:22:32.081609100(LocalDateTime)
+2026-10-29T19:22:32.082+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.083+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.insert                         : <==    Updates: 1
+2026-10-29T19:22:32.083+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.083+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.selectList                     : ==>  Preparing: SELECT id,user_id,concept_id,understanding_id,evidence_type,observation,correctness,reasoning_quality,specificity,ai_confidence,need_follow_up,follow_up_status,follow_up_conversation_id,first_seen_run_id,last_seen_run_id,analyzer_version,dedupe_key,created_at,updated_at FROM learning_evidence WHERE (dedupe_key = ?) LIMIT 1
+2026-10-29T19:22:32.084+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.selectList                     : ==> Parameters: 73739e8e132035264682361be8d34c9db25d844391523f8c9ec03ad4f582f03f(String)
+2026-10-29T19:22:32.084+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 183(Long)
+2026-10-29T19:22:32.084+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.selectList                     : <==      Total: 0
+2026-10-29T19:22:32.084+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.LearningEvidenceMapper.insert    : ==>  Preparing: INSERT INTO learning_evidence ( user_id, concept_id, understanding_id, evidence_type, observation, correctness, need_follow_up, follow_up_status, first_seen_run_id, last_seen_run_id, analyzer_version, dedupe_key, created_at, updated_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.085+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.LearningEvidenceMapper.insert    : ==> Parameters: 183(Long), 92(Long), 35(Long), OBSERVATION(String), TLB 缓存的是什么(String), UNKNOWN(String), true(Boolean), PENDING(String), 138(Long), 138(Long), rules-v1(String), 73739e8e132035264682361be8d34c9db25d844391523f8c9ec03ad4f582f03f(String), 2026-10-29T19:22:32.084121200(LocalDateTime), 2026-10-29T19:22:32.084121200(LocalDateTime)
+2026-10-29T19:22:32.085+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:32.086+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.LearningEvidenceMapper.insert    : <==    Updates: 1
+2026-10-29T19:22:32.086+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:32.086+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.087+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.E.selectCount                    : ==>  Preparing: SELECT COUNT( * ) AS total FROM evidence_source WHERE (evidence_id = ? AND source_type = ? AND source_id = ?)
+2026-10-29T19:22:32.087+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.E.selectCount                    : ==> Parameters: 46(Long), MESSAGE(String), 148(Long)
+2026-10-29T19:22:32.087+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.E.selectCount                    : <==      Total: 1
+2026-10-29T19:22:32.088+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.EvidenceSourceMapper.insert      : ==>  Preparing: INSERT INTO evidence_source ( evidence_id, source_type, source_id, created_at ) VALUES ( ?, ?, ?, ? )
+2026-10-29T19:22:32.088+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.EvidenceSourceMapper.insert      : ==> Parameters: 46(Long), MESSAGE(String), 148(Long), 2026-10-29T19:22:32.088121900(LocalDateTime)
+2026-10-29T19:22:32.089+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.EvidenceSourceMapper.insert      : <==    Updates: 1
+2026-10-29T19:22:32.089+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_understanding WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:32.089+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 183(Long), 92(Long)
+2026-10-29T19:22:32.090+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 1
+2026-10-29T19:22:32.091+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.updateById                     : ==>  Preparing: UPDATE learning_understanding SET user_id=?, concept_id=?, known_parts=?, misconceptions=?, uncertain_parts=?, status=?, updated_at=? WHERE id=?
+2026-10-29T19:22:32.091+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.updateById                     : ==> Parameters: 183(Long), 92(Long), [](String), [](String), [](String), EXPOSED(String), 2026-10-29T19:22:32.091120500(LocalDateTime), 35(Long)
+2026-10-29T19:22:32.092+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.updateById                     : <==    Updates: 1
+2026-10-29T19:22:32.092+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.U.selectMaxRevisionNoForUpdate   : ==>  Preparing: SELECT COALESCE(MAX(revision_no), 0) FROM understanding_revision WHERE understanding_id = ? FOR UPDATE
+2026-10-29T19:22:32.092+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.U.selectMaxRevisionNoForUpdate   : ==> Parameters: 35(Long)
+2026-10-29T19:22:32.093+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.U.selectMaxRevisionNoForUpdate   : <==      Total: 1
+2026-10-29T19:22:32.093+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.U.insert                         : ==>  Preparing: INSERT INTO understanding_revision ( understanding_id, revision_no, known_parts, misconceptions, uncertain_parts, status, trigger_evidence_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.093+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.U.insert                         : ==> Parameters: 35(Long), 1(Integer), [](String), [](String), [](String), EXPOSED(String), 46(Long), 2026-10-29T19:22:32.091120500(LocalDateTime)
+2026-10-29T19:22:32.094+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.U.insert                         : <==    Updates: 1
+2026-10-29T19:22:32.094+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.updateById                     : ==>  Preparing: UPDATE learning_understanding SET user_id=?, concept_id=?, known_parts=?, misconceptions=?, uncertain_parts=?, status=?, current_revision_id=?, updated_at=? WHERE id=?
+2026-10-29T19:22:32.095+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.updateById                     : ==> Parameters: 183(Long), 92(Long), [](String), [](String), [](String), EXPOSED(String), 35(Long), 2026-10-29T19:22:32.091120500(LocalDateTime), 35(Long)
+2026-10-29T19:22:32.095+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.m.L.updateById                     : <==    Updates: 1
+2026-10-29T19:22:32.096+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_state WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:32.096+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 183(Long), 92(Long)
+2026-10-29T19:22:32.097+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 0
+2026-10-29T19:22:32.097+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.LearningStateMapper.insert  : ==>  Preparing: INSERT INTO learning_state ( user_id, concept_id, status, next_review_at, review_priority, last_evidence_at, updated_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.098+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.LearningStateMapper.insert  : ==> Parameters: 183(Long), 92(Long), EXPOSED(String), 2026-10-31T19:22:32.084121200(LocalDateTime), 4(Integer), 2026-10-29T19:22:32.084121200(LocalDateTime), 2026-10-29T19:22:32.097587200(LocalDateTime)
+2026-10-29T19:22:32.098+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.LearningStateMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:32.099+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET user_id=?, conversation_id=?, session_id=?, run_type=?, status=?, input_summary=?, output_summary=?, duration_ms=?, created_at=?, finished_at=? WHERE id=?
+2026-10-29T19:22:32.100+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: 183(Long), 103(Long), 81(Long), ANALYSIS(String), COMPLETED(String), analyze message#148(String), evidence=1(String), 20(Integer), 2026-10-29T19:22:32.079259500(LocalDateTime), 2026-10-29T19:22:32.098595300(LocalDateTime), 138(Long)
+2026-10-29T19:22:32.101+08:00 DEBUG 23040 --- [backend] [  chat-stream-4] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:32.103+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.104+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:32.104+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.104+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 1
+2026-10-29T19:22:32.105+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.105+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 103(Long), USER(String), TEXT(String), TLB 缓存的是什么？(String), 7(Integer), 3(Integer), 2026-10-29T19:22:32.105593600(LocalDateTime)
+2026-10-29T19:22:32.106+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:32.107+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.107+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 183(Long), 183(Long), 81(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32.106594700(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 103(Long)
+2026-10-29T19:22:32.108+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.111+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.mapper.ConceptMapper.selectList    : ==>  Preparing: SELECT id,learning_space_id,canonical_name,display_name,description,difficulty_level,deleted_at,created_at,updated_at FROM concept WHERE deleted_at IS NULL AND (learning_space_id = ?) ORDER BY id ASC
+2026-10-29T19:22:32.111+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.mapper.ConceptMapper.selectList    : ==> Parameters: 183(Long)
+2026-10-29T19:22:32.112+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.mapper.ConceptMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.112+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.L.selectById                     : ==>  Preparing: SELECT id,user_id,learning_space_id,title,goal,current_focus,status,started_at,last_active_at,completed_at FROM learning_session WHERE id=?
+2026-10-29T19:22:32.113+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.L.selectById                     : ==> Parameters: 81(Long)
+2026-10-29T19:22:32.114+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.m.L.selectById                     : <==      Total: 1
+2026-10-29T19:22:32.115+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.116+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 183(Long), 103(Long), 81(Long), CHAT(String), RUNNING(String), TLB 缓存的是什么？(String), 73c35140ed81a5cdaade717caba84b61(String), 2026-10-29T19:22:32.115594700(LocalDateTime)
+2026-10-29T19:22:32.119+08:00 DEBUG 23040 --- [backend] [-auto-1-exec-10] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:32.124+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.MessageMapper.selectList    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE deleted_at IS NULL AND (conversation_id = ? AND message_type = ? AND id NOT IN (?)) ORDER BY sequence_no DESC,id DESC LIMIT 20
+2026-10-29T19:22:32.125+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.MessageMapper.selectList    : ==> Parameters: 103(Long), TEXT(String), 150(Long)
+2026-10-29T19:22:32.126+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.MessageMapper.selectList    : <==      Total: 2
+2026-10-29T19:22:32.129+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.129+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.130+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.131+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:32.131+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.131+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.132+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:32.132+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.132+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 1
+2026-10-29T19:22:32.133+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.134+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 103(Long), ASSISTANT(String), TEXT(String), TLB 缓存的是页表项。它让地址翻译不必每次访问内存。(String), 22(Integer), 4(Integer), 2026-10-29T19:22:32.133631900(LocalDateTime)
+2026-10-29T19:22:32.135+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:32.135+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.135+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 183(Long), 183(Long), 81(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32.135595200(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 103(Long)
+2026-10-29T19:22:32.136+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.139+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET status=?, output_summary=?, duration_ms=?, finished_at=? WHERE id=?
+2026-10-29T19:22:32.140+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: COMPLETED(String), chars=27(String), 19(Integer), 2026-10-29T19:22:32.139614400(LocalDateTime), 139(Long)
+2026-10-29T19:22:32.142+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:32.143+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.143+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 103(Long)
+2026-10-29T19:22:32.145+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.146+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.146+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 183(Long), 103(Long), 81(Long), ANALYSIS(String), RUNNING(String), analyze message#150(String), 2026-10-29T19:22:32.146594700(LocalDateTime)
+2026-10-29T19:22:32.148+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:32.148+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_understanding WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:32.149+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 183(Long), 92(Long)
+2026-10-29T19:22:32.150+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 1
+2026-10-29T19:22:32.151+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.L.selectList                     : ==>  Preparing: SELECT id,user_id,concept_id,understanding_id,evidence_type,observation,correctness,reasoning_quality,specificity,ai_confidence,need_follow_up,follow_up_status,follow_up_conversation_id,first_seen_run_id,last_seen_run_id,analyzer_version,dedupe_key,created_at,updated_at FROM learning_evidence WHERE (dedupe_key = ?) LIMIT 1
+2026-10-29T19:22:32.151+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.L.selectList                     : ==> Parameters: f5ca6af047b4403198f05c1f966c723652b8696bb8a4f0a62dd676c875c4be5b(String)
+2026-10-29T19:22:32.152+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.L.selectList                     : <==      Total: 0
+2026-10-29T19:22:32.153+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.LearningEvidenceMapper.insert    : ==>  Preparing: INSERT INTO learning_evidence ( user_id, concept_id, understanding_id, evidence_type, observation, correctness, need_follow_up, follow_up_status, first_seen_run_id, last_seen_run_id, analyzer_version, dedupe_key, created_at, updated_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.153+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.LearningEvidenceMapper.insert    : ==> Parameters: 183(Long), 92(Long), 35(Long), OBSERVATION(String), TLB 缓存的是什么(String), UNKNOWN(String), true(Boolean), PENDING(String), 140(Long), 140(Long), rules-v1(String), f5ca6af047b4403198f05c1f966c723652b8696bb8a4f0a62dd676c875c4be5b(String), 2026-10-29T19:22:32.153596(LocalDateTime), 2026-10-29T19:22:32.153596(LocalDateTime)
+2026-10-29T19:22:32.154+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.LearningEvidenceMapper.insert    : <==    Updates: 1
+2026-10-29T19:22:32.154+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.E.selectCount                    : ==>  Preparing: SELECT COUNT( * ) AS total FROM evidence_source WHERE (evidence_id = ? AND source_type = ? AND source_id = ?)
+2026-10-29T19:22:32.154+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.E.selectCount                    : ==> Parameters: 47(Long), MESSAGE(String), 150(Long)
+2026-10-29T19:22:32.155+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.E.selectCount                    : <==      Total: 1
+2026-10-29T19:22:32.155+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.EvidenceSourceMapper.insert      : ==>  Preparing: INSERT INTO evidence_source ( evidence_id, source_type, source_id, created_at ) VALUES ( ?, ?, ?, ? )
+2026-10-29T19:22:32.156+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.EvidenceSourceMapper.insert      : ==> Parameters: 47(Long), MESSAGE(String), 150(Long), 2026-10-29T19:22:32.155595100(LocalDateTime)
+2026-10-29T19:22:32.157+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.EvidenceSourceMapper.insert      : <==    Updates: 1
+2026-10-29T19:22:32.158+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_understanding WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:32.158+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 183(Long), 92(Long)
+2026-10-29T19:22:32.159+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 1
+2026-10-29T19:22:32.160+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_state WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:32.160+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 183(Long), 92(Long)
+2026-10-29T19:22:32.161+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 1
+2026-10-29T19:22:32.162+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.LearningStateMapper.updateById   : ==>  Preparing: UPDATE learning_state SET user_id=?, concept_id=?, status=?, next_review_at=?, review_priority=?, last_evidence_at=?, updated_at=? WHERE id=?
+2026-10-29T19:22:32.163+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.LearningStateMapper.updateById   : ==> Parameters: 183(Long), 92(Long), EXPOSED(String), 2026-10-31T19:22:32.153596(LocalDateTime), 4(Integer), 2026-10-29T19:22:32.153596(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 35(Long)
+2026-10-29T19:22:32.164+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.m.LearningStateMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:32.164+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET user_id=?, conversation_id=?, session_id=?, run_type=?, status=?, input_summary=?, output_summary=?, duration_ms=?, created_at=?, finished_at=? WHERE id=?
+2026-10-29T19:22:32.164+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: 183(Long), 103(Long), 81(Long), ANALYSIS(String), COMPLETED(String), analyze message#150(String), evidence=1(String), 18(Integer), 2026-10-29T19:22:32.146594700(LocalDateTime), 2026-10-29T19:22:32.164594100(LocalDateTime), 140(Long)
+2026-10-29T19:22:32.165+08:00 DEBUG 23040 --- [backend] [  chat-stream-5] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:32.221+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.222+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 105(Long)
+2026-10-29T19:22:32.223+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-3] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.277+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.278+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 106(Long)
+2026-10-29T19:22:32.279+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.279+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.279+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 187(Long)
+2026-10-29T19:22:32.280+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:32.280+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.281+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 106(Long)
+2026-10-29T19:22:32.281+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.282+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.282+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 187(Long)
+2026-10-29T19:22:32.284+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:32.285+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:32.285+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 106(Long)
+2026-10-29T19:22:32.285+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.286+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:32.286+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 106(Long)
+2026-10-29T19:22:32.287+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 0
+2026-10-29T19:22:32.287+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.287+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 106(Long), USER(String), TEXT(String), TLB 缓存的是什么？(String), 7(Integer), 1(Integer), 2026-10-29T19:22:32.287565400(LocalDateTime)
+2026-10-29T19:22:32.288+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:32.288+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.288+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 187(Long), 187(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32.288565500(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 106(Long)
+2026-10-29T19:22:32.289+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.292+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.mapper.ConceptMapper.selectList    : ==>  Preparing: SELECT id,learning_space_id,canonical_name,display_name,description,difficulty_level,deleted_at,created_at,updated_at FROM concept WHERE deleted_at IS NULL AND (learning_space_id = ?) ORDER BY id ASC
+2026-10-29T19:22:32.293+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.mapper.ConceptMapper.selectList    : ==> Parameters: 187(Long)
+2026-10-29T19:22:32.293+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.mapper.ConceptMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.295+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.L.selectList                     : ==>  Preparing: SELECT id,user_id,learning_space_id,title,goal,current_focus,status,started_at,last_active_at,completed_at FROM learning_session WHERE (user_id = ? AND learning_space_id = ? AND status IN (?,?)) ORDER BY last_active_at DESC
+2026-10-29T19:22:32.295+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.L.selectList                     : ==> Parameters: 187(Long), 187(Long), ACTIVE(String), PAUSED(String)
+2026-10-29T19:22:32.295+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.L.selectList                     : <==      Total: 0
+2026-10-29T19:22:32.296+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSessionMapper.insert     : ==>  Preparing: INSERT INTO learning_session ( user_id, learning_space_id, title, goal, status, started_at, last_active_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.296+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSessionMapper.insert     : ==> Parameters: 187(Long), 187(Long), TLB(String), 围绕「TLB」的学习(String), ACTIVE(String), 2026-10-29T19:22:32.295190700(LocalDateTime), 2026-10-29T19:22:32.295190700(LocalDateTime)
+2026-10-29T19:22:32.296+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.LearningSessionMapper.insert     : <==    Updates: 1
+2026-10-29T19:22:32.297+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.297+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 187(Long), 187(Long), 82(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 106(Long)
+2026-10-29T19:22:32.298+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.298+08:00  INFO 23040 --- [backend] [o-auto-1-exec-9] c.ails.backend.service.SessionService    : 新建学习活动, sessionId=82, conversationId=106, concepts=[TLB]
+2026-10-29T19:22:32.301+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.301+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 187(Long), 106(Long), 82(Long), CHAT(String), RUNNING(String), TLB 缓存的是什么？(String), 22a6f732e94a5124e7466f60f4ccc54c(String), 2026-10-29T19:22:32.301012200(LocalDateTime)
+2026-10-29T19:22:32.304+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-9] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:32.307+08:00 DEBUG 23040 --- [backend] [  chat-stream-6] c.a.b.mapper.MessageMapper.selectList    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE deleted_at IS NULL AND (conversation_id = ? AND message_type = ? AND id NOT IN (?)) ORDER BY sequence_no DESC,id DESC LIMIT 20
+2026-10-29T19:22:32.307+08:00 DEBUG 23040 --- [backend] [  chat-stream-6] c.a.b.mapper.MessageMapper.selectList    : ==> Parameters: 106(Long), TEXT(String), 152(Long)
+2026-10-29T19:22:32.308+08:00 DEBUG 23040 --- [backend] [  chat-stream-6] c.a.b.mapper.MessageMapper.selectList    : <==      Total: 0
+2026-10-29T19:22:32.310+08:00 DEBUG 23040 --- [backend] [  chat-stream-6] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET status=?, duration_ms=?, error_message=?, finished_at=? WHERE id=?
+2026-10-29T19:22:32.310+08:00 DEBUG 23040 --- [backend] [  chat-stream-6] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: FAILED(String), 4(Integer), 模型返回空流（reason=empty_stream, status=200, attempts=2）(String), 2026-10-29T19:22:32.309021(LocalDateTime), 141(Long)
+2026-10-29T19:22:32.313+08:00 DEBUG 23040 --- [backend] [  chat-stream-6] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:32.411+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.412+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 107(Long)
+2026-10-29T19:22:32.413+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.413+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.413+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 189(Long)
+2026-10-29T19:22:32.414+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:32.415+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.415+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 107(Long)
+2026-10-29T19:22:32.416+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.416+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.416+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 189(Long)
+2026-10-29T19:22:32.418+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:32.419+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:32.419+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 107(Long)
+2026-10-29T19:22:32.420+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.420+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:32.420+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 107(Long)
+2026-10-29T19:22:32.421+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 0
+2026-10-29T19:22:32.422+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.422+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 107(Long), USER(String), TEXT(String), TLB 缓存的是什么？(String), 7(Integer), 1(Integer), 2026-10-29T19:22:32.421709600(LocalDateTime)
+2026-10-29T19:22:32.423+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:32.424+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.424+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 189(Long), 189(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32.423694200(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 107(Long)
+2026-10-29T19:22:32.425+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.428+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.mapper.ConceptMapper.selectList    : ==>  Preparing: SELECT id,learning_space_id,canonical_name,display_name,description,difficulty_level,deleted_at,created_at,updated_at FROM concept WHERE deleted_at IS NULL AND (learning_space_id = ?) ORDER BY id ASC
+2026-10-29T19:22:32.428+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.mapper.ConceptMapper.selectList    : ==> Parameters: 189(Long)
+2026-10-29T19:22:32.429+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.mapper.ConceptMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.430+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.L.selectList                     : ==>  Preparing: SELECT id,user_id,learning_space_id,title,goal,current_focus,status,started_at,last_active_at,completed_at FROM learning_session WHERE (user_id = ? AND learning_space_id = ? AND status IN (?,?)) ORDER BY last_active_at DESC
+2026-10-29T19:22:32.430+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.L.selectList                     : ==> Parameters: 189(Long), 189(Long), ACTIVE(String), PAUSED(String)
+2026-10-29T19:22:32.431+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.L.selectList                     : <==      Total: 0
+2026-10-29T19:22:32.431+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.LearningSessionMapper.insert     : ==>  Preparing: INSERT INTO learning_session ( user_id, learning_space_id, title, goal, status, started_at, last_active_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.433+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.LearningSessionMapper.insert     : ==> Parameters: 189(Long), 189(Long), TLB(String), 围绕「TLB」的学习(String), ACTIVE(String), 2026-10-29T19:22:32.431703200(LocalDateTime), 2026-10-29T19:22:32.431703200(LocalDateTime)
+2026-10-29T19:22:32.434+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.LearningSessionMapper.insert     : <==    Updates: 1
+2026-10-29T19:22:32.435+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.437+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 189(Long), 189(Long), 83(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 107(Long)
+2026-10-29T19:22:32.438+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.438+08:00  INFO 23040 --- [backend] [o-auto-1-exec-6] c.ails.backend.service.SessionService    : 新建学习活动, sessionId=83, conversationId=107, concepts=[TLB]
+2026-10-29T19:22:32.440+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.440+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 189(Long), 107(Long), 83(Long), CHAT(String), RUNNING(String), TLB 缓存的是什么？(String), f57e132a61258104d830dcdb42c2ecfb(String), 2026-10-29T19:22:32.440983800(LocalDateTime)
+2026-10-29T19:22:32.444+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-6] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:32.447+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.mapper.MessageMapper.selectList    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE deleted_at IS NULL AND (conversation_id = ? AND message_type = ? AND id NOT IN (?)) ORDER BY sequence_no DESC,id DESC LIMIT 20
+2026-10-29T19:22:32.447+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.mapper.MessageMapper.selectList    : ==> Parameters: 107(Long), TEXT(String), 153(Long)
+2026-10-29T19:22:32.448+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.mapper.MessageMapper.selectList    : <==      Total: 0
+2026-10-29T19:22:32.450+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.450+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 107(Long)
+2026-10-29T19:22:32.451+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.452+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:32.452+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 107(Long)
+2026-10-29T19:22:32.453+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.453+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:32.453+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 107(Long)
+2026-10-29T19:22:32.454+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 1
+2026-10-29T19:22:32.455+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, truncated, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.455+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 107(Long), ASSISTANT(String), TEXT(String), TLB 缓存的是页表项。(String), 8(Integer), true(Boolean), 2(Integer), 2026-10-29T19:22:32.454026900(LocalDateTime)
+2026-10-29T19:22:32.456+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:32.456+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.456+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 189(Long), 189(Long), 83(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32.456025200(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 107(Long)
+2026-10-29T19:22:32.457+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.460+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET status=?, output_summary=?, duration_ms=?, finished_at=? WHERE id=?
+2026-10-29T19:22:32.460+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: TRUNCATED(String), chars=12,truncated=true(String), 16(Integer), 2026-10-29T19:22:32.460346200(LocalDateTime), 142(Long)
+2026-10-29T19:22:32.463+08:00 DEBUG 23040 --- [backend] [  chat-stream-7] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:32.476+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-7] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.476+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-7] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 107(Long)
+2026-10-29T19:22:32.476+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-7] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.477+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-7] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.477+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-7] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 189(Long)
+2026-10-29T19:22:32.477+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-7] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:32.478+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-7] c.a.b.mapper.MessageMapper.selectList    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE deleted_at IS NULL AND (conversation_id = ?) ORDER BY sequence_no ASC,id ASC
+2026-10-29T19:22:32.478+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-7] c.a.b.mapper.MessageMapper.selectList    : ==> Parameters: 107(Long)
+2026-10-29T19:22:32.479+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-7] c.a.b.mapper.MessageMapper.selectList    : <==      Total: 2
+2026-10-29T19:22:32.540+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.540+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 108(Long)
+2026-10-29T19:22:32.541+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.542+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.542+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 191(Long)
+2026-10-29T19:22:32.542+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:32.543+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.543+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 108(Long)
+2026-10-29T19:22:32.544+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.544+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : ==>  Preparing: SELECT id,user_id,name,description,visibility,deleted_at,created_at,updated_at FROM learning_space WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.544+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : ==> Parameters: 191(Long)
+2026-10-29T19:22:32.544+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSpaceMapper.selectById   : <==      Total: 1
+2026-10-29T19:22:32.545+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:32.545+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 108(Long)
+2026-10-29T19:22:32.546+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.546+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:32.546+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 108(Long)
+2026-10-29T19:22:32.546+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 0
+2026-10-29T19:22:32.547+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.547+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 108(Long), USER(String), TEXT(String), TLB 缓存的是什么？(String), 7(Integer), 1(Integer), 2026-10-29T19:22:32.547007200(LocalDateTime)
+2026-10-29T19:22:32.547+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:32.548+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.548+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 191(Long), 191(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32.548027700(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 108(Long)
+2026-10-29T19:22:32.549+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.552+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.ConceptMapper.selectList    : ==>  Preparing: SELECT id,learning_space_id,canonical_name,display_name,description,difficulty_level,deleted_at,created_at,updated_at FROM concept WHERE deleted_at IS NULL AND (learning_space_id = ?) ORDER BY id ASC
+2026-10-29T19:22:32.552+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.ConceptMapper.selectList    : ==> Parameters: 191(Long)
+2026-10-29T19:22:32.553+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.ConceptMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.553+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.L.selectList                     : ==>  Preparing: SELECT id,user_id,learning_space_id,title,goal,current_focus,status,started_at,last_active_at,completed_at FROM learning_session WHERE (user_id = ? AND learning_space_id = ? AND status IN (?,?)) ORDER BY last_active_at DESC
+2026-10-29T19:22:32.554+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.L.selectList                     : ==> Parameters: 191(Long), 191(Long), ACTIVE(String), PAUSED(String)
+2026-10-29T19:22:32.554+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.L.selectList                     : <==      Total: 0
+2026-10-29T19:22:32.554+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSessionMapper.insert     : ==>  Preparing: INSERT INTO learning_session ( user_id, learning_space_id, title, goal, status, started_at, last_active_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.555+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSessionMapper.insert     : ==> Parameters: 191(Long), 191(Long), TLB(String), 围绕「TLB」的学习(String), ACTIVE(String), 2026-10-29T19:22:32.554008200(LocalDateTime), 2026-10-29T19:22:32.554008200(LocalDateTime)
+2026-10-29T19:22:32.555+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.LearningSessionMapper.insert     : <==    Updates: 1
+2026-10-29T19:22:32.556+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.556+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 191(Long), 191(Long), 84(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 108(Long)
+2026-10-29T19:22:32.556+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.557+08:00  INFO 23040 --- [backend] [o-auto-1-exec-4] c.ails.backend.service.SessionService    : 新建学习活动, sessionId=84, conversationId=108, concepts=[TLB]
+2026-10-29T19:22:32.559+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, trace_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.560+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 191(Long), 108(Long), 84(Long), CHAT(String), RUNNING(String), TLB 缓存的是什么？(String), 0fcdd9ee747cb0c7e1805d9ff0f6dee5(String), 2026-10-29T19:22:32.559006300(LocalDateTime)
+2026-10-29T19:22:32.562+08:00 DEBUG 23040 --- [backend] [o-auto-1-exec-4] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:32.566+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.MessageMapper.selectList    : ==>  Preparing: SELECT id,conversation_id,role,message_type,content,tokens,truncated,sequence_no,deleted_at,created_at FROM message WHERE deleted_at IS NULL AND (conversation_id = ? AND message_type = ? AND id NOT IN (?)) ORDER BY sequence_no DESC,id DESC LIMIT 20
+2026-10-29T19:22:32.567+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.MessageMapper.selectList    : ==> Parameters: 108(Long), TEXT(String), 155(Long)
+2026-10-29T19:22:32.567+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.MessageMapper.selectList    : <==      Total: 0
+2026-10-29T19:22:32.570+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.570+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 108(Long)
+2026-10-29T19:22:32.571+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.571+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.selectList    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE deleted_at IS NULL AND (id = ?) FOR UPDATE
+2026-10-29T19:22:32.572+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.selectList    : ==> Parameters: 108(Long)
+2026-10-29T19:22:32.572+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.selectList    : <==      Total: 1
+2026-10-29T19:22:32.573+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==>  Preparing: SELECT sequence_no FROM message WHERE conversation_id = ? ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+2026-10-29T19:22:32.573+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.M.selectMaxSequenceNoForUpdate   : ==> Parameters: 108(Long)
+2026-10-29T19:22:32.573+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.M.selectMaxSequenceNoForUpdate   : <==      Total: 1
+2026-10-29T19:22:32.573+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.backend.mapper.MessageMapper.insert  : ==>  Preparing: INSERT INTO message ( conversation_id, role, message_type, content, tokens, sequence_no, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.574+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.backend.mapper.MessageMapper.insert  : ==> Parameters: 108(Long), ASSISTANT(String), TEXT(String), TLB 缓存的是页表项。它让地址翻译不必每次访问内存。(String), 22(Integer), 2(Integer), 2026-10-29T19:22:32.573007500(LocalDateTime)
+2026-10-29T19:22:32.575+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.backend.mapper.MessageMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:32.575+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.updateById    : ==>  Preparing: UPDATE conversation SET user_id=?, learning_space_id=?, session_id=?, title=?, status=?, last_message_at=?, created_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.575+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.updateById    : ==> Parameters: 191(Long), 191(Long), 84(Long), chat-sse-it-conversation(String), ACTIVE(String), 2026-10-29T19:22:32.575006900(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 2026-10-29T19:22:32(LocalDateTime), 108(Long)
+2026-10-29T19:22:32.576+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.updateById    : <==    Updates: 1
+2026-10-29T19:22:32.579+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET status=?, output_summary=?, duration_ms=?, finished_at=? WHERE id=?
+2026-10-29T19:22:32.580+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: COMPLETED(String), chars=27(String), 16(Integer), 2026-10-29T19:22:32.579012(LocalDateTime), 143(Long)
+2026-10-29T19:22:32.584+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+2026-10-29T19:22:32.644+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.selectById    : ==>  Preparing: SELECT id,user_id,learning_space_id,session_id,title,status,last_message_at,deleted_at,created_at,updated_at FROM conversation WHERE id=? AND deleted_at IS NULL
+2026-10-29T19:22:32.645+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.selectById    : ==> Parameters: 108(Long)
+2026-10-29T19:22:32.645+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.ConversationMapper.selectById    : <==      Total: 1
+2026-10-29T19:22:32.646+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.AgentRunMapper.insert       : ==>  Preparing: INSERT INTO agent_run ( user_id, conversation_id, session_id, run_type, status, input_summary, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.646+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.AgentRunMapper.insert       : ==> Parameters: 191(Long), 108(Long), 84(Long), ANALYSIS(String), RUNNING(String), analyze message#155(String), 2026-10-29T19:22:32.646419700(LocalDateTime)
+2026-10-29T19:22:32.647+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.AgentRunMapper.insert       : <==    Updates: 1
+2026-10-29T19:22:32.647+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_understanding WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:32.647+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 191(Long), 96(Long)
+2026-10-29T19:22:32.648+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 0
+2026-10-29T19:22:32.650+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.insert                         : ==>  Preparing: INSERT INTO learning_understanding ( user_id, concept_id, known_parts, misconceptions, uncertain_parts, status, updated_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.650+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.insert                         : ==> Parameters: 191(Long), 96(Long), [](String), [](String), [](String), UNKNOWN(String), 2026-10-29T19:22:32.650419(LocalDateTime)
+2026-10-29T19:22:32.651+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.insert                         : <==    Updates: 1
+2026-10-29T19:22:32.651+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.selectList                     : ==>  Preparing: SELECT id,user_id,concept_id,understanding_id,evidence_type,observation,correctness,reasoning_quality,specificity,ai_confidence,need_follow_up,follow_up_status,follow_up_conversation_id,first_seen_run_id,last_seen_run_id,analyzer_version,dedupe_key,created_at,updated_at FROM learning_evidence WHERE (dedupe_key = ?) LIMIT 1
+2026-10-29T19:22:32.651+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.selectList                     : ==> Parameters: 315c8cd6dfee96a9d1c5b305915227bee0e7d58c93710078d49fa6fd2163b9be(String)
+2026-10-29T19:22:32.652+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.selectList                     : <==      Total: 0
+2026-10-29T19:22:32.652+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.LearningEvidenceMapper.insert    : ==>  Preparing: INSERT INTO learning_evidence ( user_id, concept_id, understanding_id, evidence_type, observation, correctness, need_follow_up, follow_up_status, first_seen_run_id, last_seen_run_id, analyzer_version, dedupe_key, created_at, updated_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.653+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.LearningEvidenceMapper.insert    : ==> Parameters: 191(Long), 96(Long), 36(Long), OBSERVATION(String), TLB 缓存的是什么(String), UNKNOWN(String), true(Boolean), PENDING(String), 144(Long), 144(Long), rules-v1(String), 315c8cd6dfee96a9d1c5b305915227bee0e7d58c93710078d49fa6fd2163b9be(String), 2026-10-29T19:22:32.652421900(LocalDateTime), 2026-10-29T19:22:32.652421900(LocalDateTime)
+2026-10-29T19:22:32.653+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.LearningEvidenceMapper.insert    : <==    Updates: 1
+2026-10-29T19:22:32.654+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.E.selectCount                    : ==>  Preparing: SELECT COUNT( * ) AS total FROM evidence_source WHERE (evidence_id = ? AND source_type = ? AND source_id = ?)
+2026-10-29T19:22:32.654+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.E.selectCount                    : ==> Parameters: 48(Long), MESSAGE(String), 155(Long)
+2026-10-29T19:22:32.654+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.E.selectCount                    : <==      Total: 1
+2026-10-29T19:22:32.655+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.EvidenceSourceMapper.insert      : ==>  Preparing: INSERT INTO evidence_source ( evidence_id, source_type, source_id, created_at ) VALUES ( ?, ?, ?, ? )
+2026-10-29T19:22:32.655+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.EvidenceSourceMapper.insert      : ==> Parameters: 48(Long), MESSAGE(String), 155(Long), 2026-10-29T19:22:32.654422(LocalDateTime)
+2026-10-29T19:22:32.655+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.EvidenceSourceMapper.insert      : <==    Updates: 1
+2026-10-29T19:22:32.656+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_understanding WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:32.656+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 191(Long), 96(Long)
+2026-10-29T19:22:32.656+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 1
+2026-10-29T19:22:32.658+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.updateById                     : ==>  Preparing: UPDATE learning_understanding SET user_id=?, concept_id=?, known_parts=?, misconceptions=?, uncertain_parts=?, status=?, updated_at=? WHERE id=?
+2026-10-29T19:22:32.659+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.updateById                     : ==> Parameters: 191(Long), 96(Long), [](String), [](String), [](String), EXPOSED(String), 2026-10-29T19:22:32.657422400(LocalDateTime), 36(Long)
+2026-10-29T19:22:32.659+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.updateById                     : <==    Updates: 1
+2026-10-29T19:22:32.659+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.U.selectMaxRevisionNoForUpdate   : ==>  Preparing: SELECT COALESCE(MAX(revision_no), 0) FROM understanding_revision WHERE understanding_id = ? FOR UPDATE
+2026-10-29T19:22:32.659+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.U.selectMaxRevisionNoForUpdate   : ==> Parameters: 36(Long)
+2026-10-29T19:22:32.660+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.U.selectMaxRevisionNoForUpdate   : <==      Total: 1
+2026-10-29T19:22:32.660+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.U.insert                         : ==>  Preparing: INSERT INTO understanding_revision ( understanding_id, revision_no, known_parts, misconceptions, uncertain_parts, status, trigger_evidence_id, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.660+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.U.insert                         : ==> Parameters: 36(Long), 1(Integer), [](String), [](String), [](String), EXPOSED(String), 48(Long), 2026-10-29T19:22:32.657422400(LocalDateTime)
+2026-10-29T19:22:32.662+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.U.insert                         : <==    Updates: 1
+2026-10-29T19:22:32.663+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.updateById                     : ==>  Preparing: UPDATE learning_understanding SET user_id=?, concept_id=?, known_parts=?, misconceptions=?, uncertain_parts=?, status=?, current_revision_id=?, updated_at=? WHERE id=?
+2026-10-29T19:22:32.663+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.updateById                     : ==> Parameters: 191(Long), 96(Long), [](String), [](String), [](String), EXPOSED(String), 36(Long), 2026-10-29T19:22:32.657422400(LocalDateTime), 36(Long)
+2026-10-29T19:22:32.664+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.m.L.updateById                     : <==    Updates: 1
+2026-10-29T19:22:32.664+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] .a.b.m.L.selectByUserAndConceptForUpdate : ==>  Preparing: SELECT * FROM learning_state WHERE user_id = ? AND concept_id = ? FOR UPDATE
+2026-10-29T19:22:32.664+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] .a.b.m.L.selectByUserAndConceptForUpdate : ==> Parameters: 191(Long), 96(Long)
+2026-10-29T19:22:32.665+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] .a.b.m.L.selectByUserAndConceptForUpdate : <==      Total: 0
+2026-10-29T19:22:32.665+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.LearningStateMapper.insert  : ==>  Preparing: INSERT INTO learning_state ( user_id, concept_id, status, next_review_at, review_priority, last_evidence_at, updated_at ) VALUES ( ?, ?, ?, ?, ?, ?, ? )
+2026-10-29T19:22:32.665+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.LearningStateMapper.insert  : ==> Parameters: 191(Long), 96(Long), EXPOSED(String), 2026-10-31T19:22:32.652421900(LocalDateTime), 4(Integer), 2026-10-29T19:22:32.652421900(LocalDateTime), 2026-10-29T19:22:32.665500800(LocalDateTime)
+2026-10-29T19:22:32.666+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.LearningStateMapper.insert  : <==    Updates: 1
+2026-10-29T19:22:32.666+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.AgentRunMapper.updateById   : ==>  Preparing: UPDATE agent_run SET user_id=?, conversation_id=?, session_id=?, run_type=?, status=?, input_summary=?, output_summary=?, duration_ms=?, created_at=?, finished_at=? WHERE id=?
+2026-10-29T19:22:32.667+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.AgentRunMapper.updateById   : ==> Parameters: 191(Long), 108(Long), 84(Long), ANALYSIS(String), COMPLETED(String), analyze message#155(String), evidence=1(String), 21(Integer), 2026-10-29T19:22:32.646419700(LocalDateTime), 2026-10-29T19:22:32.666507200(LocalDateTime), 144(Long)
+2026-10-29T19:22:32.667+08:00 DEBUG 23040 --- [backend] [  chat-stream-8] c.a.b.mapper.AgentRunMapper.updateById   : <==    Updates: 1
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 8.467 s -- in com.ails.backend.service.ChatSseIntegrationTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  11.798 s
+[INFO] Finished at: 2026-10-29T19:22:33+08:00
+[INFO] ------------------------------------------------------------------------

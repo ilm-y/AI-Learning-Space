@@ -46,7 +46,8 @@ import java.util.stream.Stream;
  *   <tr><th>Agent 事件</th><th>本类动作</th></tr>
  *   <tr><td>{@code meta}</td><td>只记日志（命中概念、上下文规模），无对应回调</td></tr>
  *   <tr><td>{@code delta}</td><td>{@link AgentStreamHandler#onDelta(String)}</td></tr>
- *   <tr><td>{@code done}</td><td>{@link AgentStreamHandler#onComplete()}</td></tr>
+ *   <tr><td>{@code done}</td><td>{@link AgentStreamHandler#onComplete(StreamCompletion)}：
+ *       {@code finishReason=length} / {@code truncated=true} 时保留部分内容但标记不完整</td></tr>
  *   <tr><td>{@code error}</td><td>{@link AgentStreamHandler#onError(int, String)}</td></tr>
  * </table>
  * {@code error} 的 {@code code} <b>原样透传</b>事件里的 int，不在这里另编一套常量：
@@ -281,13 +282,31 @@ public class HttpPythonAgentGateway implements AgentGateway {
                     handler.onDelta(delta);
                 }
             }
-            case "done" -> finish(handler, terminated, true, 0, null);
+            case "done" -> {
+                String finishReason = node.path("finishReason").isTextual()
+                        ? node.path("finishReason").asText()
+                        : null;
+                // finishReason=length 是截断的硬事实：即使上游漏发或错发了
+                // truncated=false，也不能把这一轮当成正常完成。
+                boolean truncated = "length".equals(finishReason)
+                        || node.path("truncated").asBoolean(false);
+                finish(handler, terminated, new StreamCompletion(finishReason, truncated));
+            }
             case "error" -> finish(handler, terminated, false,
                     // 正常路径下这个 int 由上游给出；asInt 的默认值只在事件本身畸形时才会生效
                     node.path("code").asInt(CODE_BAD_GATEWAY),
                     node.path("message").asText("Agent 生成失败"));
             default -> log.debug("忽略未知事件: {}", eventName);
         }
+    }
+
+    /** 正常终局：把完成原因一起交给调用方，截断不能被压缩成「正常完成」。 */
+    private void finish(AgentStreamHandler handler, AtomicBoolean terminated,
+                        StreamCompletion completion) {
+        if (!terminated.compareAndSet(false, true)) {
+            return;
+        }
+        handler.onComplete(completion);
     }
 
     /** 抢占终局名额；没抢到说明终局已经写过，直接丢弃（契约第 3 条）。 */

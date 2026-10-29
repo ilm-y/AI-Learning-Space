@@ -17,7 +17,8 @@ public record MessageResponse(
         String content,
         Integer tokens,
         Integer sequenceNo,
-        LocalDateTime createdAt) {
+        LocalDateTime createdAt,
+        boolean truncated) {
 
     public static MessageResponse from(Message message) {
         if (message == null) {
@@ -26,6 +27,7 @@ public record MessageResponse(
         return new MessageResponse(
                 message.getId(), message.getConversationId(), message.getRole(),
                 message.getMessageType(), message.getContent(), message.getTokens(),
-                message.getSequenceNo(), message.getCreatedAt());
+                message.getSequenceNo(), message.getCreatedAt(),
+                Boolean.TRUE.equals(message.getTruncated()));
     }
 }

@@ -1,4 +1,4 @@
-# 测试与质量矩阵（截至 2026-10-27）
+# 测试与质量矩阵（截至 2026-10-29，Phase 9）
 
 > **不要把这些数字合并成一个「总体通过率」。** 它们的执行时间、代码版本、评分规则、
 > 测试语义都不同：Mock 只证明链路，真实模型才证明语义；RAG v1 / v2 是两套评分规则；
@@ -8,8 +8,8 @@
 
 | 层级 | 最近结果 | 证明什么 | 不能证明什么 |
 | --- | --- | --- | --- |
-| Agent 单元 / 集成 | 232 passed，5 skipped | 函数与运行时契约 | 真实模型语义质量 |
-| Spring 单元 | 189 passed，29 skipped，0 failed | 服务 / 网关 / MQ 消费者契约 | 真实 MySQL + RabbitMQ 全链路 |
+| Agent 单元 / 集成 | 382 passed，5 skipped，1 xfailed | 函数与运行时契约、来源过滤、预算边界 | 真实模型语义质量 |
+| Spring 单元 / 集成 | 255 条（182 执行通过 / 73 skipped / 0 failed） | 服务 / 网关 / MQ 消费者契约 | 真实 RabbitMQ Testcontainers 全链路 |
 | 5.1 inline E2E | 101 / 0 / 0 | Mock 下的对话 → 分析 → 证据 → 状态闭环 | 真实模型回答质量 |
 | 5.1 MQ E2E | 27 / 0 / 0（有效重跑） | 真 RabbitMQ + 真 Worker 的异步机制 | 真实模型语义 |
 | 5.2 学习轨迹 E2E | 94 / 0 / 0 | 跨会话状态、轨迹、权限、冲突 | 真实模型是否遵守历史边界 |
@@ -25,11 +25,15 @@
 python -m pytest -q
 ```
 
-最近结果（2026-10-27）：
+最近结果（2026-10-29，Phase 9）：
 
 ```text
-232 passed, 5 skipped, 1 warning in 9.55s
+382 passed, 5 skipped, 1 xfailed, 1 warning in 10.65s
 ```
+
+1 个 `xfail(strict=True)` 不是跳过，也不是通过：它记录「检索成功但片段被裁剪时，
+模型可能用自然语言说没有检索到资料」这一当前架构无法确定性拦截的语义风险。
+详见 `docs/testing/phase9-evidence-boundary.md`。
 
 5 个 skip 都是环境门控，**跳过不等于通过**：
 
@@ -49,24 +53,32 @@ python -m pytest -q
 ./mvnw test
 ```
 
-最近结果（2026-10-27）：
+最近结果（2026-10-29，Phase 9 重跑）：
 
 ```text
-30 个测试类：189 tests, 0 failures, 0 errors, 29 skipped
+Tests run: 255, Failures: 0, Errors: 0, Skipped: 73
+Surefire 聚合：39 个 report，255 total / 182 executed / 182 passed / 73 skipped
 ```
 
-29 个 skip 全部是环境门控：
+`Tests run` 包含 skipped，不能写成「255 passed」。73 个 skip 全部是环境门控
+（真实 MySQL / Docker / 环境变量）：
 
 | 测试类 | skip | 条件 |
 | --- | ---: | --- |
 | `BackendApplicationTests` | 1 | 需要本地 MySQL 与库表 |
-| `SecurityContextIntegrationTest` | 11 | `AILS_SECURITY_IT` |
+| `ChatSseIntegrationTest` | 8 | `AILS_CHAT_SSE_IT=true` |
+| `ChatSseOrderingProbeTest` | 1 | `AILS_CHAT_SSE_IT` + `AILS_P8_ORDER_PROBE` |
 | `DocumentIndexE2EIntegrationTest` | 1 | `AILS_DOCUMENT_E2E_IT` |
-| `DocumentIndexServiceIntegrationTest` | 9 | `AILS_DOCUMENT_INDEX_IT` |
+| `DocumentIndexServiceIntegrationTest` | 15 | `AILS_DOCUMENT_INDEX_IT` |
 | `DocumentServiceIntegrationTest` | 7 | `AILS_DOCUMENT_IT` |
+| `InternalIdentityHttpIntegrationTest` | 5 | 内部身份集成开关 |
+| `Phase2MqProcessorIntegrationTest` | 5 | 真实 MySQL + MQ |
+| `Phase2RabbitMqBrokerTest` | 5 | 真实 broker |
+| `Phase2RealStateIntegrationTest` | 6 | 真实学习状态链路 |
+| `SecurityContextIntegrationTest` | 19 | `AILS_SECURITY_IT` |
 
-`AnalysisMqIntegrationTest` 在默认 `./mvnw test` 下是 **0 个用例执行**：它需要
-`-Pmq-integration` 与 Docker（Testcontainers 拉起 RabbitMQ）。没有把它算进 189，
+`AnalysisMqIntegrationTest` 在默认 `./mvnw test` 下仍是 **0 个用例执行**：它需要
+`-Pmq-integration` 与 Docker（Testcontainers 拉起 RabbitMQ）。没有把它算进 255，
 也没有把「0 executed」写成「通过」。
 
 CI 配置（`.github/workflows/ci.yml`）会跑：
@@ -269,6 +281,11 @@ C-only 的原始输出包含：
 2026-10-27  E2E     scripts/phase52-e2e.sh               94 PASS / 0 FAIL / 0 SKIP
 2026-10-27  E2E     scripts/phase51-mq-e2e.sh            27 PASS / 0 FAIL / 0 SKIP（独占队列重跑）
 2026-10-27  Demo    scripts/phase6-demo.sh               23 PASS / 0 FAIL（Mock）
+2026-10-29  Agent   python -m pytest -q                 382 passed, 5 skipped, 1 xfailed
+2026-10-29  Agent   citation 定向回归                   22 passed, 1 xfailed
+2026-10-29  Spring  ./mvnw -B test                        255 条 / 182 执行通过 / 73 skipped / 0 failed
+2026-10-29  Eval    python -m evaluation                 40/40, 124/124 assertions
+2026-10-29  Agent   Phase 6 注入与安全回归               16 passed
 ```
 
 ## 11. 质量报告索引
@@ -276,6 +293,7 @@ C-only 的原始输出包含：
 | 报告 | 路径 |
 | --- | --- |
 | Agent 离线评测（当前） | `evaluation/reports/latest.md` |
+| Phase 9 证据边界 | `docs/testing/phase9-evidence-boundary.md` |
 | 5.3.2 复验报告 | `backend/backend/target/phase53-eval/20261027-004622/REPORT-5.3.2.md` |
 | 5.3.1 真实模型报告 | `backend/backend/target/phase53-eval/20261027-004622/REPORT-5.3.1.md` |
 | RAG v1 全量 | `evaluation/rag/reports/real_20261026_full_revalidated/summary.md` |

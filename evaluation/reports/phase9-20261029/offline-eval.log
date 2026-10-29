@@ -1,0 +1,46 @@
+analyze run 2 失败：模型输出里找不到 JSON 对象
+analyze run 3 失败：分析结果不符合契约：1 validation error for AnalyzeResult evidenceCandidates.0.evidenceType   Input should be 'USER_EXPLANATION', 'OBSERVATION', 'TEST_RESULT', 'USER_CORRECTION' or 'HIGHLIGHT_SIGNAL' [type=enum, input_value='GUESS', input_type=str]     For further information visit https://errors.pydantic.dev/2.7/v/enum
+analyze run 4 失败：模型输出没有任何分析字段（期望 evidenceCandidates / understandingProposal / memoryCandidates / verificationDecision）
+  [PASS] contract-fenced-json               analysis_contract            5ms
+  [PASS] contract-malformed-json            analysis_contract            3ms
+  [PASS] contract-invalid-enum              analysis_contract            3ms
+  [PASS] contract-nested-result             analysis_contract            4ms
+  [PASS] contract-empty-input               analysis_contract            3ms
+  [PASS] contract-no-concept                analysis_contract            4ms
+  [PASS] contract-unknown-field-and-clamp   analysis_contract            3ms
+  [PASS] cross-session-history-user-hit     cross_session                4ms
+  [PASS] cross-session-prefers-user-over-assistant cross_session                4ms
+  [PASS] cross-session-lookback-window      cross_session                4ms
+  [PASS] cross-session-assistant-fallback   cross_session                5ms
+  [PASS] dedup-identical-candidates         evidence_dedup               3ms
+  [PASS] dedup-same-text-different-type     evidence_dedup               3ms
+  [PASS] dedup-per-concept-cap              evidence_dedup               3ms
+  [PASS] dedup-total-cap                    evidence_dedup               4ms
+  [PASS] dedup-invalid-concept-dropped      evidence_dedup               3ms
+  [PASS] dedup-blank-observation-dropped    evidence_dedup               3ms
+  [PASS] memory-action-add-preserved        memory_conflict              3ms
+  [PASS] memory-action-update-preserved     memory_conflict              3ms
+  [PASS] memory-action-ignore-preserved     memory_conflict              3ms
+  [PASS] memory-conflict-blank-content-dropped memory_conflict              3ms
+  [PASS] memory-conflict-importance-clamped memory_conflict              3ms
+  [PASS] memory-scope-global-clears-ids     memory_scope                 3ms
+  [PASS] memory-scope-space-uses-current-space memory_scope                 3ms
+  [PASS] memory-scope-concept-keeps-id      memory_scope                 3ms
+  [PASS] memory-scope-fabricated-concept-falls-back memory_scope                 3ms
+  [PASS] memory-scope-defaults-to-concept   memory_scope                 3ms
+  [PASS] memory-scope-duplicate-content     memory_scope                 3ms
+  [PASS] revision-proposal-known-parts      understanding_revision       3ms
+  [PASS] revision-empty-proposal-dropped    understanding_revision       4ms
+  [PASS] revision-misconception-preserved   understanding_revision       3ms
+  [PASS] revision-fabricated-concept-falls-back understanding_revision       3ms
+  [PASS] revision-explanation-truncated     understanding_revision       4ms
+  [PASS] revision-heuristic-explanation-proposal understanding_revision       3ms
+  [PASS] verification-new-concept-ask-later verification                 3ms
+  [PASS] verification-known-concept-skip    verification                 3ms
+  [PASS] verification-explanation-skips     verification                 3ms
+  [PASS] verification-recorded-ask-now-preserved verification                 3ms
+  [PASS] verification-fabricated-concept-skipped verification                 3ms
+  [PASS] verification-ask-now-default-question verification                 3ms
+离线：40 条，通过 40，失败 0，跳过 0，通过率 100.0%
+
+报告：evaluation\reports\latest.md | evaluation\reports\latest.json
