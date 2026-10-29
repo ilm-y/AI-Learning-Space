@@ -300,8 +300,9 @@ class AnalysisWorker:
 
         await message.ack()
         log.info(
-            "分析完成, taskId=%s, traceId=%s, elapsedMs=%d",
-            task.task_id, task.trace_id, int((time.monotonic() - started) * 1000),
+            "分析完成, taskId=%s, traceId=%s, retries=%d, elapsedMs=%d",
+            task.task_id, task.trace_id, retries,
+            int((time.monotonic() - started) * 1000),
         )
 
     async def _fail(
