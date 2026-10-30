@@ -253,6 +253,7 @@ class LearningAnalyzer:
                 "模型输出没有任何分析字段（期望 evidenceCandidates / "
                 "understandingProposal / memoryCandidates / verificationDecision）"
             )
+        _coerce_verification_enums(data)
         try:
             return AnalyzeResult.model_validate(data)
         except ValidationError as exc:
@@ -573,6 +574,45 @@ def _sanitize_memories(
         if len(result) >= _MAX_MEMORIES:
             break
     return result
+
+
+_VERIFICATION_ACTIONS = {item.value for item in VerificationAction}
+_VERIFICATION_TRIGGERS = {item.value for item in VerificationTrigger}
+_QUESTION_TYPES = {item.value for item in QuestionType}
+
+
+def _coerce_verification_enums(data: dict) -> None:
+    """只收敛 verificationDecision 的可选枚举，不放过证据字段的错误。
+
+    验证决策是「这一轮要不要出题」的附加建议；模型把 trigger 写成一段
+    自由文本（例如「用户把 TLB miss 直接当成缺页」）时，不该因此丢掉整轮
+    已经正确的 Evidence。这里把无法识别的 trigger/questionType 置空，把
+    无法识别的 action 降为 SKIP；证据、理解、记忆的枚举仍然严格校验，
+    因为那些字段会直接写进长期学习状态。
+    """
+    key = "verificationDecision" if "verificationDecision" in data else "verification_decision"
+    if key not in data:
+        return
+    decision = data.get(key)
+    if decision is None:
+        data[key] = {}
+        return
+    if not isinstance(decision, dict):
+        return
+
+    def normalize(field: str, allowed: set[str]) -> str | None:
+        value = decision.get(field)
+        if value is None:
+            return None
+        normalized = str(value).strip().upper()
+        return normalized if normalized in allowed else None
+
+    action = normalize("action", _VERIFICATION_ACTIONS)
+    decision["action"] = action or VerificationAction.SKIP.value
+    trigger = normalize("trigger", _VERIFICATION_TRIGGERS)
+    decision["trigger"] = trigger
+    question_type = normalize("questionType", _QUESTION_TYPES)
+    decision["questionType"] = question_type
 
 
 def _sanitize_verification(

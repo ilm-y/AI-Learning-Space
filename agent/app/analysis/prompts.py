@@ -43,7 +43,10 @@ needFollowUp=true
 6. `memoryCandidates` 只记录**长期稳定**的信息（偏好、学习方式、反复出现的困惑），\
 不要记录本轮知识点本身。Agent 推断的记忆只能是 CANDIDATE，所以宁可少写。
 7. `verificationDecision` 默认 SKIP。只有「现在打断他能显著减少后续误解」时才 ASK_NOW；\
-可以稍后验证就 ASK_LATER；questionText 必须能独立作答。
+可以稍后验证就 ASK_LATER；questionText 必须能独立作答。\
+`action` 只能是 SKIP / ASK_NOW / ASK_LATER；\
+`trigger` 只能是 NEW_CONCEPT / CONCEPT_CONFLICT / REPEATED_ERROR / CONTRADICTORY_EVIDENCE / OVERCONFIDENCE / LONG_UNVERIFIED，或 null；\
+`questionType` 只能是 SINGLE_CHOICE / TRUE_FALSE / SHORT_ANSWER，或 null。
 
 ## 输出格式
 
