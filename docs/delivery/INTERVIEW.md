@@ -1,9 +1,11 @@
 # 面试讲解提纲
 
 > 这份提纲只讲**代码里真实存在的东西**。真实模型已完成 2026-10-30 单轮 5 场景
-> Agent Runtime 复验（C-only 依赖 fallback）和 Spring SSE 3 轮服务端 E2E（47/0）；
-> 但仍不是完整产品验收：Flutter 未实现、MQ 真实模型未跑、没有文档引用场景，
-> 部分接口返回 501。这些要主动说明，不能包装成“已完成”。
+> Agent Runtime 复验（C-only 依赖 fallback）、Spring SSE 3 轮服务端 E2E（47/0），
+> 以及 5.4 的 MQ 真实模型（19/0）、Qdrant 文档引用（28/0）、重复采样（3 轮 47/0）
+> 和单机并发基线（6/12、12/24、24/24 均 10/0）；但仍不是完整产品验收：
+> Flutter 未实现、没有人工评分 / 留存指标、没有多实例和持续压测，部分接口返回 501。
+> 这些要主动说明，不能包装成“已完成”。
 
 ## 1. 30 秒版本
 
@@ -153,15 +155,21 @@ inline 分析走真实模型并返回 `agent-v1`；显式复盘注入 3 个 Revi
 
 **必须主动说明的限制：**
 
-- 2026-10-30 已完成真实模型 Agent Runtime 复验和 Spring SSE 服务端 E2E，
-  但 Runtime 只跑了**一轮 5 场景**、服务端只跑了 **3 轮**，不是重复采样，
-  也没有人工评分；
+- 2026-10-30 已完成真实模型 Agent Runtime 复验、Spring SSE 服务端 E2E、
+  MQ 真实模型、Qdrant 文档引用、3 轮重复采样和 3 组并发基线；
+  但 Runtime 只跑了**一轮 5 场景**、重复采样只覆盖**同一组 3 个场景**，
+  没有人工评分、置信区间或留存指标；
 - C-only 的模型回答本身正确，但被 `history_guard` 的 `no_history_denial`
   否定句规则误判，重生成后仍误判，最终交付的是 **fallback**，不是模型原文；
 - 校验器是句子级启发式，不能覆盖所有同义改写；非常规措辞可能不触发复盘；
-- 服务端 E2E 只覆盖 inline；MQ 真实模型、Flutter 前端、文档引用场景仍未验证；
-- `deepseek-flash` 在 `max_tokens=1024` 时会截断长回答，本轮已改为 4096；
-- 因此可以写「已完成单轮真实模型行为复验和一次服务端 E2E」，不能写
+- 文档引用 28/0 只用了两篇各 1 个 chunk 的合成文档，证明标签可回跳，
+  不证明事实正确率或多 chunk 排序；
+- 并发只到 24 个短问题、单机单实例，没有 SLO、持续负载、限流或断线重连；
+- MQ 轮保留了一次 `ConnectError` + 非法 JSON 的真实失败样本；失败由
+  `rules-v1` 兜底，不能把 MQ 写成稳定通过；
+- Flutter 前端仍未验证；`deepseek-flash` 在 `max_tokens=1024` 时会截断长回答，
+  本轮已改为 4096；
+- 因此可以写「已完成多链路真实模型验收和单机并发基线」，不能写
   「真实模型已稳定通过完整产品验收」。
 
 这一段最能体现工程判断：**不把“改好了”说成“验证过了”，也不把“误报”藏起来。**
@@ -176,6 +184,60 @@ inline 分析走真实模型并返回 `agent-v1`；显式复盘注入 3 个 Revi
 **测试环境教训：** 第一次 MQ E2E 有另一个常驻 Worker 争用队列，出现 9 个 FAIL；
 停掉它并清空队列后重跑 27/0。这不是产品缺陷，但说明这个脚本要求**独占队列**。
 讲的时候可以把它当成“如何区分环境问题与代码问题”的例子。
+
+**5.4 真实模型 MQ 验收：** 另起 Spring 8082 + Agent 8001 + 独立 Phase54 拓扑，
+脚本自行启停 Worker，走通 `publish → Worker → /agent/analyze → result consumer → DB`。
+正式轮 **19 / 0**：run `SUCCEEDED`、Evidence `agent-v1`、来源回跳、
+`MISCONCEPTION` + 1 Revision；同一 taskId 重复投递被 Worker 处理两次，但
+Evidence / Revision 零新增，Result Consumer 识别并忽略重复结果。
+
+同一脚本的上一轮保留了 **15 / 4** 的真实失败：首次 `ConnectError`（可重试），
+重试 HTTP 200 但 JSON 非法（不可重试），run 落 `FAILED`，由 `rules-v1` 写
+`UNKNOWN` 观察。这个样本很适合讲「失败语义」：系统没有把 fallback 冒充成
+`agent-v1`，也没有推进掌握状态。
+
+### 3.7 并发压测暴露的两个死锁与一个顺序竞态（5.4）
+
+**这不是设计推演，是压测打出来的。**
+
+#### 死锁一：消息序号的索引间隙锁
+
+旧实现先在事务里锁 `conversation` 行，再执行：
+
+```sql
+SELECT sequence_no FROM message
+WHERE conversation_id = ?
+ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE
+```
+
+`message(conversation_id, sequence_no)` 是普通唯一索引。空对话上的锁定范围读
+会在索引区间上加**间隙锁**，相邻对话的区间互相覆盖；两个事务写不同对话却互相等待，
+12 并发里 3 个请求直接 500：`Deadlock found when trying to get lock`。
+
+修复：`conversation.last_message_seq` 计数器，分配改成
+`UPDATE ... SET x = x + 1` 后在同一事务读回。只锁主键行，没有范围扫描。
+实体字段标记 `updateStrategy = NEVER`，防止先读后改的 `updateById` 覆盖并发分配。
+已有库执行 `schema-migration-phase54-message-seq.sql`。
+
+#### 死锁二：首次 Session 归属的 S→X 锁升级
+
+多条对话同时发出第一条学习消息时，每个事务都看到「没有可归属的 Session」，
+各自 CREATE 出重复 Session；同时 `conversation.session_id` 的外键检查给 session 行
+加共享锁，随后 `learning_session` 更新要升级为排他锁。两个事务各持 S 锁等 X 锁，
+死锁回滚一个。
+
+修复：首次归属先锁 `learning_space` 行，把同一空间的解析串行化；
+`attach()` 固定「先 UPDATE session（X 锁），再写 conversation.session_id（FK 检查）」。
+复测 12 个会话只有 1 个 Session，0 死锁。
+
+#### 顺序竞态：`message.end` 早于 run 终态
+
+重复采样第一轮 46/1：客户端收到 `message.end` 后立刻按 `runId` 查库，看到
+`RUNNING`/空。修复：`ChatService` 先 `finishRun(...)` 写终态，再发 end；
+写失败走 `message.error`。修复后连续 3 轮 47/0。
+
+**可以讲：** 这三个都不是「代码写得丑」，而是并发/顺序假设被真实负载推翻；
+修复分别选择了计数器、统一锁顺序、先提交后通知，而不是加重试掩盖。
 
 ## 4. 演示怎么讲（7 步，Mock）
 
@@ -218,12 +280,14 @@ A：句子级校验需要完整回答；代价是显式复盘首字延迟从第�
 A：保留失败样本，判定为已知限制；最低关闭条件是真实模型重跑 B / C / C-only，
 分别记录 raw answer 与 production final answer，不能合并判定。2026-10-30 已按这个
 方式补跑：C 通过，C-only 因守卫误判走 fallback；并补了 Spring SSE 服务端 E2E
-（3 轮 / 47 检查）。下一步是修复 `no_history_denial` 的否定句误报，再补重复采样、
-MQ 真实模型、Flutter 和真实文档引用场景。
+（3 轮 / 47 检查）、MQ 真实模型、文档引用、3 轮重复采样和 3 组并发基线。
+下一步是修复 `no_history_denial` 的否定句误报，补人工评分、持续压测和 Flutter。
 
 **Q：系统最大的技术风险？**
-A：单进程假设（SSE、线程池）、没有迁移框架、真实模型只完成单轮复验且
-C-only 仍依赖 fallback；服务端 E2E 也只覆盖 inline、单次采样，没有并发压测。
+A：单进程假设（SSE、线程池）、没有迁移框架、真实模型仍会连接失败或输出非法 JSON；
+C-only 仍依赖 fallback，重复采样只覆盖 3 个场景；并发只到 24 个短问题，没有 SLO、
+多实例或持续负载。5.4 已修掉两个数据库死锁和一个 `message.end` 顺序竞态，但
+这些修复目前主要由 E2E / 并发脚本覆盖，没有专门的单元回归。
 这些都在 `KNOWN_LIMITATIONS.md` 里，不藏在代码注释里。
 
 ## 6. 如果只能讲一个技术点
@@ -241,4 +305,5 @@ C-only 仍依赖 fallback；服务端 E2E 也只覆盖 inline、单次采样，�
 - 生命周期：[LEARNING_LIFECYCLE.md](LEARNING_LIFECYCLE.md)
 - 演示：[DEMO.md](DEMO.md)
 - 测试口径：[TEST_MATRIX.md](TEST_MATRIX.md)
+- 5.4 真实验收：[../testing/phase54-real-model-20261030.md](../testing/phase54-real-model-20261030.md)
 - 已知限制：[KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md)

@@ -1,4 +1,4 @@
-# 测试与质量矩阵（截至 2026-10-30，Phase 9 + 5.3 真实模型复验 + 服务端 E2E）
+# 测试与质量矩阵（截至 2026-10-30，Phase 9 + 5.3 + 5.4 真实模型验收）
 
 > **不要把这些数字合并成一个「总体通过率」。** 它们的执行时间、代码版本、评分规则、
 > 测试语义都不同：Mock 只证明链路，真实模型才证明语义；RAG v1 / v2 是两套评分规则；
@@ -18,6 +18,10 @@
 | 5.3 真实模型复验（2026-10-30） | 6 次调用 / 5 场景；A/B/C/D PASS，C-only PASS（fallback） | 真实 `deepseek-flash` 在 A/B/C/D 不再编造；C-only 被守卫误判后安全兜底 | 稳定合规、完整产品验收 |
 | 5.3 服务端 E2E（2026-10-30） | 3 轮聊天 + 3 次 inline 分析；**47 PASS / 0 FAIL** | Spring SSE → Agent → `deepseek-flash`、消息 / run 落库、`agent-v1` 分析、显式复盘轨迹 | Flutter、MQ 真实模型、文档 RAG、重复采样 |
 | 5.3.2 历史校验（2026-10-30） | 已用真实模型复验；C 无 issue，C-only `no_history_denial` → fallback | 校验器能拦截并兜底；同时暴露一次否定句误报 | 校验器无误报、模型独立通过 |
+| 5.4 重复采样（2026-10-30） | **3 轮 × 47 PASS / 0 FAIL** | 修复 `message.end` 早于 run 终态后连续稳定 | 统计采样、人工评分 |
+| 5.4 文档引用（2026-10-30） | **28 PASS / 0 FAIL** | 真实 Qdrant + Embedding + LLM；标签可回跳；无关问题不引用 | 事实正确率、多 chunk / 干扰排序 |
+| 5.4 MQ 真实模型（2026-10-30） | **19 PASS / 0 FAIL**；另保留 15 / 4 失败样本 | 真 broker + Worker + 真实模型；幂等；失败语义 | 生产 MQ、高可用、Testcontainers |
+| 5.4 并发基线（2026-10-30） | **3 组 × 10 PASS / 0 FAIL**（6/12、12/24、24/24） | 单机单实例下的 SSE 契约、落库一致、分析终态 | SLO、持续负载、多实例 |
 
 ## 2. Agent 测试
 
@@ -55,7 +59,7 @@ python -m pytest -q
 ./mvnw test
 ```
 
-最近结果（2026-10-29，Phase 9 重跑）：
+最近结果（2026-10-30，5.4 并发 / 顺序修复后重跑）：
 
 ```text
 Tests run: 255, Failures: 0, Errors: 0, Skipped: 73
@@ -95,25 +99,31 @@ CI 配置（`.github/workflows/ci.yml`）会跑：
 
 所有 E2E 的详细前置条件见各脚本头部。共同点：
 
-- 后端 `8080`（inline）或 `8081`（mq）；
-- Agent `8000`；除 `phase53-spring-e2e.py` 外均为 `AILS_LLM_PROVIDER=mock`；
+- 后端 `8080`（inline）或 `8081`（mq）；5.4 使用 8081 / 8082，避开用户的 8080；
+- Agent `8000`；`phase53-spring-e2e.py`、`phase54-rag-citation-e2e.py`、
+  `phase54-mq-real-e2e.py`、`phase54-concurrency-e2e.py` 使用真实模型，
+  其余为 `AILS_LLM_PROVIDER=mock`；
 - MySQL 可连，凭证从 `application-local.yml` 读取；
 - 脚本只通过公开 API / SSE / 分析链路产生数据；直接 SQL 只用于只读核对。
 
-| 脚本 | 结果（2026-10-27） | 说明 |
+| 脚本 | 结果 | 说明 |
 | --- | --- | --- |
-| `scripts/phase51-e2e.sh` | **101 PASS / 0 FAIL / 0 SKIP** | inline 分析、SSE、Evidence、Session、状态 |
-| `scripts/phase51-mq-e2e.sh` | **27 PASS / 0 FAIL / 0 SKIP** | 真 RabbitMQ + 真 Worker；重复投递幂等 |
-| `scripts/phase52-e2e.sh` | **94 PASS / 0 FAIL / 0 SKIP** | A 当前误区 / B 已纠正 / C 复盘 / D Memory 冲突 / E 权限与闲聊 |
-| `scripts/phase6-demo.sh` | **23 PASS / 0 FAIL** | TLB 七步演示：证据 / Revision / 新会话 / 复盘 / SSE / 只读查库 |
+| `scripts/phase51-e2e.sh` | **101 PASS / 0 FAIL / 0 SKIP（2026-10-27）** | inline 分析、SSE、Evidence、Session、状态 |
+| `scripts/phase51-mq-e2e.sh` | **27 PASS / 0 FAIL / 0 SKIP（2026-10-27）** | 真 RabbitMQ + 真 Worker；重复投递幂等 |
+| `scripts/phase52-e2e.sh` | **94 PASS / 0 FAIL / 0 SKIP（2026-10-27）** | A 当前误区 / B 已纠正 / C 复盘 / D Memory 冲突 / E 权限与闲聊 |
+| `scripts/phase6-demo.sh` | **23 PASS / 0 FAIL（2026-10-27）** | TLB 七步演示：证据 / Revision / 新会话 / 复盘 / SSE / 只读查库 |
 | `scripts/phase53-spring-e2e.py` | **47 PASS / 0 FAIL（2026-10-30）** | 真实 `deepseek-flash`；Spring SSE、消息 / run 落库、inline 分析、复盘轨迹 |
+| `scripts/phase53-spring-e2e.py` ×3 | **47 / 0 × 3（2026-10-30）** | 重复采样；修复 `message.end` 顺序竞态后连续通过 |
+| `scripts/phase54-rag-citation-e2e.py` | **28 PASS / 0 FAIL（2026-10-30）** | 真实 Qdrant + Embedding + `deepseek-flash`；引用标签可回跳 |
+| `scripts/phase54-mq-real-e2e.py` | **19 PASS / 0 FAIL（2026-10-30）** | 真 RabbitMQ + Worker + 真实模型；另有 15 / 4 失败样本 |
+| `scripts/phase54-concurrency-e2e.py` | **10 / 0 × 3（2026-10-30）** | 6/12、12/24、24/24；单机单实例 |
 | `scripts/regress-closed-loop.sh` | 本轮未重跑 | 旧闭环脚本；不要引用为当前结果 |
 
-除 `phase53-spring-e2e.py` 外，这些 E2E 全部使用 **Mock LLM**。它们能证明检索、
-上下文注入、持久化、状态流转、权限隔离和 SSE 事件序列；不能证明真实模型的语义判断
-或教学效果。真实模型服务端 E2E 的边界见
-[`docs/testing/phase53-spring-e2e-20261030.md`](../testing/phase53-spring-e2e-20261030.md)：
-没有 Flutter、MQ、文档 RAG、重复采样。
+前 5 个脚本使用 **Mock LLM**，能证明检索、上下文注入、持久化、状态流转、权限隔离和
+SSE 事件序列；不能证明真实模型语义。5.3 / 5.4 的 4 个 Python 脚本使用真实模型；
+它们的边界、失败样本和产物路径见
+[`docs/testing/phase54-real-model-20261030.md`](../testing/phase54-real-model-20261030.md)：
+没有 Flutter、人工评分、多实例或持续压测。
 
 ### MQ 小节
 
@@ -280,6 +290,24 @@ C-only 的原始输出包含：
 正式轮恢复 `agent-v1`。失败样本保留在
 `backend/backend/target/phase53-spring-e2e/20261030-210931/`。
 
+### 7.6 阶段 5.4：MQ / 文档引用 / 重复采样 / 并发（2026-10-30）
+
+完整报告：[`docs/testing/phase54-real-model-20261030.md`](../testing/phase54-real-model-20261030.md)。
+
+| 项目 | 结果 | 关键证据 | 保留失败样本 |
+| --- | --- | --- | --- |
+| 文档引用 | **28 / 0** | collection 1024 维、每篇 1 point = 1 chunk、preview `SUCCESS` + ids `[3,4]`、3 轮回答标签可回跳、无关问题不引用 | 首轮 26 / 2 是脚本读错字段 / 误判旧值 |
+| MQ 真实模型 | **19 / 0** | run `SUCCEEDED`、`agent-v1` Evidence、来源回跳、`MISCONCEPTION` + 1 Revision、重复 taskId 处理 2 次但零新增 | 15 / 4：`ConnectError` + 非法 JSON → `FAILED` + `rules-v1` |
+| 重复采样 | **47 / 0 × 3** | 3 轮普通 / 错误解释 / 显式复盘；消息与 run 落库、`agent-v1`、轨迹注入 | 修复前 46 / 1：`message.end` 早于 run 终态 |
+| 并发 | **10 / 0 × 3** | 6/12、12/24、24/24；HTTP / SSE / 落库逐字一致；每 12 会话只有 1 个 Session | 修复前 4 / 6：消息序号间隙锁死锁；4 / 6：Session FK 锁升级死锁 |
+
+修复的代码：`conversation.last_message_seq` 计数器、首次 Session 归属锁空间行、
+`attach()` 先写 session 再写 conversation、`finishRun` 先于 `message.end`。
+已有库必须执行 `schema-migration-phase54-message-seq.sql`。
+
+这不是统计采样：3 轮重复、3 组并发都使用同一组短问题 / 场景，判定由脚本完成，
+没有人工评分、置信区间或 SLO。MQ 的 15 / 4 样本证明的是失败语义，不是通过。
+
 ## 8. 阶段 5.3.2 历史校验复验
 
 | 项目 | 结果 | 性质 |
@@ -311,9 +339,13 @@ C-only 的原始输出包含：
 | GitHub Actions CI | 未执行 | 本地未触发 |
 | Flutter 测试 | 未执行 | 仍是脚手架，没有业务代码 |
 | 5.3 / 5.3.2 真实模型复验 | **已执行 6 次（5 场景）** | 2026-10-30；A/B/C/D PASS，C-only fallback |
-| Spring SSE 真实模型端到端 | **已执行（2026-10-30，47 / 0）** | 3 轮聊天 + 3 次 inline 分析；不含 Flutter、MQ、文档 RAG |
-| MQ 真实模型端到端 | 未执行 | 本轮 `AILS_ANALYSIS_MODE=inline` |
-| 真实模型重复采样 / 人工评分 | 未执行 | 每个场景 1 轮；判定由脚本完成 |
+| Spring SSE 真实模型端到端 | **已执行（2026-10-30，47 / 0）** | 3 轮聊天 + 3 次 inline 分析；不含 Flutter |
+| MQ 真实模型端到端 | **已执行（2026-10-30，19 / 0；另有 15 / 4）** | 真 broker + Worker + 真实模型；不是 Testcontainers / 生产 MQ |
+| 文档引用端到端 | **已执行（2026-10-30，28 / 0）** | 真实 Qdrant + Embedding + LLM；只有两篇合成文档、每篇 1 chunk |
+| 真实模型重复采样 | **已执行（3 轮 × 47 / 0）** | 同一组 3 场景；不是统计采样 |
+| 并发基线 | **已执行（3 组 × 10 / 0）** | 6/12、12/24、24/24；单机单实例，无 SLO |
+| 人工评分 / 双人复核 | 未执行 | 所有判定由脚本完成 |
+| 持续负载 / 多实例 | 未执行 | 并发脚本是一次性短问题基线 |
 
 ## 10. 最近执行记录
 
@@ -338,6 +370,12 @@ C-only 的原始输出包含：
 2026-10-30  Guard   phase532_replay_guard.py            C 0 issue；C-only no_history_denial → fallback
 2026-10-30  Agent   python -m pytest -q                 383 passed, 5 skipped, 1 xfailed
 2026-10-30  E2E     scripts/phase53-spring-e2e.py       47 PASS / 0 FAIL（真实 deepseek-flash）
+2026-10-30  Spring  ./mvnw test                          255 条 / 182 执行通过 / 73 skipped / 0 failed（5.4 修复后）
+2026-10-30  E2E     phase54-rag-citation-e2e.py         28 PASS / 0 FAIL（真 Qdrant / Embedding / LLM）
+2026-10-30  E2E     phase54-mq-real-e2e.py              19 PASS / 0 FAIL（真 MQ + Worker + LLM）
+2026-10-30  E2E     phase54-mq-real-e2e.py              15 PASS / 4 FAIL（保留：ConnectError + 非法 JSON）
+2026-10-30  E2E     phase54-concurrency-e2e.py          6/12、12/24、24/24 均 10 PASS / 0 FAIL
+2026-10-30  E2E     phase53-spring-e2e.py ×3            47 PASS / 0 FAIL × 3（重复采样）
 ```
 
 ## 11. 质量报告索引
@@ -348,6 +386,7 @@ C-only 的原始输出包含：
 | Phase 9 证据边界 | `docs/testing/phase9-evidence-boundary.md` |
 | 5.3 真实模型复验（2026-10-30） | `docs/testing/phase53-real-model-20261030.md` |
 | 5.3 Spring 服务端 E2E（2026-10-30） | `docs/testing/phase53-spring-e2e-20261030.md` |
+| 5.4 MQ / 文档引用 / 重复采样 / 并发（2026-10-30） | `docs/testing/phase54-real-model-20261030.md` |
 | 5.3.2 复验报告（2026-10-27） | `backend/backend/target/phase53-eval/20261027-004622/REPORT-5.3.2.md` |
 | 5.3.1 真实模型报告 | `backend/backend/target/phase53-eval/20261027-004622/REPORT-5.3.1.md` |
 | RAG v1 全量 | `evaluation/rag/reports/real_20261026_full_revalidated/summary.md` |

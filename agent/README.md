@@ -262,7 +262,7 @@ agent/
 │
 ├── app/worker.py                     Worker 入口（进程独立于 HTTP 服务）
 ├── fixtures/demo_space.json          样例认知数据（README 里那个 TLB 场景）
-├── tests/                            232 个通过用例：概念识别 / 上下文组装 / 分析器 / 消息契约 / 端到端
+├── tests/                            383 个通过用例：概念识别 / 上下文组装 / 分析器 / 消息契约 / 端到端
 ├── docs/pipeline.md                  各层职责与数据契约
 ├── docs/progress.md                  进度、边界与下一步
 ├── requirements.txt / requirements-dev.txt

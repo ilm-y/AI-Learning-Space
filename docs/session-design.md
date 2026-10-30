@@ -215,6 +215,13 @@ Session ≠ Evidence
    └── 创建新 Session
 ```
 
+**并发约束（2026-10-30 补）：** 同一空间下多条 Conversation 同时发出第一条学习消息时，
+「首次归属判定」必须串行，否则每个事务都看到「没有候选」而各自创建 Session。
+实现上先 `SELECT ... FOR UPDATE` 锁住 `learning_space` 行（`LearningSpaceMapper.lockById`），
+再解析、创建 / 归属；`attach()` 固定先更新 `learning_session`（排他锁），
+再写 `conversation.session_id`，避免外键检查的共享锁升级成排他锁时死锁。
+锁粒度是空间，不是全局，不同空间仍可并发。
+
 ---
 
 # 四、为什么 Conversation 创建时不立刻创建 Session？

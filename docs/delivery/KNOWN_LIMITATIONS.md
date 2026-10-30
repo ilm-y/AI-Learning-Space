@@ -27,28 +27,40 @@ Mock Agent 完成；真实模型只负责生成。完整原始输出与判定见
 历史失败样本仍保留：5.3.1 的 C 曾虚构「很可能通过重读定义迁移」「没有外部资料
 介入」，B 曾为 `PARTIAL`。这些是 2026-10-27 的结果，不因本轮通过而删除。
 
+2026-10-30 阶段 5.4 又补跑了四类链路：文档引用 **28 / 0**（真实 Qdrant +
+Embedding + `deepseek-flash`）、MQ 真实模型 **19 / 0**、同一服务端场景连续
+**3 轮 × 47 / 0**、并发 **6/12、12/24、24/24 均 10 / 0**。压测还暴露并修复了
+两个数据库死锁和一个 `message.end` 顺序竞态。完整报告见
+[`docs/testing/phase54-real-model-20261030.md`](../testing/phase54-real-model-20261030.md)。
+
 因此：
 
 - 可以声称「已完成单轮真实模型 Agent Runtime 行为复验」；
-- 可以声称「已完成一次 Spring SSE → Agent → 真实模型的 inline 服务端 E2E」；
-- **不能**声称「真实模型已经稳定遵守证据边界」：C-only 依赖 fallback，各场景只跑一轮；
+- 可以声称「已完成 Spring SSE → Agent → 真实模型的 inline 服务端 E2E」；
+- 可以声称「已完成一次 MQ → Worker → 真实模型 → Result Consumer → MySQL」；
+- 可以声称「已完成一次真实 Qdrant / Embedding / LLM 的文档引用 E2E」；
+- 可以声称「已完成 3 轮重复采样和 6/12、12/24、24/24 的单机并发基线」；
+- **不能**声称「真实模型已经稳定遵守证据边界」：C-only 依赖 fallback，
+  3 轮重复采样只覆盖 3 个场景，且 MQ 轮出现过 `ConnectError` + 非法 JSON；
 - **不能**声称「教学效果已被真实模型验证」：没有人工评分、学习者对照或留存指标；
-- **不能**声称「MQ 真实模型链路通过」：服务端 E2E 只跑 inline；
 - **不能**声称「Flutter 前端可用」：前端未测试、未修改；
-- **不能**声称「RAG 引用质量通过」：两轮真实模型验收的所有场景都是
-  `NO_VALID_DOCUMENTS`，Qdrant 未启动。
+- **不能**声称「RAG 引用质量通过」：28 / 0 只证明标签可回跳，
+  只用了两篇各 1 个 chunk 的合成文档，没有事实核查；
+- **不能**声称「已通过并发压测」：没有 SLO、持续负载、多实例、限流或断线重连验证。
 
 ### 仍需完成的最低验收
 
-1. 在真实文档场景重跑引用 / 无依据问题的拒绝；
-2. 每个场景重复采样，记录 `finish_reason`、延迟分布和失败率；
+1. 对引用回答做人工评分，覆盖多 chunk、干扰片段、无依据问题；
+2. 扩大重复采样与并发规模，记录 `finish_reason`、错误率、P95/P99，而不是
+   只记录脚本判定；
 3. 对 C / C-only 做人工评分或双人复核，而不是单次执行者判定；
 4. 修复 `history_guard` 对「不能反过来断言你以前没有这个错误」的误报，
    再确认 C-only 不再依赖 fallback；
 5. 启动 Flutter 前端，验证 SSE 消费、断线重连和渲染；
-6. 跑一次 MQ 模式真实模型链路（需要 RabbitMQ + Worker）。
+6. 给序号分配 / Session 首次归属补单元或集成回归测试；
+7. 用 Testcontainers 把 MQ 链路纳入 CI，而不是依赖手工 broker + Worker。
 
-### 三个已确认的工程限制
+### 五个已确认的工程限制
 
 - **预算截断**：`deepseek-flash` 的推理内容也消耗生成预算。`max_tokens=1024`
   时 A/B/C/D 的回答都在句子中间被截断；`4096` 时全部 `finish_reason=stop`。
@@ -61,6 +73,17 @@ Mock Agent 完成；真实模型只负责生成。完整原始输出与判定见
   写成自由文本，Pydantic 校验失败，整轮分析退回 `rules-v1`。已增加
   `_coerce_verification_enums()`、prompt 枚举和契约测试；证据、理解、记忆的枚举
   仍严格校验。这个修复避免「后端 fallback 让链路看起来通过」的误判。
+- **供应商连接 / JSON 不稳定**：5.4 MQ 轮首次调用 `ConnectError`（可重试），
+  重试拿到 HTTP 200 但 JSON 非法（不可重试），run 落 `FAILED`，由 `rules-v1`
+  写 `UNKNOWN` 观察。并发轮也出现过上游 `RemoteProtocolError`，单请求约 80 s 后
+  `message.error`。这不是数据库死锁，也没有被修复；失败样本保留在
+  `backend/backend/target/phase54-mq-real-e2e/20261030-220047/`。
+- **并发下的锁顺序**：压测发现两处真实死锁——消息序号在
+  `message(conversation_id, sequence_no)` 上做锁定范围读会锁住相邻对话的索引间隙；
+  首次 Session 归属会在 `conversation.session_id` 外键检查与
+  `learning_session` 更新之间形成 S→X 锁升级。已分别改为
+  `conversation.last_message_seq` 计数器、锁空间行 + 先写 session 再写 conversation。
+  24 并发复测通过，但这仍是单机短问题基线，不能外推到更高负载。
 
 ## 2. 历史校验本身的边界
 
@@ -118,14 +141,17 @@ Mock Agent 完成；真实模型只负责生成。完整原始输出与判定见
   「没有检索到资料」。Runtime 不做关键词拦截，也不改写模型原文；该行为以
   strict XFAIL 记录，不能写成「已解决」；
 - 过滤丢弃标注后，标注前的空白已经发送、无法回撤，可能出现轻微排版痕迹；
+- 5.4 的文档引用 E2E 只有两篇合成文档、每篇 1 个 chunk；28 / 0 证明的是
+  链路和标签可回跳，不是多 chunk 排序、干扰片段或事实正确性；
 - RAG 评测的通过率不能直接当成「回答正确率」，也不能把 v1 / v2 合并。
 
 ## 6. 数据库与部署限制
 
 - 表结构用 `schema.sql` 手工维护，没有 Flyway / Liquibase；
 - `CREATE TABLE IF NOT EXISTS` 不会给已有表加列；升级必须按版本手工执行
-  `schema-migration-document-rag.sql` 与 `schema-migration-phase7-truncation.sql`，
-  或清库重建；漏跑 Phase 7 脚本会报 `Unknown column 'truncated'`；
+  `schema-migration-document-rag.sql`、`schema-migration-phase7-truncation.sql`
+  与 `schema-migration-phase54-message-seq.sql`，或清库重建；漏跑 Phase 7 脚本会报
+  `Unknown column 'truncated'`，漏跑 5.4 脚本会报 `Unknown column 'last_message_seq'`；
 - `schema-dev-reset.sql` 会 DROP 数据，只能在开发库使用；
 - `application-local.yml` 与 `agent/.env` 含本机凭证，绝不能提交；
 - 当前没有多实例部署的分布式协调；SSE 连接、分析线程池都是单进程假设；
@@ -135,11 +161,13 @@ Mock Agent 完成；真实模型只负责生成。完整原始输出与判定见
 
 - 当前 Agent 383 passed / 5 skipped / 1 xfailed；Spring 255 条（182 执行通过 /
   73 跳过）；E2E 101 / MQ E2E 27 / E2E 94 / Demo 23 是 2026-10-27 的 Mock 结果；
-  Spring 服务端 E2E 47/0 是 2026-10-30 的真实模型单次结果；
+  Spring 服务端 E2E 47/0、重复采样 3 × 47/0 是 2026-10-30 的真实模型结果；
+  5.4 另有文档引用 28/0、MQ 19/0（及 15/4 失败样本）、并发 3 × 10/0；
 - 1 个 xfail 是语义误述风险，不是通过，也不是普通跳过；
 - 真实 Qdrant、真实 broker、真实 MySQL 集成测试有 5 + 73 个环境门控 skip；
-- `AnalysisMqIntegrationTest` 默认 0 个用例执行；本轮 MQ E2E 另起真实 broker + Worker 验证，
-  但它不等于 Testcontainers 集成测试；
+  5.4 的文档引用 / MQ E2E 是另起真实服务验证，**不改变这些 skip 的状态**；
+- `AnalysisMqIntegrationTest` 默认 0 个用例执行；5.4 MQ E2E 另起真实 broker + Worker
+  验证，但它不等于 Testcontainers 集成测试，也没有接进 CI；
 - `python -m evaluation --mode all` 本轮未重跑；49/49 是 2026-10-21、`34b59b5` 的历史结果；
 - `scripts/regress-closed-loop.sh` 本轮未重跑；
 - GitHub Actions CI 本轮未触发；

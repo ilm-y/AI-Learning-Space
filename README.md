@@ -4,14 +4,19 @@
 > AI Learning Agent。
 
 **交付快照：** 2026-10-29（阶段 9，证据边界收口；功能冻结）；
-**文档更新：** 2026-10-30（5.3 真实模型复验 + Spring 服务端 E2E）
+**文档更新：** 2026-10-30（5.3 真实模型复验 + 服务端 E2E；5.4 MQ / 文档引用 /
+重复采样 / 并发压测）
 
-**状态：** 可本地复现的开发基线；**已完成真实模型 Agent 运行时复验（5 场景）**，
-以及 **Spring SSE → Agent → `deepseek-flash` 的真实服务端 E2E（3 轮 / 47 检查）**；
-但**不是**完整产品验收（无 Flutter 业务前端、无 MQ 真实模型链路、无文档 RAG 引用场景）。
-真实模型复验的原始输出、判定与限制见
-[docs/testing/phase53-real-model-20261030.md](docs/testing/phase53-real-model-20261030.md)，
-服务端链路证据见
+**状态：** 可本地复现的开发基线；**已完成真实模型 Agent 运行时复验（5 场景）**、
+**Spring SSE → Agent → `deepseek-flash` 的真实服务端 E2E（3 轮 / 47 检查）**，
+并在 5.4 补跑了 **MQ 真实模型（19 / 0）**、**Qdrant 文档引用（28 / 0）**、
+**连续 3 轮重复采样（47 / 0 × 3）** 和 **单机并发基线（6/12、12/24、24/24，均 10 / 0）**。
+但**不是**完整产品验收：无 Flutter 业务前端、无人工评分 / 留存指标、无多实例与持续压测；
+5.4 的 MQ 轮还保留了真实模型 `ConnectError` + 非法 JSON 的失败样本。
+总报告见
+[docs/testing/phase54-real-model-20261030.md](docs/testing/phase54-real-model-20261030.md)，
+5.3 证据见
+[docs/testing/phase53-real-model-20261030.md](docs/testing/phase53-real-model-20261030.md)、
 [docs/testing/phase53-spring-e2e-20261030.md](docs/testing/phase53-spring-e2e-20261030.md)。
 
 **当前客户端：** Postman / curl。`flutter/` 仍是脚手架，见第 10 节。
@@ -264,6 +269,8 @@ Agent 关键环境变量：
   1. `schema-migration-document-rag.sql`（文档 RAG 相关表 / 列）；
   2. `schema-migration-phase7-truncation.sql`（`message.truncated` 与
      `agent_run.status=TRUNCATED`；可重复执行，末尾带只读核对查询）；
+  3. `schema-migration-phase54-message-seq.sql`（`conversation.last_message_seq`，
+     并按已有消息回填；可重复执行，末尾带只读核对查询）；
 - 执行示例（密码不要写进命令历史时改用 `MYSQL_PWD` 或本地配置文件）：
 
   ```bash
@@ -271,7 +278,8 @@ Agent 关键环境变量：
   ```
 
   漏跑第二个脚本时，新版 MyBatis 查询 `message.truncated` 会报
-  `Unknown column 'truncated' in 'field list'`；
+  `Unknown column 'truncated' in 'field list'`；漏跑第三个脚本时，消息序号分配会报
+  `Unknown column 'last_message_seq'`；
 - 清库重建：`schema-dev-reset.sql`（只 DROP）→ `schema.sql`，只能用于开发库；
 - 没有 Flyway / Liquibase；迁移脚本不会被 Spring 自动执行。
 
@@ -327,9 +335,29 @@ bash scripts/phase52-e2e.sh
 # MQ E2E（8081 + Worker + RabbitMQ；要求没有其他 Worker 在消费）
 BACKEND_LOG=/path/to/backend-mq.log bash scripts/phase51-mq-e2e.sh
 
+# 5.3 服务端 E2E（8081 + Agent 8000 + 真实 deepseek-flash）
+python scripts/phase53-spring-e2e.py \
+  --base http://127.0.0.1:8081 --agent http://127.0.0.1:8000
+
+# 5.4 文档引用 E2E（Spring 8081 + Agent 8000 + 真实 Qdrant / Embedding / LLM）
+python scripts/phase54-rag-citation-e2e.py \
+  --base http://127.0.0.1:8081 --agent http://127.0.0.1:8000
+
+# 5.4 MQ 真实模型 E2E（Spring 8082 + Agent 8001 + 独立 Phase54 拓扑；脚本自启停 Worker）
+python scripts/phase54-mq-real-e2e.py \
+  --base http://127.0.0.1:8082 --agent http://127.0.0.1:8001 \
+  --backend-log /path/to/backend-8082.log
+
+# 5.4 并发基线（默认 6 并发 / 12 总请求；真实模型）
+python scripts/phase54-concurrency-e2e.py \
+  --base http://127.0.0.1:8081 --concurrency 6 --total 12
+
 # 阶段 6 TLB 演示（Mock，自动建新用户 / 新空间）
 bash scripts/phase6-demo.sh
 ```
+
+前置条件、独立测试库和产物路径见
+[docs/testing/phase54-real-model-20261030.md](docs/testing/phase54-real-model-20261030.md)。
 
 结果口径：
 
@@ -341,6 +369,10 @@ bash scripts/phase6-demo.sh
 | 5.1 MQ E2E | 27 / 0 / 0 | Mock LLM + 真 RabbitMQ + 真 Worker |
 | 5.2 学习轨迹 E2E | 94 / 0 / 0 | Mock |
 | 5.3 服务端 E2E（2026-10-30） | **47 / 0 / 0** | Spring SSE → Agent → 真实 `deepseek-flash` |
+| 5.4 重复采样（2026-10-30） | **47 / 0 / 0 × 3 轮** | 同一服务端场景连续重跑；非统计采样 |
+| 5.4 Qdrant 文档引用（2026-10-30） | **28 / 0 / 0** | 真实 Qdrant + Embedding + `deepseek-flash` |
+| 5.4 MQ 真实模型（2026-10-30） | **19 / 0 / 0** | 真 RabbitMQ + Worker + 真实模型；另有 15/4 失败样本 |
+| 5.4 并发基线（2026-10-30） | **10 / 0 / 0 × 3 组** | 6/12、12/24、24/24；单机单实例 |
 | 离线评测 | 40/40，124/124 断言 | 不调用模型 |
 | RAG / 5.3 | 真实模型结果，失败样本保留 | 见测试矩阵 |
 
@@ -358,6 +390,10 @@ bash scripts/phase6-demo.sh
 | 5.3 真实模型复验（2026-10-30） | **6 次调用 / 5 场景** | A/B/C/D `PASS`；C-only `PASS`（fallback）；见复验报告 |
 | 5.3 服务端 E2E（2026-10-30） | **3 轮聊天 + 3 次 inline 分析，47 / 0** | Spring SSE 契约、消息 / run 落库、真实模型分析、显式复盘上下文均通过 |
 | 5.3.2 历史回答复验（2026-10-30） | **已用真实模型复验** | C 不再编造原因；C-only 被否定句误判后走 fallback |
+| 5.4 重复采样（2026-10-30） | **3 轮 × 47 / 0** | 修复 `message.end` 早于 run 终态的顺序竞态后连续通过 |
+| 5.4 文档引用（2026-10-30） | **28 / 0** | 真实 Qdrant / Embedding / LLM；回答可带可回跳标签，无关问题不引用 |
+| 5.4 MQ 真实模型（2026-10-30） | **19 / 0；另有 15 / 4 失败样本** | 真 broker + Worker + 真实模型；失败样本是供应商连接 / JSON 错误 |
+| 5.4 并发（2026-10-30） | **3 组 × 10 / 0** | 6/12、12/24、24/24；修复消息序号与 Session 归属死锁 |
 | 真实 Qdrant / broker / MySQL 集成 | 5（Agent）+ 73（Spring）个环境门控 skip | 本轮未执行 |
 
 真实模型切换方式：
@@ -383,9 +419,17 @@ C-only 的模型回答也正确拒绝了编造，但被 `history_guard` 的否�
 普通问题、错误解释、显式复盘 3 轮，47 / 0 通过；`message.start → delta → end`、
 消息 / `agent_run` 落库、inline 分析 `agent-v1`、显式复盘 `trajectory` 注入均核对。
 首轮还暴露并修复了一个真实模型契约漂移：`verificationDecision.trigger` 被模型写成
-自由文本，导致整轮分析失败并退回 `rules-v1`；修复后重新验收通过。
-这不代表 Flutter、MQ 真实模型链路或文档 RAG 已验收。证据见
+自由文本，导致整轮分析失败并退回 `rules-v1`；修复后重新验收通过。证据见
 [docs/testing/phase53-spring-e2e-20261030.md](docs/testing/phase53-spring-e2e-20261030.md)。
+
+**2026-10-30 阶段 5.4：** 补跑了 5.3 未覆盖的四类链路。文档引用 28 / 0，
+MQ 真实模型 19 / 0，重复采样 3 轮 47 / 0，并发 6/12、12/24、24/24 均为 10 / 0。
+压测暴露并修复了两个死锁（消息序号索引间隙锁、首次 Session 归属的外键 S→X 升级）
+和一个顺序竞态（`message.end` 早于 `agent_run` 终态）。MQ 另有一轮 15 / 4：
+Worker 首次 `ConnectError`、重试返回非法 JSON，run 落 `FAILED` 并由 `rules-v1`
+兜底，失败样本保留。**这不代表 Flutter、人工评分、多实例或持续压测已验收。**
+完整报告见
+[docs/testing/phase54-real-model-20261030.md](docs/testing/phase54-real-model-20261030.md)。
 
 ---
 
@@ -393,10 +437,16 @@ C-only 的模型回答也正确拒绝了编造，但被 `history_guard` 的否�
 
 详见 [docs/delivery/KNOWN_LIMITATIONS.md](docs/delivery/KNOWN_LIMITATIONS.md)。摘要：
 
-- **真实模型已做 Agent Runtime 复验 + Spring 服务端 E2E，但仍不是完整产品验收**：
-  5 场景 A/B/C/D `PASS`、C-only 依赖 fallback；服务端 3 轮 47 / 0。Flutter、MQ 真实模型、
-  文档引用场景、重复采样 / 人工评分仍未执行；`deepseek-flash` 在 `max_tokens=1024`
-  时会截断长回答，本轮已改为 4096；
+- **真实模型已做 Runtime 复验 + 服务端 E2E + MQ / 文档引用 / 重复采样 / 并发，
+  但仍不是完整产品验收**：5 场景 A/B/C/D `PASS`、C-only 依赖 fallback；服务端 3 轮
+  47 / 0；5.4 的 MQ 19 / 0、文档引用 28 / 0、重复采样 3 × 47 / 0、并发 3 × 10 / 0。
+  Flutter、人工评分 / 留存指标、多实例和持续压测仍未执行；`deepseek-flash` 在
+  `max_tokens=1024` 时会截断长回答，本轮已改为 4096；
+- **真实模型仍不稳定**：5.4 MQ 轮出现 `ConnectError` + 非法 JSON，run 落 `FAILED`
+  并由 `rules-v1` 兜底；并发轮出现上游 `RemoteProtocolError`，单个请求约 80 s 后
+  `message.error`。这些是供应商 / 网络问题，不是本轮数据库死锁；
+- **并发只到 24 个短问题**：单机、单实例、默认线程池，没有 SLO、持续负载、断线重连
+  或限流验证；不能写成「已通过压测」；
 - **历史校验是句子级启发式**：不能覆盖所有同义改写；非常规措辞可能不触发复盘；
   C-only 已出现「不能反过来断言你以前没有这个错误」被误判为 `no_history_denial`
   的真实误报，导致一次多余重生成并最终 fallback；
@@ -414,8 +464,10 @@ C-only 的模型回答也正确拒绝了编造，但被 `history_guard` 的否�
   **不声称已修复**；
 - **流式过滤的代价**：越界标注被丢弃后，标注前的空白不会被回撤（已发送的文本
   无法撤回），可能出现「字 空格。」这类轻微排版痕迹；标注本身不会泄漏；
-- **数据库 / 部署**：没有迁移框架；单进程假设；RabbitMQ 只有本地 compose；
-- **测试限制**：GitHub Actions CI 本轮未触发；`--mode all` 与
+- **数据库 / 部署**：没有迁移框架；已有库必须手工执行
+  `schema-migration-phase54-message-seq.sql`；单进程假设；RabbitMQ 只有本地 compose；
+- **测试限制**：序号分配与 Session 首次归属目前由 E2E / 并发脚本覆盖，没有专门的
+  单元回归；GitHub Actions CI 本轮未触发；`--mode all` 与
   `scripts/regress-closed-loop.sh` 本轮未重跑；Flutter 测试未执行。
 
 ---
@@ -430,6 +482,7 @@ C-only 的模型回答也正确拒绝了编造，但被 `history_guard` 的否�
 | [docs/delivery/ENVIRONMENT.md](docs/delivery/ENVIRONMENT.md) | 依赖、启动顺序、环境变量、建表 / 迁移 |
 | [docs/delivery/TEST_MATRIX.md](docs/delivery/TEST_MATRIX.md) | 测试 / 质量矩阵与报告索引 |
 | [docs/delivery/KNOWN_LIMITATIONS.md](docs/delivery/KNOWN_LIMITATIONS.md) | 已知限制、未完成验收、不要做的事 |
+| [docs/testing/phase54-real-model-20261030.md](docs/testing/phase54-real-model-20261030.md) | Phase 5.4：MQ 真实模型、文档引用、重复采样、并发压测与死锁修复 |
 | [docs/testing/phase9-evidence-boundary.md](docs/testing/phase9-evidence-boundary.md) | Phase 9：来源过滤、知识状态边界、测试与契约清单 |
 | [docs/delivery/GIT_WORKSPACE.md](docs/delivery/GIT_WORKSPACE.md) | 文件分类、工作区风险、提交建议（不自动提交） |
 | [docs/delivery/INTERVIEW.md](docs/delivery/INTERVIEW.md) | 面试讲解提纲：核心设计、关键缺陷、修复 |

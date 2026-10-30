@@ -10,9 +10,11 @@
 >
 > **补充（同日）：** Spring 8081 → Agent 8000 → `deepseek-flash` 的 3 轮服务端 E2E
 > 已单独完成（47 PASS / 0 FAIL），覆盖 SSE、消息与 `agent_run` 落库、inline 分析
-> 和复盘轨迹注入；MQ、Flutter、文档引用仍未覆盖。见
-> [`phase53-spring-e2e-20261030.md`](phase53-spring-e2e-20261030.md)。本报告仍只描述
-> 进程内 Runtime 复验，不因该 E2E 改写历史结论。
+> 和复盘轨迹注入。阶段 5.4 又补跑了 MQ 真实模型（19 / 0）、文档引用（28 / 0）、
+> 重复采样（3 × 47 / 0）和并发（3 × 10 / 0）；Flutter 与人工评分仍未覆盖。见
+> [`phase53-spring-e2e-20261030.md`](phase53-spring-e2e-20261030.md) 与
+> [`phase54-real-model-20261030.md`](phase54-real-model-20261030.md)。本报告仍只描述
+> 进程内 Runtime 复验，不因这些 E2E 改写历史结论。
 
 ---
 

@@ -1,8 +1,10 @@
 # Git 工作区分类、风险与提交建议
 
-**快照时间：** 2026-10-27  
-**当前分支：** `feat/phase-4.4-evidence-guard`（分支名早于 5.x / 6 的内容）  
-**状态：** 尚未执行任何 `git add`、`git commit`、`git reset`、`git clean` 或分支切换。
+**快照时间：** 2026-10-30（阶段 5.4）
+
+**当前分支：** `main`
+
+**状态：** 尚未执行 5.4 的 `git add` / `git commit` / `git push`；5.3 及之前的提交已存在。
 
 > 本文只是分类和建议。提交前必须由仓库所有者确认；不要用 `git add .`
 > 把整个工作区一次性提交。
@@ -30,6 +32,13 @@
 | `agent/app/tutor/tutor.py` | 5.3 | 复盘回答约束 |
 | `backend/.../service/ChatService.java` | 5.3.2 | SSE 完成后分析与异常边界 |
 | `backend/.../service/UnderstandingService.java` | 5.3.2 | 快照归一化与 uncertain 处理 |
+| `backend/.../entity/Conversation.java` | 5.4 | `last_message_seq`（禁止 `updateById` 回写） |
+| `backend/.../mapper/ConversationMapper.java` | 5.4 | 序号原子自增 / 读回 |
+| `backend/.../mapper/LearningSpaceMapper.java` | 5.4 | 首次 Session 归属锁空间行 |
+| `backend/.../service/MessageService.java` | 5.4 | 序号分配改用计数器 |
+| `backend/.../service/SessionService.java` | 5.4 | 首次归属串行化 + 统一锁顺序 |
+| `backend/.../service/ChatService.java` | 5.4 | `finishRun` 先于 `message.end` |
+| `backend/.../resources/schema-migration-phase54-message-seq.sql` | 5.4 | 已有库迁移（幂等） |
 
 ### B. 测试（应提交）
 
@@ -56,6 +65,9 @@
 | `agent/scripts/phase53_runtime_eval.py` | 5.3 | 真实模型 Runtime 评测 |
 | `agent/scripts/phase53_real_model_eval.py` | 5.3 | 真实模型调用脚本 |
 | `agent/scripts/phase532_replay_guard.py` | 5.3.2 | 离线回放 / 生产 SSE 复验 |
+| `scripts/phase54-rag-citation-e2e.py` | 5.4 | 真实 Qdrant / Embedding / LLM 文档引用 |
+| `scripts/phase54-mq-real-e2e.py` | 5.4 | 真实 MQ + Worker + 真实模型 |
+| `scripts/phase54-concurrency-e2e.py` | 5.4 | 单机 SSE 并发基线 |
 
 这些脚本里出现的 `Passw0rd!23` 与 `phase51-internal-token` 是**本地测试占位值**，
 不是生产密钥；脚本没有内嵌任何真实 API Key。
@@ -65,8 +77,8 @@
 | 路径 | 说明 |
 | --- | --- |
 | `README.md` | 根说明，已按阶段 6 的 11 个主题重写 |
-| `agent/README.md` | 测试口径更新为 232 passed / 5 skipped |
-| `backend/backend/README.md` | 测试口径更新为 189 passed / 29 skipped |
+| `agent/README.md` | 测试口径为 383 passed / 5 skipped / 1 xfailed |
+| `backend/backend/README.md` | 测试口径为 255 条（182 执行 / 73 skipped） |
 | `docs/delivery/ARCHITECTURE.md` | 架构图与职责 |
 | `docs/delivery/LEARNING_LIFECYCLE.md` | 学习状态生命周期 |
 | `docs/delivery/DEMO.md` | 七步演示（Mock 标注） |
@@ -75,6 +87,7 @@
 | `docs/delivery/KNOWN_LIMITATIONS.md` | 已知限制 |
 | `docs/delivery/GIT_WORKSPACE.md` | 本文 |
 | `docs/delivery/INTERVIEW.md` | 面试提纲 |
+| `docs/testing/phase54-real-model-20261030.md` | 5.4 MQ / 文档引用 / 重复采样 / 并发报告 |
 
 ### E. 生成产物（单独决定，不要混进源码提交）
 

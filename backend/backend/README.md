@@ -461,7 +461,9 @@ Agent 那边有自己的 `run_id`），所以 `ChatService.createRun` 会生成�
 `ANALYSIS` 与 `TEST` 类型的 run **没有 trace_id**（`NULL`），这是对的：它们不出进程，
 没有第二半日志需要对上。
 
-**关于 `sequence_no`：** 不能写成 `SELECT MAX(sequence_no) + 1`，两个并发请求会读到同一个最大值然后撞号。实现是先在事务里 `SELECT ... FOR UPDATE` 锁住所属 conversation 那一行，把同一对话的写入串行化；数据库侧另有 `UNIQUE(conversation_id, sequence_no)` 兜底，真撞上会直接报错而不是静默错序。
+**关于 `sequence_no`：** 不能写成 `SELECT MAX(sequence_no) + 1`，两个并发请求会读到同一个最大值然后撞号。实现是在同一事务里对 `conversation.last_message_seq` 做原子自增（`UPDATE ... SET x = x + 1`）后读回；只锁 conversation 主键行，同一对话串行、不同对话互不阻塞。
+
+不要改回「锁 conversation 行 + `SELECT MAX(sequence_no) ... FOR UPDATE`」：`message(conversation_id, sequence_no)` 上的锁定范围读会加间隙锁，空对话时相邻对话的索引区间互相覆盖，并发写不同对话会死锁（2026-10-30 压测实测）。已有库升级需执行 `schema-migration-phase54-message-seq.sql`。数据库侧仍保留 `UNIQUE(conversation_id, sequence_no)` 兜底，真撞上会直接报错而不是静默错序。
 
 ---
 

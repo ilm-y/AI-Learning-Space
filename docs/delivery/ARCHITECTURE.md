@@ -141,7 +141,8 @@ Agent 内部 SSE 与前端 SSE **刻意不同名**：
 | 文档导出 / 导入 / 学习计划 | Controller 返回 501，表结构已在位 |
 | 测试作答语义判分 | `TestService` 是长度 + 是否点到概念名的启发式 |
 | Memory 向量检索 | 关键词 `LIKE`，`memory.embedding_ref` 未接向量库 |
-| 真实模型行为验收 | 2026-10-30 已完成 Agent Runtime 级 5 场景复验（A/B/C/D `PASS`，C-only 因守卫误判走 fallback）和 Spring SSE 3 轮服务端 E2E（47/0，inline）；MQ 真实模型、Flutter、文档引用场景仍未跑 |
+| 真实模型行为验收 | 2026-10-30 已完成 Agent Runtime 级 5 场景复验（A/B/C/D `PASS`，C-only 因守卫误判走 fallback）、Spring SSE 3 轮（47/0）、MQ 真实模型（19/0）、文档引用（28/0）、3 轮重复采样（47/0 × 3）和单机并发（10/0 × 3）；Flutter、人工评分、持续压测仍未覆盖 |
+| 并发写入协调 | 单实例内用 `conversation.last_message_seq` 原子计数器分配消息序号，首次 Session 归属锁 `learning_space` 行；没有跨实例分布式锁 |
 | 多实例一致性 | Agent 无状态，但 Spring 的分析线程池与 SSE 连接未做分布式协调 |
 
 ## 6. 相关文档

@@ -10,13 +10,16 @@
 
 > **2026-10-30 更新：** 本报告是 2026-10-27 的现状快照。此后已用 `deepseek-flash`
 > 完成 5.3 真实模型 Agent Runtime 复验（A/B/C/D `PASS`；C-only 因守卫误判走
-> fallback），并另起 Spring 8081 + Agent 8000 完成 3 轮服务端 E2E
-> （47 PASS / 0 FAIL，覆盖 SSE、消息与 `agent_run` 落库、inline 分析、复盘轨迹注入）。
+> fallback），另起 Spring 8081 + Agent 8000 完成 3 轮服务端 E2E
+> （47 PASS / 0 FAIL），并在 5.4 补跑 MQ 真实模型（19 / 0）、Qdrant 文档引用
+> （28 / 0）、3 轮重复采样（47 / 0 × 3）和 3 组并发基线（10 / 0 × 3）。
+> 5.4 还修复了消息序号 / Session 归属死锁和 `message.end` 顺序竞态。
 > 文中「5.3.2 为 0 次调用」「真实模型证据缺失」「8000 端口是 Mock」等结论只代表
 > 审计当时；最新证据见
+> [`phase54-real-model-20261030.md`](phase54-real-model-20261030.md)、
 > [`phase53-real-model-20261030.md`](phase53-real-model-20261030.md) 和
 > [`phase53-spring-e2e-20261030.md`](phase53-spring-e2e-20261030.md)。
-> 服务端 E2E 只覆盖 inline，未覆盖 MQ、Flutter、文档引用与重复采样。
+> Flutter、人工评分、持续压测和多实例仍未覆盖。
 
 ---
 
@@ -26,9 +29,9 @@
 |---|---|
 | 当前 8000 端口上的 Agent 是否在调用真实 LLM？ | **否。** `/health` 返回 `llm_provider=mock`、`llm_model=mock`。这与 `agent/.env` 中请求的 `openai` / `deepseek-flash` 不一致，说明运行进程被显式 mock 参数覆盖，或并非由该 `.env` 启动。 |
 | 仓库是否具备真实模型调用能力？ | **具备。** 代码支持 OpenAI 兼容协议；本轮已用 curl 验证 DeepSeek `deepseek-flash`、DashScope `text-embedding-v4`、`qwen-plus` 均返回 HTTP 200（密钥未落盘、未写入本报告）。 |
-| 现有测试能否证明真实模型质量？ | **审计时不能；2026-10-30 已补跑 5 场景 + 3 轮服务端 E2E。** 默认测试、离线评测、live 评测、E2E 脚本仍使用 Mock LLM 或录制输出；真实模型只有单轮 Runtime 复验和一次 3 轮 inline E2E，不是重复采样或人工评分。 |
-| 现有测试能否证明后端链路？ | **部分能，且已有真实模型服务端 E2E。** 2026-10-30 的 Spring 8081 → Agent 8000 → `deepseek-flash` 3 轮 E2E 47/0，验证了 SSE 契约、消息/run 落库、inline 分析与复盘轨迹；Mock 下另有 SSE、持久化、Evidence/Revision、权限隔离、MQ 机制测试。真实 MySQL/RabbitMQ/Qdrant 集成测试仍大量被环境门控跳过。 |
-| 是否存在可上简历的指标？ | **有，但必须按层标注。** 例如审计时的 232 个 Agent 测试、189 个 Spring 测试、40/40 离线评测、9/9 live Mock 评测；2026-10-30 复跑 Agent 为 383 passed，并新增真实模型服务端 E2E 47/0。真实模型语义质量仍没有重复采样或人工评分证据。 |
+| 现有测试能否证明真实模型质量？ | **审计时不能；2026-10-30 已补跑 5 场景、3 轮服务端 E2E、3 轮重复采样、MQ 与文档引用。** 默认测试、离线评测、live 评测、Mock E2E 仍使用 Mock LLM 或录制输出；真实模型验收已有单轮 Runtime 复验、3 轮 inline E2E、MQ 19/0、文档引用 28/0、重复采样 47/0 × 3，但仍没有人工评分。 |
+| 现有测试能否证明后端链路？ | **部分能，且已有真实模型服务端 E2E / MQ / 文档引用。** 2026-10-30 的 Spring 8081 → Agent 8000 → `deepseek-flash` 3 轮 E2E 47/0，验证了 SSE 契约、消息/run 落库、inline 分析与复盘轨迹；5.4 另验证真实 broker + Worker 和真实 Qdrant 引用链路。真实 MySQL/RabbitMQ/Qdrant 集成测试仍大量被环境门控跳过。 |
+| 是否存在可上简历的指标？ | **有，但必须按层标注。** 例如审计时的 232 个 Agent 测试、189 个 Spring 测试、40/40 离线评测、9/9 live Mock 评测；2026-10-30 复跑 Agent 为 383 passed、Spring 为 255 条（182 执行 / 73 skipped），并有服务端 E2E 47/0、MQ 19/0、文档引用 28/0、重复采样 3 × 47/0、并发 3 × 10/0。真实模型语义质量仍没有人工评分或留存指标。 |
 
 ---
 
@@ -200,7 +203,7 @@ POST /api/spaces/{spaceId}/documents
 | 层 | 命令 | 本轮结果 | 性质 |
 |---|---|---:|---|
 | Agent 测试 | `cd agent && python -m pytest -q` | **232 passed, 5 skipped, 1 warning in 8.08s** | Mock/fixture，默认 CI |
-| Spring 测试 | `cd backend/backend && ./mvnw test` | **189 tests, 0 failures, 0 errors, 29 skipped，BUILD SUCCESS，28.174s** | 单元 + Mockito + 少量真实 MySQL（被门控） |
+| Spring 测试（审计时） | `cd backend/backend && ./mvnw test` | **189 tests, 0 failures, 0 errors, 29 skipped，BUILD SUCCESS，28.174s** | 单元 + Mockito + 少量真实 MySQL（被门控） |
 | 离线评测 | `python -m evaluation` | **40/40，0 失败，0 跳过；124/124 断言** | 录制输出 + 启发式，不调真实模型 |
 | live 评测 | `python -m evaluation --mode live` | **9/9，0 失败，0 跳过；70/70 断言** | 真实 Spring + MySQL + SSE，但 **Mock LLM** |
 | E2E 脚本 | `scripts/phase51/52/51-mq/6-demo` | **本轮未重跑**；文档记录 101/27/94/23 PASS | Mock LLM；历史结果 |
@@ -209,6 +212,12 @@ POST /api/spaces/{spaceId}/documents
 | 5.3.2（2026-10-27） | `REPORT-5.3.2.md` | 当时 **0 次真实调用**；只有离线回放 + Mock SSE | 审计时结果 |
 | 5.3 复验（2026-10-30） | `docs/testing/phase53-real-model-20261030.md` | 6 次调用 / 5 场景；A/B/C/D PASS，C-only PASS（fallback） | 真实模型单轮复验，不是完整产品验收 |
 | Spring 服务端 E2E（2026-10-30） | `scripts/phase53-spring-e2e.py` | **47 PASS / 0 FAIL**；3 轮（普通 / 错误解释 / 显式复盘） | Spring 8081 + Agent 8000 + `deepseek-flash`；只覆盖 inline |
+| Spring 测试（5.4 修复后） | `cd backend/backend && ./mvnw test` | **255 条（182 执行通过 / 73 skipped / 0 failed）** | 单元 + Mockito；真实 MySQL / Docker 集成仍门控 |
+| Agent 测试（5.4 未改动 Agent） | `cd agent && python -m pytest -q` | **383 passed / 5 skipped / 1 xfailed** | Mock / fixture；1 xfail 是语义风险 |
+| 5.4 文档引用（2026-10-30） | `scripts/phase54-rag-citation-e2e.py` | **28 PASS / 0 FAIL** | 真 Qdrant + Embedding + LLM；两篇各 1 chunk |
+| 5.4 MQ 真实模型（2026-10-30） | `scripts/phase54-mq-real-e2e.py` | **19 PASS / 0 FAIL**；另有 15 / 4 失败样本 | 真 broker + Worker + LLM |
+| 5.4 重复采样（2026-10-30） | `scripts/phase53-spring-e2e.py` ×3 | **47 PASS / 0 FAIL × 3** | 同一组 3 场景；非统计采样 |
+| 5.4 并发（2026-10-30） | `scripts/phase54-concurrency-e2e.py` | **10 PASS / 0 FAIL × 3**（6/12、12/24、24/24） | 单机单实例短问题基线 |
 | CI | `.github/workflows/ci.yml` | **本轮未执行** | CI 不含真实 LLM、不含真实 MySQL 集成 |
 
 离线评测日志中的 `analyze run 2/3/4 失败：...` 是 `analysis_contract` 的**负向用例预期输出**，
@@ -226,7 +235,8 @@ POST /api/spaces/{spaceId}/documents
 | `BackendApplicationTests` | 1 disabled | 本地 MySQL 上下文 |
 | 真实模型 5.3.2（2026-10-27） | 0 次调用 | 当时缺少 Key；2026-10-30 已补跑真实模型 5 场景 |
 | Flutter | 未执行 | 仍是脚手架，无业务代码 |
-| 性能/压测 | 未执行 | 仓库无基准 |
+| 性能/持续压测 | 部分执行 | 5.4 只做了 6/12、12/24、24/24 的一次性短问题基线；无 SLO / 多实例 |
+| 人工评分 / 留存指标 | 未执行 | 5.3 / 5.4 判定均由脚本完成 |
 
 ---
 
@@ -279,7 +289,9 @@ AgentRun 493（CHAT COMPLETED 194；ANALYSIS COMPLETED 256、SUCCEEDED 10、FAIL
 ### 7.1 高影响、已由代码确认
 
 1. **审计时真实模型证据缺失。** 运行中的 Agent 是 Mock；README/TEST_MATRIX 中“真实模型”结果全部是历史产物。
-   2026-10-30 已补跑 5 场景，但仍不能写“真实 LLM 稳定语义通过率”，只能写“单轮复验”。
+   2026-10-30 已补跑 5 场景，并在 5.4 补跑 MQ / 文档引用 / 3 轮重复采样 / 3 组并发；
+   但仍不能写“真实 LLM 稳定语义通过率”：重复采样只覆盖 3 个场景，且 MQ 轮出现过
+   `ConnectError` + 非法 JSON。
 2. **引用校验只观测、不拦截。** `validate_citations` 在回答流式输出之后执行，非法/捏造引用不会阻止到达用户；
    生产只留 trace，评测层才把它变成失败。
 3. **无文档删除/向量清理路径。** 无 DELETE 端点；`DELETING/DELETED` 未被生产代码设置；
@@ -293,6 +305,18 @@ AgentRun 493（CHAT COMPLETED 194；ANALYSIS COMPLETED 256、SUCCEEDED 10、FAIL
 7. **History Guard 是句级正则启发式。** 能拦截已知失败样本，但不能证明语义合规；
    5.3.1 的 C 失败样本仍保留。2026-10-30 已真实复验：C 通过，C-only 因
    `no_history_denial` 否定句误报走 fallback，说明校验器仍会误杀正确回答。
+8. **跨对话并发曾因消息序号分配死锁。** 旧实现的
+   `SELECT ... ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE` 在 message 唯一索引上
+   加间隙锁，12 并发里 3 个请求 500。5.4 已改为 `conversation.last_message_seq`
+   原子计数器；已有库必须执行迁移。新增修复目前只有 E2E / 并发脚本覆盖，
+   没有专门单元回归。
+9. **并发首次 Session 归属曾重复建 Session 并死锁。** 5.4 已用
+   `LearningSpaceMapper.lockById` + 统一 `attach()` 锁顺序修复；12 会话复测只有
+   1 个 Session。
+10. **`message.end` 曾早于 `agent_run` 终态。** 客户端收到 end 后立刻查库会看到
+    `RUNNING`。5.4 已改为先 `finishRun` 再发 end；修复前 46/1 样本保留。
+11. **真实模型供应商不稳定。** MQ 轮出现 `ConnectError` + 非法 JSON，
+    并发轮出现 `RemoteProtocolError`；这些不是数据库死锁，也没有被修复。
 
 ### 7.2 高影响、需隔离环境验证的假设
 
@@ -406,8 +430,9 @@ AgentRun 493（CHAT COMPLETED 194；ANALYSIS COMPLETED 256、SUCCEEDED 10、FAIL
 - 真实并发压力与性能 SLO（无基线、无压测）。
 - Flutter 端行为（无业务代码）。
 - 真实用户规模下的数据隐私与成本。
-- 5.3.2 的“真实模型已稳定通过”（2026-10-30 只完成单轮 5 场景 + 3 轮 inline 服务端 E2E，
-  C-only 依赖 fallback，且没有重复采样或人工评分）。
+- 5.3.2 的“真实模型已稳定通过”（2026-10-30 完成单轮 5 场景、3 轮 inline E2E、
+  MQ / 文档引用 / 3 轮重复采样 / 3 组并发基线，但 C-only 依赖 fallback，
+  没有人工评分；MQ 轮还出现过 `ConnectError` + 非法 JSON）。
 
 ---
 
@@ -415,7 +440,7 @@ AgentRun 493（CHAT COMPLETED 194；ANALYSIS COMPLETED 256、SUCCEEDED 10、FAIL
 
 | 项目 | 状态 | 说明 |
 |---|---|---|
-| 真实模型完整评测 | **部分执行（2026-10-30）** | 5 场景 Agent Runtime 复验 + 3 轮 Spring SSE inline E2E 完成；MQ 端到端、文档引用、Flutter、重复采样未执行 |
+| 真实模型完整评测 | **部分执行（2026-10-30）** | 5 场景 Runtime 复验、3 轮 inline E2E、MQ 19/0、文档引用 28/0、重复采样 3 × 47/0、并发 3 × 10/0；人工评分、持续压测、Flutter 未执行 |
 | 5.3.2 真实复验 | **已执行（2026-10-30）** | C 通过；C-only 因守卫误判走 fallback；见复验报告 |
 | Spring 服务端 E2E | **已执行（2026-10-30）** | 8081 + 8000 + `deepseek-flash`，3 轮 47/0；覆盖 SSE、落库、inline 分析、复盘轨迹；见服务端 E2E 报告 |
 | 真实 MySQL/RabbitMQ/Qdrant 集成 | **可解阻，默认跳过** | 本机服务可用；需设置 `AILS_*_IT` 与 `-Pmq-integration` |

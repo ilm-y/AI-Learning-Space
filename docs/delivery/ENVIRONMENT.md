@@ -1,7 +1,7 @@
 # 环境配置与启动
 
-所有命令都在本仓库当前代码上验证过（2026-10-27）。默认路径是**离线可跑**：
-Mock LLM + Fixture 检索，不需要 API Key。
+所有命令都在本仓库当前代码上验证过（2026-10-27；5.4 真实验收补充于 2026-10-30）。
+默认路径是**离线可跑**：Mock LLM + Fixture 检索，不需要 API Key。
 
 ## 1. 依赖与端口
 
@@ -49,6 +49,9 @@ spring:
 - 清库重建：手工执行 `schema-dev-reset.sql`（只 DROP）再执行 `schema.sql`。
 - 已有库升级（文档 RAG 相关列）：手工执行 `schema-migration-document-rag.sql`。
   `CREATE TABLE IF NOT EXISTS` **不会**给已有表加列。
+- 已有库升级（消息序号计数器）：手工执行 `schema-migration-phase54-message-seq.sql`。
+  脚本幂等：先检查 `conversation.last_message_seq` 是否存在，不存在才加列，并按
+  `MAX(message.sequence_no)` 回填；漏跑会报 `Unknown column 'last_message_seq'`。
 
 验证：
 
@@ -261,12 +264,54 @@ python scripts/phase53-spring-e2e.py \
 ```
 
 不要给 Agent 设置 `AILS_INTERNAL_DELEGATION_SECRET`：配置了会拒绝启动。
-本轮 Qdrant 未启动，因此所有回答都是 `NO_VALID_DOCUMENTS`；这不是引用验收。
+5.3 服务端 E2E 时 Qdrant 未启动，因此所有回答都是 `NO_VALID_DOCUMENTS`；
+文档引用验收在 5.4 单独用真实 Qdrant 完成，见下文。
 完整结果与产物见
 [`docs/testing/phase53-spring-e2e-20261030.md`](../testing/phase53-spring-e2e-20261030.md)。
 
 `provider=openai` 但缺 Key 时**启动即报错**，不会静默退回 Mock。Embedding 同理：
 `AILS_EMBEDDING_PROVIDER=openai` 失败不会回退到 hash。
+
+### 5.4 真实验收环境（2026-10-30）
+
+5.4 的四个脚本都要求真实服务，但**不占用用户原有的 8080**：
+
+| 项目 | 建议实例 | 说明 |
+| --- | --- | --- |
+| 文档引用 | Spring 8081 + Agent 8000 | Qdrant 必须启动；Embedding 用 `openai`（1024 维） |
+| 重复采样 | Spring 8081 + Agent 8000 | 同一组 3 轮；可用 `MYSQL_DB` 指向独立测试库 |
+| 并发基线 | Spring 8081 + Agent 8000 | 默认 6 并发 / 12 总请求 |
+| MQ 真实模型 | Spring 8082 + Agent 8001 + 独立 Worker | 使用 `learning.analysis.phase54.*` 拓扑 |
+
+文档引用会创建 collection
+`<AILS_QDRANT_COLLECTION_PREFIX>_<model>_<dimension>`；本轮是
+`ails_phase54_text-embedding-v4_1024`。脚本只读核对 Qdrant，不删除 collection。
+测试库可以使用 `ails_phase54_rag` / `ails_phase54_mq`，避免污染开发库。
+
+MQ 模式启动示例（token / identity 用本机值，不要写进仓库）：
+
+```bash
+# Spring 8082
+cd backend/backend
+SERVER_PORT=8082 AILS_ANALYSIS_MODE=mq \
+  AILS_AGENT_BASE_URL=http://127.0.0.1:8001 \
+  AILS_INTERNAL_TOKEN=<两端一致> \
+  AILS_INTERNAL_IDENTITY_SECRET=<两端一致> \
+  AILS_INTERNAL_DELEGATION_SECRET=<只给后端> \
+  MYSQL_DB=ails_phase54_mq \
+  ./mvnw -q -DskipTests spring-boot:run
+
+# E2E 脚本自行启动 / 停止 Worker；需要后端日志用于幂等断言
+python scripts/phase54-mq-real-e2e.py \
+  --base http://127.0.0.1:8082 --agent http://127.0.0.1:8001 \
+  --backend-log /path/to/backend-8082.log
+```
+
+脚本要求没有其他 Worker 消费同一 Phase54 队列；否则「Worker 未启动时保持
+PENDING」的断言会被常驻 Worker 破坏。
+
+完整结果、失败样本和产物路径见
+[`docs/testing/phase54-real-model-20261030.md`](../testing/phase54-real-model-20261030.md)。
 
 ## 5. 从零启动（离线 Mock，最小链路）
 

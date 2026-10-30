@@ -232,8 +232,9 @@ SELECT COUNT(*) FROM learning_understanding
 
 **不能证明：**
 
-- 真实模型会稳定遵守证据边界（2026-10-30 只做了单轮 5 场景复验 + 3 轮服务端 E2E；
-  C-only 依赖 fallback，服务端 E2E 未覆盖 MQ、Flutter、文档引用）；
+- 真实模型会稳定遵守证据边界（2026-10-30 已完成 5 场景复验、3 轮服务端 E2E、
+  MQ / 文档引用 / 3 轮重复采样 / 3 组并发基线，但 C-only 依赖 fallback；
+  MQ 轮出现过 `ConnectError` + 非法 JSON，且 Flutter 未覆盖）；
 - 教学效果；
 - Flutter 前端可用（仍是脚手架）；
 - 测试作答判分是语义判分（当前是启发式）。

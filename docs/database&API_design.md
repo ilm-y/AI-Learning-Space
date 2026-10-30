@@ -296,6 +296,7 @@ conversation (
     title VARCHAR(255),
     status ENUM('ACTIVE','ARCHIVED') NOT NULL,
     last_message_at DATETIME,
+    last_message_seq INT NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
 
@@ -314,6 +315,12 @@ conversation (
     )
 )
 ```
+
+`last_message_seq` 是消息序号的分配计数器，0 表示尚未分配。写入时先在同一事务里
+`UPDATE conversation SET last_message_seq = last_message_seq + 1`，再读回。
+不用 `SELECT MAX(sequence_no) ... FOR UPDATE`：那会在
+`message(conversation_id, sequence_no)` 索引上加范围锁 / 间隙锁，并发写入不同对话时
+会互相等待并死锁。已有库升级见 `schema-migration-phase54-message-seq.sql`。
 
 ---
 
