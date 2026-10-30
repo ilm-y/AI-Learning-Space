@@ -281,7 +281,10 @@ public class ChatService {
                             end.put("truncated", true);
                             end.put("finishReason", terminal.finishReason());
                         }
-                        send(emitter, "message.end", end);
+                        // 先把 agent_run 写到终态，再发 message.end。
+                        // 反过来的话，客户端收到 end 后立刻查库会看到 RUNNING/空状态：
+                        // 2026-10-30 的重复采样就抓到过这一次竞态（46/1）。
+                        // 终态写失败会走下面的 catch，客户端收到 message.error，不会只看到 end。
                         // agent_run 用独立状态记录「内容不完整」，不与正常 COMPLETED 混用。
                         finishRun(
                                 run,
@@ -291,6 +294,7 @@ public class ChatService {
                                         : "chars=" + buffer.length(),
                                 null,
                                 startedAt);
+                        send(emitter, "message.end", end);
                     } catch (Exception e) {
                         // 落库失败等价于这次回复不存在，前端必须收到明确的失败事件 ——
                         // 不能让它只看到流被干净地关掉、然后在等 message.end 里挂到超时。
