@@ -1,7 +1,9 @@
 # 面试讲解提纲
 
-> 这份提纲只讲**代码里真实存在的东西**。真实模型验收未完成、Flutter 未实现、
-> 部分接口返回 501，这些要主动说明，不能包装成“已完成”。
+> 这份提纲只讲**代码里真实存在的东西**。真实模型已完成 2026-10-30 单轮 5 场景
+> Agent Runtime 复验（C-only 依赖 fallback）和 Spring SSE 3 轮服务端 E2E（47/0）；
+> 但仍不是完整产品验收：Flutter 未实现、MQ 真实模型未跑、没有文档引用场景，
+> 部分接口返回 501。这些要主动说明，不能包装成“已完成”。
 
 ## 1. 30 秒版本
 
@@ -115,11 +117,28 @@ normalized_observation)`，数据库 `UNIQUE(dedupe_key)`；重复时复用原 E
 
 ### 3.5 历史回答虚构未记录的过程（5.3 / 5.3.2）
 
-**真实失败：** 5.3.1 的 C 场景中，真实模型写出：
+**历史真实失败：** 5.3.1（2026-10-27）的 C 场景中，真实模型写出：
 
 > 你很可能通过重读定义 + 对比缓存通用含义迁移了过来……而且没有外部提示或资料介入。
 
 这些过程没有记录，属于编造。C 判定 `FAIL`，失败样本保留。
+
+**2026-10-30 复验：** 用 `deepseek-flash` 重跑 A/B/C/C-only/D 五场景。C 不再编造
+变化原因，明确写「记录里看不出原因」；C-only 的两次模型回答也都拒绝编造历史，
+但被 `no_history_denial` 的否定句规则误判，最终由确定性 fallback 交付。
+复验报告见 `docs/testing/phase53-real-model-20261030.md`。
+
+**同日服务端 E2E：** 另起 Spring 8081 + Agent 8000，走 3 轮公开 API：
+普通问题、错误解释、显式复盘，47 / 0 通过。三次聊天均
+`message.start → delta → end`、`finish_reason=stop`、`message.truncated=0`；
+inline 分析走真实模型并返回 `agent-v1`；显式复盘注入 3 个 Revision、
+`history_guard issues=[]`、`fallback=false`。
+证据见 `docs/testing/phase53-spring-e2e-20261030.md`。
+
+这次 E2E 还抓到一个真实模型契约漂移：模型把 `verificationDecision.trigger`
+写成自由文本，导致整轮分析 Pydantic 校验失败并退回 `rules-v1`。修复
+`_coerce_verification_enums()` 后重跑通过。这个例子适合讲
+「HTTP 200 不等于链路验收通过，必须核对分析器版本和 fallback」。
 
 **修复思路：**
 
@@ -134,12 +153,18 @@ normalized_observation)`，数据库 `UNIQUE(dedupe_key)`；重复时复用原 E
 
 **必须主动说明的限制：**
 
-- 5.3.2 真实模型调用 **0 次**（本地没有 Key，按约束停止重试）；
-- 离线回放和 Mock SSE 只能证明校验器能拦截**已知失败**，不能证明真实模型下次合规；
+- 2026-10-30 已完成真实模型 Agent Runtime 复验和 Spring SSE 服务端 E2E，
+  但 Runtime 只跑了**一轮 5 场景**、服务端只跑了 **3 轮**，不是重复采样，
+  也没有人工评分；
+- C-only 的模型回答本身正确，但被 `history_guard` 的 `no_history_denial`
+  否定句规则误判，重生成后仍误判，最终交付的是 **fallback**，不是模型原文；
 - 校验器是句子级启发式，不能覆盖所有同义改写；非常规措辞可能不触发复盘；
-- 这是**可接受的已知限制，但不是已通过验收**。
+- 服务端 E2E 只覆盖 inline；MQ 真实模型、Flutter 前端、文档引用场景仍未验证；
+- `deepseek-flash` 在 `max_tokens=1024` 时会截断长回答，本轮已改为 4096；
+- 因此可以写「已完成单轮真实模型行为复验和一次服务端 E2E」，不能写
+  「真实模型已稳定通过完整产品验收」。
 
-这一段最能体现工程判断：**没有证据时，不把“改好了”说成“验证过了”。**
+这一段最能体现工程判断：**不把“改好了”说成“验证过了”，也不把“误报”藏起来。**
 
 ### 3.6 MQ 幂等与失败语义
 
@@ -154,7 +179,7 @@ normalized_observation)`，数据库 `UNIQUE(dedupe_key)`；重复时复用原 E
 
 ## 4. 演示怎么讲（7 步，Mock）
 
-先声明：**“以下 LLM 是 Mock，输出确定性；真实模型验收未完成。”**
+先声明：**“以下 LLM 是 Mock，输出确定性；真实模型复验是独立的单轮实验，不在本演示中。”**
 
 ```bash
 bash scripts/phase6-demo.sh
@@ -191,11 +216,14 @@ A：句子级校验需要完整回答；代价是显式复盘首字延迟从第�
 
 **Q：如果真实模型一直不通过怎么办？**
 A：保留失败样本，判定为已知限制；最低关闭条件是真实模型重跑 B / C / C-only，
-分别记录 raw answer 与 production final answer，不能合并判定。在没有 Key 时继续
-改 Prompt 或扩大架构无法验证收益。
+分别记录 raw answer 与 production final answer，不能合并判定。2026-10-30 已按这个
+方式补跑：C 通过，C-only 因守卫误判走 fallback；并补了 Spring SSE 服务端 E2E
+（3 轮 / 47 检查）。下一步是修复 `no_history_denial` 的否定句误报，再补重复采样、
+MQ 真实模型、Flutter 和真实文档引用场景。
 
 **Q：系统最大的技术风险？**
-A：单进程假设（SSE、线程池）、没有迁移框架、真实模型合规性未验证。
+A：单进程假设（SSE、线程池）、没有迁移框架、真实模型只完成单轮复验且
+C-only 仍依赖 fallback；服务端 E2E 也只覆盖 inline、单次采样，没有并发压测。
 这些都在 `KNOWN_LIMITATIONS.md` 里，不藏在代码注释里。
 
 ## 6. 如果只能讲一个技术点

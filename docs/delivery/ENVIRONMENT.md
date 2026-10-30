@@ -224,6 +224,47 @@ AILS_LLM_TEMPERATURE=0.0
 AILS_LLM_API_KEY=<从本地 gitignored 配置或环境变量注入>
 ```
 
+当前真实验收实例使用 DeepSeek：`AILS_LLM_BASE_URL=https://api.deepseek.com/v1`、
+`AILS_LLM_MODEL=deepseek-flash`、`AILS_LLM_MAX_TOKENS=4096`。
+`deepseek-flash` 的推理内容也计入生成预算；1024 会把长回答截断在句子中间，
+4096 才能让本轮 5 个场景正常结束。证据见
+[`docs/testing/phase53-real-model-20261030.md`](../testing/phase53-real-model-20261030.md)。
+
+### 真实模型服务端 E2E（Spring 8081 + Agent 8000）
+
+2026-10-30 的 E2E 不占用用户原有的 8080：后端起在 **8081**，Agent 仍是 8000。
+两端必须共享同一组内部 token / identity secret；delegation secret **只给后端**：
+
+```bash
+# 终端 1：Agent（.env 配 openai / deepseek-flash / 4096）
+cd agent
+AILS_BACKEND_BASE_URL=http://127.0.0.1:8081 \
+AILS_INTERNAL_TOKEN=<两端一致> \
+AILS_INTERNAL_IDENTITY_SECRET=<两端一致> \
+AILS_PORT=8000 python -m app.main
+
+# 终端 2：Spring（避开 8080）
+cd backend/backend
+SERVER_PORT=8081 AILS_AGENT_GATEWAY=http \
+AILS_AGENT_BASE_URL=http://127.0.0.1:8000 \
+AILS_ANALYSIS_MODE=inline \
+AILS_INTERNAL_TOKEN=<两端一致> \
+AILS_INTERNAL_IDENTITY_SECRET=<两端一致> \
+AILS_INTERNAL_DELEGATION_SECRET=<只给后端> \
+./mvnw -q -DskipTests spring-boot:run
+
+# 终端 3：E2E（只通过公开 API 写数据，MySQL 只读核对）
+AILS_INTERNAL_TOKEN=<两端一致> \
+AILS_INTERNAL_IDENTITY_SECRET=<两端一致> \
+python scripts/phase53-spring-e2e.py \
+  --base http://127.0.0.1:8081 --agent http://127.0.0.1:8000
+```
+
+不要给 Agent 设置 `AILS_INTERNAL_DELEGATION_SECRET`：配置了会拒绝启动。
+本轮 Qdrant 未启动，因此所有回答都是 `NO_VALID_DOCUMENTS`；这不是引用验收。
+完整结果与产物见
+[`docs/testing/phase53-spring-e2e-20261030.md`](../testing/phase53-spring-e2e-20261030.md)。
+
 `provider=openai` 但缺 Key 时**启动即报错**，不会静默退回 Mock。Embedding 同理：
 `AILS_EMBEDDING_PROVIDER=openai` 失败不会回退到 hash。
 

@@ -3,34 +3,64 @@
 这份清单是交付的一部分。它记录**当前代码确实做不到的事**，避免把设计目标、
 Mock 结果或历史报告当成已完成验收。
 
-## 1. 真实模型验收未完成
+## 1. 真实模型：已完成 Runtime 复验和服务端 E2E，但不是完整产品验收
 
-| 项目 | 状态 | 证据 |
+2026-10-30 使用 `deepseek-flash` 完成 5 场景、6 次真实模型调用。数据播种仍由
+Mock Agent 完成；真实模型只负责生成。完整原始输出与判定见
+[`docs/testing/phase53-real-model-20261030.md`](../testing/phase53-real-model-20261030.md)。
+
+同日另起 Spring 8081 + Agent 8000，通过公开 API 完成 3 轮服务端 E2E
+（普通问题 / 错误解释 / 显式复盘），**47 PASS / 0 FAIL**。三次聊天均走
+`message.start → delta → end`，消息与 `agent_run` 落库，inline 分析返回
+`agent-v1`；显式复盘读到 3 个 Revision、`history_guard issues=[]`、未 fallback。
+证据见
+[`docs/testing/phase53-spring-e2e-20261030.md`](../testing/phase53-spring-e2e-20261030.md)。
+
+| 场景 | 2026-10-30 结果 | 证据 |
 | --- | --- | --- |
-| 5.3.2 真实模型复验 | **0 次调用** | `REPORT-5.3.2.md`：本地无 `AILS_LLM_API_KEY`，按约束停止重试 |
-| C（Trajectory-enabled）真实模型 | **FAIL** | 5.3.1 仍虚构「很可能通过重读定义迁移」「没有外部资料介入」 |
-| C Current-only 真实模型 | 历史缺失处理通过，技术表述未通过 | 5.3.1 报告第七节 |
-| B 真实模型 | **PARTIAL** | 掌握断言改善，但「高频访问」超范围、权限检查简化、丢失 `TLB miss ≠ page fault` 区分 |
-| D Memory 冲突 | 通过（有限） | 未引用 Memory 时间/来源，留有余地 |
+| A 当前误区 | **PASS** | 区分页表 / 页表项 / 缺页，未假设已掌握 |
+| B 纠正后普通问题 | **PASS** | 保留 `TLB miss ≠ 缺页`，没有把扩展内容写成已掌握 |
+| C 显式复盘 | **PASS** | 只陈述记录，明确「记录里看不出原因」 |
+| C-only 无轨迹复盘 | **PASS（fallback）** | 模型两次拒绝编造，但被 `no_history_denial` 误判，最终走确定性 fallback |
+| D Memory 冲突 | **PASS** | 明确旧 Memory 是历史，当前状态不同 |
+
+历史失败样本仍保留：5.3.1 的 C 曾虚构「很可能通过重读定义迁移」「没有外部资料
+介入」，B 曾为 `PARTIAL`。这些是 2026-10-27 的结果，不因本轮通过而删除。
 
 因此：
 
-- 不能声称「历史回答已经可靠遵守证据边界」；
-- 不能声称「教学效果已被真实模型验证」；
-- 5.3.2 的离线回放和 Mock SSE 只能证明**校验器会拦截已知失败**，
-  不能证明真实模型下次会合规。
+- 可以声称「已完成单轮真实模型 Agent Runtime 行为复验」；
+- 可以声称「已完成一次 Spring SSE → Agent → 真实模型的 inline 服务端 E2E」；
+- **不能**声称「真实模型已经稳定遵守证据边界」：C-only 依赖 fallback，各场景只跑一轮；
+- **不能**声称「教学效果已被真实模型验证」：没有人工评分、学习者对照或留存指标；
+- **不能**声称「MQ 真实模型链路通过」：服务端 E2E 只跑 inline；
+- **不能**声称「Flutter 前端可用」：前端未测试、未修改；
+- **不能**声称「RAG 引用质量通过」：两轮真实模型验收的所有场景都是
+  `NO_VALID_DOCUMENTS`，Qdrant 未启动。
 
-### 判定：这是可接受的已知限制吗？
+### 仍需完成的最低验收
 
-**当前阶段可以接受，但不能作为「已通过」交付。** 理由：
+1. 在真实文档场景重跑引用 / 无依据问题的拒绝；
+2. 每个场景重复采样，记录 `finish_reason`、延迟分布和失败率；
+3. 对 C / C-only 做人工评分或双人复核，而不是单次执行者判定；
+4. 修复 `history_guard` 对「不能反过来断言你以前没有这个错误」的误报，
+   再确认 C-only 不再依赖 fallback；
+5. 启动 Flutter 前端，验证 SSE 消费、断线重连和渲染；
+6. 跑一次 MQ 模式真实模型链路（需要 RabbitMQ + Worker）。
 
-1. 失败模式已经被定位到生成层，不是检索层；轨迹和来源确实进入了上下文。
-2. 校验器能在离线回放中识别 5.3.1 的已知失败，并给出确定性回退。
-3. 没有真实 Key 时继续改 Prompt 或扩大架构，无法验证是否真的改善；
-   按阶段约束停止，保留失败样本，比声称通过更诚实。
+### 三个已确认的工程限制
 
-如果后续要关闭这个限制，最低要求是：用真实模型重跑 B / C / C-only，
-记录 raw answer 与 production final answer，分别判定，不合并。
+- **预算截断**：`deepseek-flash` 的推理内容也消耗生成预算。`max_tokens=1024`
+  时 A/B/C/D 的回答都在句子中间被截断；`4096` 时全部 `finish_reason=stop`。
+  本地 `.env` 已改为 4096。
+- **守卫误报**：C-only 首答「不能反过来断言『你以前没有这个错误』」被
+  `_NO_HISTORY_DENIAL_RE` 当成「断言过去没有错误」，触发一次重生成；重生成
+  仍被误判，最终 fallback。安全性未受损，但多了一次生成，且掩盖了模型本身
+  已经正确处理历史缺失的事实。
+- **分析枚举漂移**：服务端 E2E 首轮发现真实模型把 `verificationDecision.trigger`
+  写成自由文本，Pydantic 校验失败，整轮分析退回 `rules-v1`。已增加
+  `_coerce_verification_enums()`、prompt 枚举和契约测试；证据、理解、记忆的枚举
+  仍严格校验。这个修复避免「后端 fallback 让链路看起来通过」的误判。
 
 ## 2. 历史校验本身的边界
 
@@ -103,8 +133,9 @@ Mock 结果或历史报告当成已完成验收。
 
 ## 7. 测试口径限制
 
-- 当前 Agent 382 passed / 5 skipped / 1 xfailed；Spring 255 条（182 执行通过 /
+- 当前 Agent 383 passed / 5 skipped / 1 xfailed；Spring 255 条（182 执行通过 /
   73 跳过）；E2E 101 / MQ E2E 27 / E2E 94 / Demo 23 是 2026-10-27 的 Mock 结果；
+  Spring 服务端 E2E 47/0 是 2026-10-30 的真实模型单次结果；
 - 1 个 xfail 是语义误述风险，不是通过，也不是普通跳过；
 - 真实 Qdrant、真实 broker、真实 MySQL 集成测试有 5 + 73 个环境门控 skip；
 - `AnalysisMqIntegrationTest` 默认 0 个用例执行；本轮 MQ E2E 另起真实 broker + Worker 验证，

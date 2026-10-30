@@ -47,7 +47,12 @@ from app.config import Settings  # noqa: E402
 from app.context.builder import ContextBuilder  # noqa: E402
 from app.context.tokens import estimate_tokens  # noqa: E402
 from app.embedding import build_embedding_provider  # noqa: E402
-from app.llm.base import ChatMessage, LLMAdapter  # noqa: E402
+from app.llm.base import (  # noqa: E402
+    ChatMessage,
+    CompletionAwareStream,
+    LLMAdapter,
+    StreamCompletion,
+)
 from app.llm.factory import build_llm_adapter  # noqa: E402
 from app.llm.mock import MockLLMAdapter  # noqa: E402
 from app.retriever.knowledge import KnowledgeSearchService  # noqa: E402
@@ -131,6 +136,7 @@ class RecordingLLMAdapter:
             "chunks": self.chunks,
             "error": None,
             "temperature": temperature,
+            "completion": None,
         }
         self.attempts.append(record)
         return record
@@ -143,6 +149,7 @@ class RecordingLLMAdapter:
                 "error": attempt["error"],
                 "temperature": attempt["temperature"],
                 "tokensEstimated": estimate_tokens("".join(attempt["chunks"])),
+                "completion": attempt["completion"],
             }
             for attempt in self.attempts
         ]
@@ -165,6 +172,53 @@ class RecordingLLMAdapter:
             self.error = f"{type(exc).__name__}: {str(exc)[:300]}"
             record["error"] = self.error
             raise
+
+    def stream_chat_with_completion(
+        self,
+        messages: list[ChatMessage],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> CompletionAwareStream:
+        """转发供应商终态，让评测产物能区分 stop / length 与截断。"""
+        record = self._begin_attempt(temperature)
+        holder: dict[str, StreamCompletion | None] = {"completion": None}
+        inner_factory = getattr(self._inner, "stream_chat_with_completion", None)
+        if inner_factory is not None:
+            inner_stream = inner_factory(
+                messages, temperature=temperature, max_tokens=max_tokens
+            )
+        else:
+            inner_stream = CompletionAwareStream(
+                self._inner.stream_chat(
+                    messages, temperature=temperature, max_tokens=max_tokens
+                ),
+                lambda: StreamCompletion(metadata_available=False),
+            )
+
+        async def relay() -> AsyncIterator[str]:
+            try:
+                async for delta in inner_stream:
+                    self.chunks.append(delta)
+                    yield delta
+            except Exception as exc:  # noqa: BLE001 —— 记录失败类别，不在评测里重试
+                self.error = f"{type(exc).__name__}: {str(exc)[:300]}"
+                record["error"] = self.error
+                raise
+            completion = inner_stream.completion or StreamCompletion(
+                metadata_available=False
+            )
+            holder["completion"] = completion
+            record["completion"] = {
+                "finishReason": completion.finish_reason,
+                "metadataAvailable": completion.metadata_available,
+                "truncated": completion.truncated,
+            }
+
+        return CompletionAwareStream(
+            relay(),
+            lambda: holder["completion"] or StreamCompletion(metadata_available=False),
+        )
 
     async def complete(
         self,
@@ -371,11 +425,14 @@ async def run_case(runtime: AgentRuntime, recorder: RecordingLLMAdapter,
     streamed = "".join(deltas)
     history_guard = history_guard_trace(prepared)
     guard_notice = final[len(raw):] if final.startswith(raw) else None
+    completion = attempts[0].get("completion") if attempts else None
     result.update(
         {
             "httpStatus": recorder.last_status_code,
             "llmCallCount": len(attempts),
             "modelAttempts": attempts,
+            "finishReason": completion.get("finishReason") if completion else None,
+            "truncated": completion.get("truncated") if completion else None,
             "rawAnswer": raw,
             "finalAnswer": final,
             "firstDeltaMs": first_delta_ms,
@@ -534,6 +591,7 @@ async def main() -> int:
             f"calls={call.get('llmCallCount')} firstDelta={call.get('firstDeltaMs')}ms "
             f"raw={len(call.get('rawAnswer') or '')}chars "
             f"final={len(call.get('finalAnswer') or '')}chars "
+            f"finish={call.get('finishReason')} truncated={call.get('truncated')} "
             f"fallback={call.get('fallbackUsed')} "
             f"guard={bool(call.get('guardNotice'))} error={call.get('error')}"
         )

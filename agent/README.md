@@ -206,7 +206,7 @@ curl -s -X POST http://127.0.0.1:8000/agent/context/preview \
 ### 测试
 
 ```bash
-python -m pytest -q          # 382 passed, 5 skipped, 1 xfailed（2026-10-29）
+python -m pytest -q          # 383 passed, 5 skipped, 1 xfailed（2026-10-30）
 ```
 
 5 个 skip 都是环境门控，**跳过不等于通过**：真实 Qdrant（2）、真实 broker（2）、
@@ -513,7 +513,7 @@ error   { runId, code, message }     code: 500 内部错误 / 502 模型上游�
 - **异步分析（可选）**：`python -m app.worker` 消费 `learning.analysis.request`，
   使用服务端凭据回访后端检索，结果经 `learning.analysis.result` 回到 Spring Boot。
   拓扑、契约与失败处理见 [../docs/analysis-mq.md](../docs/analysis-mq.md)；
-- 382 个不依赖数据库与网络的测试已通过；另有 5 个环境门控用例（真实 Qdrant / 真实
+- 383 个不依赖数据库与网络的测试已通过；另有 5 个环境门控用例（真实 Qdrant / 真实
   broker / 真实知识 E2E）本轮跳过，1 个 strict xfail 记录自然语言误述风险。
   端到端验收见 `scripts/phase51-e2e.sh`、`scripts/phase52-e2e.sh` 与 `evaluation/`。
 

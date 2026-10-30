@@ -141,7 +141,7 @@ Agent 内部 SSE 与前端 SSE **刻意不同名**：
 | 文档导出 / 导入 / 学习计划 | Controller 返回 501，表结构已在位 |
 | 测试作答语义判分 | `TestService` 是长度 + 是否点到概念名的启发式 |
 | Memory 向量检索 | 关键词 `LIKE`，`memory.embedding_ref` 未接向量库 |
-| 真实模型行为验收 | 本地无 `AILS_LLM_API_KEY`，5.3.2 真实调用为 0；只完成 Mock 与离线回放 |
+| 真实模型行为验收 | 2026-10-30 已完成 Agent Runtime 级 5 场景复验（A/B/C/D `PASS`，C-only 因守卫误判走 fallback）和 Spring SSE 3 轮服务端 E2E（47/0，inline）；MQ 真实模型、Flutter、文档引用场景仍未跑 |
 | 多实例一致性 | Agent 无状态，但 Spring 的分析线程池与 SSE 连接未做分布式协调 |
 
 ## 6. 相关文档

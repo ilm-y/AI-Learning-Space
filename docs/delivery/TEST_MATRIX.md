@@ -1,4 +1,4 @@
-# 测试与质量矩阵（截至 2026-10-29，Phase 9）
+# 测试与质量矩阵（截至 2026-10-30，Phase 9 + 5.3 真实模型复验 + 服务端 E2E）
 
 > **不要把这些数字合并成一个「总体通过率」。** 它们的执行时间、代码版本、评分规则、
 > 测试语义都不同：Mock 只证明链路，真实模型才证明语义；RAG v1 / v2 是两套评分规则；
@@ -8,14 +8,16 @@
 
 | 层级 | 最近结果 | 证明什么 | 不能证明什么 |
 | --- | --- | --- | --- |
-| Agent 单元 / 集成 | 382 passed，5 skipped，1 xfailed | 函数与运行时契约、来源过滤、预算边界 | 真实模型语义质量 |
+| Agent 单元 / 集成 | 383 passed，5 skipped，1 xfailed | 函数与运行时契约、来源过滤、预算边界 | 真实模型语义质量 |
 | Spring 单元 / 集成 | 255 条（182 执行通过 / 73 skipped / 0 failed） | 服务 / 网关 / MQ 消费者契约 | 真实 RabbitMQ Testcontainers 全链路 |
 | 5.1 inline E2E | 101 / 0 / 0 | Mock 下的对话 → 分析 → 证据 → 状态闭环 | 真实模型回答质量 |
 | 5.1 MQ E2E | 27 / 0 / 0（有效重跑） | 真 RabbitMQ + 真 Worker 的异步机制 | 真实模型语义 |
 | 5.2 学习轨迹 E2E | 94 / 0 / 0 | 跨会话状态、轨迹、权限、冲突 | 真实模型是否遵守历史边界 |
 | RAG 真实模型 | v1 / v2 分别记录，不合并 | 检索、上下文、引用在真实模型下的表现 | 教学效果 |
-| 5.3 真实模型 | 8 次调用；A/D 通过，B PARTIAL，C FAIL | 生产 Runtime 下的真实行为 | 完整通过 |
-| 5.3.2 历史校验 | 0 次真实调用；离线回放 + Mock SSE | 校验器能拦截 5.3.1 的已知失败 | 真实模型合规性 |
+| 5.3 真实模型（2026-10-27 历史） | 8 次调用；A/D 通过，B PARTIAL，C FAIL | 生产 Runtime 下的真实行为 | 完整通过 |
+| 5.3 真实模型复验（2026-10-30） | 6 次调用 / 5 场景；A/B/C/D PASS，C-only PASS（fallback） | 真实 `deepseek-flash` 在 A/B/C/D 不再编造；C-only 被守卫误判后安全兜底 | 稳定合规、完整产品验收 |
+| 5.3 服务端 E2E（2026-10-30） | 3 轮聊天 + 3 次 inline 分析；**47 PASS / 0 FAIL** | Spring SSE → Agent → `deepseek-flash`、消息 / run 落库、`agent-v1` 分析、显式复盘轨迹 | Flutter、MQ 真实模型、文档 RAG、重复采样 |
+| 5.3.2 历史校验（2026-10-30） | 已用真实模型复验；C 无 issue，C-only `no_history_denial` → fallback | 校验器能拦截并兜底；同时暴露一次否定句误报 | 校验器无误报、模型独立通过 |
 
 ## 2. Agent 测试
 
@@ -25,10 +27,10 @@
 python -m pytest -q
 ```
 
-最近结果（2026-10-29，Phase 9）：
+最近结果（2026-10-30，5.3 契约修复后）：
 
 ```text
-382 passed, 5 skipped, 1 xfailed, 1 warning in 10.65s
+383 passed, 5 skipped, 1 xfailed
 ```
 
 1 个 `xfail(strict=True)` 不是跳过，也不是通过：它记录「检索成功但片段被裁剪时，
@@ -94,7 +96,7 @@ CI 配置（`.github/workflows/ci.yml`）会跑：
 所有 E2E 的详细前置条件见各脚本头部。共同点：
 
 - 后端 `8080`（inline）或 `8081`（mq）；
-- Agent `8000`，`AILS_LLM_PROVIDER=mock`；
+- Agent `8000`；除 `phase53-spring-e2e.py` 外均为 `AILS_LLM_PROVIDER=mock`；
 - MySQL 可连，凭证从 `application-local.yml` 读取；
 - 脚本只通过公开 API / SSE / 分析链路产生数据；直接 SQL 只用于只读核对。
 
@@ -104,10 +106,14 @@ CI 配置（`.github/workflows/ci.yml`）会跑：
 | `scripts/phase51-mq-e2e.sh` | **27 PASS / 0 FAIL / 0 SKIP** | 真 RabbitMQ + 真 Worker；重复投递幂等 |
 | `scripts/phase52-e2e.sh` | **94 PASS / 0 FAIL / 0 SKIP** | A 当前误区 / B 已纠正 / C 复盘 / D Memory 冲突 / E 权限与闲聊 |
 | `scripts/phase6-demo.sh` | **23 PASS / 0 FAIL** | TLB 七步演示：证据 / Revision / 新会话 / 复盘 / SSE / 只读查库 |
+| `scripts/phase53-spring-e2e.py` | **47 PASS / 0 FAIL（2026-10-30）** | 真实 `deepseek-flash`；Spring SSE、消息 / run 落库、inline 分析、复盘轨迹 |
 | `scripts/regress-closed-loop.sh` | 本轮未重跑 | 旧闭环脚本；不要引用为当前结果 |
 
-这些 E2E 全部使用 **Mock LLM**。它们能证明检索、上下文注入、持久化、状态流转、
-权限隔离和 SSE 事件序列；不能证明真实模型的语义判断或教学效果。
+除 `phase53-spring-e2e.py` 外，这些 E2E 全部使用 **Mock LLM**。它们能证明检索、
+上下文注入、持久化、状态流转、权限隔离和 SSE 事件序列；不能证明真实模型的语义判断
+或教学效果。真实模型服务端 E2E 的边界见
+[`docs/testing/phase53-spring-e2e-20261030.md`](../testing/phase53-spring-e2e-20261030.md)：
+没有 Flutter、MQ、文档 RAG、重复采样。
 
 ### MQ 小节
 
@@ -211,7 +217,8 @@ python -m evaluation
 | --- | ---: | --- |
 | 5.3 第一轮 | 4 | A / B / C / C-only |
 | 5.3.1 第二轮 | 4 | B / C / C-only / D 的修正后复验 |
-| 5.3.2 | **0** | 本地没有 `AILS_LLM_API_KEY`；不伪造真实调用 |
+| 5.3.2（2026-10-27） | **0** | 当时本地没有 `AILS_LLM_API_KEY`；不伪造真实调用 |
+| 5.3 复验（2026-10-30） | **6** | A/B/C/C-only/D；C-only 触发一次重生成 |
 
 ### 7.2 结果
 
@@ -225,7 +232,23 @@ python -m evaluation
 | C Current-only | 不再断言「你以前没有错误」，明确说明无法确认；技术表述仍有错误 | 历史缺失处理通过；技术层面未通过 |
 | D Memory 冲突 | 明确「过去曾有，现在已修正」；未推断原因；未删除/改写 Memory | 通过（未引用 Memory 时间/来源，留有余地） |
 
-### 7.3 保留的失败样本
+### 7.3 2026-10-30 真实模型复验
+
+模型 `deepseek-flash`，`temperature=0.6`，`max_tokens=4096`；5 场景、6 次调用。
+完整报告：[`docs/testing/phase53-real-model-20261030.md`](../testing/phase53-real-model-20261030.md)。
+
+| 场景 | 结果 | 关键证据 |
+| --- | --- | --- |
+| A | **PASS** | 区分页表 / 页表项 / 缺页；不假设已掌握 |
+| B | **PASS** | 保留 `TLB miss ≠ 缺页`；未把扩展内容写成已掌握 |
+| C | **PASS** | 只陈述记录，明确「记录里看不出原因」；无旧版编造 |
+| C-only | **PASS（fallback）** | 模型两次拒绝编造；`no_history_denial` 误判后确定性 fallback |
+| D | **PASS** | 旧 Memory 标为历史，当前状态不同 |
+
+所有调用 `finish_reason=stop`、`truncated=false`。注意：C-only 的最终文本不是
+模型原文，而是 `build_history_fallback()`；本轮不能证明「模型独立通过」。
+
+### 7.4 保留的失败样本
 
 C 的原始输出（5.3.1 `runtime-eval/C.json` 的 `call.rawAnswer`）包含：
 
@@ -237,6 +260,26 @@ C-only 的原始输出包含：
 
 这些是真实模型输出，没有被删除、没有被改写成「通过」。
 
+### 7.5 Spring 服务端 E2E（2026-10-30）
+
+独立启动 Spring 8081 + Agent 8000，通过公开 API 跑 3 轮。完整报告：
+[`docs/testing/phase53-spring-e2e-20261030.md`](../testing/phase53-spring-e2e-20261030.md)。
+
+| 轮次 | HTTP / SSE | 模型输出 | run / message | inline 分析 |
+| --- | --- | --- | --- | --- |
+| 普通问题 | 200；74 事件 / 72 delta；1828 ms | 123 字，`finish=stop` | CHAT 536 / message 415 | ANALYSIS 537，`evidence=1`，`agent-v1` |
+| 错误解释 | 200；886 事件 / 884 delta；17686 ms | 1476 字，`finish=stop` | CHAT 538 / message 417 | ANALYSIS 539，`evidence=3`，`agent-v1` |
+| 显式复盘 | 200；11 事件 / 9 delta；10688 ms | 1035 字，`finish=stop` | CHAT 541 / message 419 | ANALYSIS 542，`evidence=0`（允许） |
+
+三次 `message.truncated=0`；显式复盘轨迹 `trajectoryRevisions=3`、
+`trajectoryEvidenceIds=[398,400,402]`、`history_guard issues=[]`、`fallback=false`。
+没有 `message.error`。
+
+首轮曾发现 `verificationDecision.trigger` 被真实模型写成自由文本，导致分析契约失败并
+退回 `rules-v1`；修复 `_coerce_verification_enums()`、补充 prompt 枚举和契约测试后，
+正式轮恢复 `agent-v1`。失败样本保留在
+`backend/backend/target/phase53-spring-e2e/20261030-210931/`。
+
 ## 8. 阶段 5.3.2 历史校验复验
 
 | 项目 | 结果 | 性质 |
@@ -244,7 +287,7 @@ C-only 的原始输出包含：
 | 离线回放 C | 881 → 551 字；4 个 issue；fallback=true | 不调用模型，只验证校验器 |
 | 离线回放 C-only | 924 → 176 字；2 个 issue；fallback=true | 同上 |
 | 生产 SSE（Mock） | `message.start` → 5 × `message.delta` → `message.end`；551 字；fallback=true | Mock 链路验收 |
-| 真实模型 | **0 次调用** | 未执行；不能声称 C 已通过 |
+| 真实模型（2026-10-30） | C：927 字、0 issue；C-only：首答/重生成均被 `no_history_denial` 误判，fallback=true（176 字） | 真实调用；C 通过，C-only 依赖 fallback |
 
 产物：
 
@@ -267,7 +310,10 @@ C-only 的原始输出包含：
 | `scripts/regress-closed-loop.sh` | 未重跑 | 旧闭环脚本 |
 | GitHub Actions CI | 未执行 | 本地未触发 |
 | Flutter 测试 | 未执行 | 仍是脚手架，没有业务代码 |
-| 5.3.2 真实模型 | 0 次 | 本地无 Key；已停止重试 |
+| 5.3 / 5.3.2 真实模型复验 | **已执行 6 次（5 场景）** | 2026-10-30；A/B/C/D PASS，C-only fallback |
+| Spring SSE 真实模型端到端 | **已执行（2026-10-30，47 / 0）** | 3 轮聊天 + 3 次 inline 分析；不含 Flutter、MQ、文档 RAG |
+| MQ 真实模型端到端 | 未执行 | 本轮 `AILS_ANALYSIS_MODE=inline` |
+| 真实模型重复采样 / 人工评分 | 未执行 | 每个场景 1 轮；判定由脚本完成 |
 
 ## 10. 最近执行记录
 
@@ -286,6 +332,12 @@ C-only 的原始输出包含：
 2026-10-29  Spring  ./mvnw -B test                        255 条 / 182 执行通过 / 73 skipped / 0 failed
 2026-10-29  Eval    python -m evaluation                 40/40, 124/124 assertions
 2026-10-29  Agent   Phase 6 注入与安全回归               16 passed
+2026-10-30  E2E     scripts/phase53-setup.sh             23 PASS / 0 FAIL（Mock 播种）
+2026-10-30  E2E     scripts/phase53-setup-clean.sh       11 PASS / 0 FAIL（Mock 播种）
+2026-10-30  Real    5.3 runtime-eval                     A/B/C/D PASS；C-only fallback；6 次调用
+2026-10-30  Guard   phase532_replay_guard.py            C 0 issue；C-only no_history_denial → fallback
+2026-10-30  Agent   python -m pytest -q                 383 passed, 5 skipped, 1 xfailed
+2026-10-30  E2E     scripts/phase53-spring-e2e.py       47 PASS / 0 FAIL（真实 deepseek-flash）
 ```
 
 ## 11. 质量报告索引
@@ -294,7 +346,9 @@ C-only 的原始输出包含：
 | --- | --- |
 | Agent 离线评测（当前） | `evaluation/reports/latest.md` |
 | Phase 9 证据边界 | `docs/testing/phase9-evidence-boundary.md` |
-| 5.3.2 复验报告 | `backend/backend/target/phase53-eval/20261027-004622/REPORT-5.3.2.md` |
+| 5.3 真实模型复验（2026-10-30） | `docs/testing/phase53-real-model-20261030.md` |
+| 5.3 Spring 服务端 E2E（2026-10-30） | `docs/testing/phase53-spring-e2e-20261030.md` |
+| 5.3.2 复验报告（2026-10-27） | `backend/backend/target/phase53-eval/20261027-004622/REPORT-5.3.2.md` |
 | 5.3.1 真实模型报告 | `backend/backend/target/phase53-eval/20261027-004622/REPORT-5.3.1.md` |
 | RAG v1 全量 | `evaluation/rag/reports/real_20261026_full_revalidated/summary.md` |
 | RAG v2 全量 | `evaluation/rag/reports/real_20261026_v2_offline_final/summary.md` |

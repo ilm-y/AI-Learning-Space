@@ -4,9 +4,12 @@
 以及**下一次会话怎样区分「历史上错过」和「现在已掌握」**。它不是教学效果验收。
 
 > **LLM 状态必须写明：本演示只使用 Mock LLM。**
-> Mock 输出是确定性的，不是真实模型能力。真实模型验收仍未完成，
-> 见 [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) 第 1 节。
-> 不要把本演示的 SSE 回答当成「真实模型已经学会遵守证据边界」。
+> Mock 输出是确定性的，不是真实模型能力。2026-10-30 已完成真实模型 Agent Runtime
+> 单轮 5 场景复验，以及 Spring SSE 3 轮服务端 E2E（47/0）；但完整产品验收仍未完成，
+> 见 [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) 第 1 节、
+> [phase53-real-model-20261030.md](../testing/phase53-real-model-20261030.md) 和
+> [phase53-spring-e2e-20261030.md](../testing/phase53-spring-e2e-20261030.md)。
+> 不要把本演示的 SSE 回答当成「真实模型已经稳定遵守证据边界」。
 
 ## 1. 前置
 
@@ -229,10 +232,12 @@ SELECT COUNT(*) FROM learning_understanding
 
 **不能证明：**
 
-- 真实模型会稳定遵守证据边界（5.3.2 真实调用为 0）；
+- 真实模型会稳定遵守证据边界（2026-10-30 只做了单轮 5 场景复验 + 3 轮服务端 E2E；
+  C-only 依赖 fallback，服务端 E2E 未覆盖 MQ、Flutter、文档引用）；
 - 教学效果；
 - Flutter 前端可用（仍是脚手架）；
 - 测试作答判分是语义判分（当前是启发式）。
 
 真实模型复验的最低要求与失败样本见 [TEST_MATRIX.md](TEST_MATRIX.md) 第 7、8 节和
-[KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md)。
+[KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md)。服务端 E2E 证据见
+[phase53-spring-e2e-20261030.md](../testing/phase53-spring-e2e-20261030.md)。

@@ -3,9 +3,16 @@
 > 一个能跨对话保留「学习者当前怎么理解某个知识点」、并用这些记录调整后续回答的
 > AI Learning Agent。
 
-**交付快照：** 2026-10-29（阶段 9，证据边界收口；功能冻结）
+**交付快照：** 2026-10-29（阶段 9，证据边界收口；功能冻结）；
+**文档更新：** 2026-10-30（5.3 真实模型复验 + Spring 服务端 E2E）
 
-**状态：** 可本地复现的开发基线；**不是**已完成真实模型验收的产品版本。
+**状态：** 可本地复现的开发基线；**已完成真实模型 Agent 运行时复验（5 场景）**，
+以及 **Spring SSE → Agent → `deepseek-flash` 的真实服务端 E2E（3 轮 / 47 检查）**；
+但**不是**完整产品验收（无 Flutter 业务前端、无 MQ 真实模型链路、无文档 RAG 引用场景）。
+真实模型复验的原始输出、判定与限制见
+[docs/testing/phase53-real-model-20261030.md](docs/testing/phase53-real-model-20261030.md)，
+服务端链路证据见
+[docs/testing/phase53-spring-e2e-20261030.md](docs/testing/phase53-spring-e2e-20261030.md)。
 
 **当前客户端：** Postman / curl。`flutter/` 仍是脚手架，见第 10 节。
 
@@ -292,7 +299,7 @@ AILS_INTERNAL_TOKEN=<token> python -m app.worker
 **不要把不同时间、不同评分规则、不同测试语义的通过率相加。**
 
 ```bash
-# Agent 单元 / 集成（当前 382 passed, 5 skipped, 1 xfailed）
+# Agent 单元 / 集成（当前 383 passed, 5 skipped, 1 xfailed）
 cd agent && python -m pytest -q
 
 # 来源过滤定向回归
@@ -328,11 +335,12 @@ bash scripts/phase6-demo.sh
 
 | 层级 | 最近结果 | 性质 |
 | --- | --- | --- |
-| Agent | 382 passed / 5 skipped / 1 xfailed | Mock + 单元；5 个 skip 是环境门控；1 个 xfail 是已记录的自然语言误述风险 |
+| Agent | 383 passed / 5 skipped / 1 xfailed | Mock + 单元；5 个 skip 是环境门控；1 个 xfail 是已记录的自然语言误述风险 |
 | Spring | 255 条（182 执行通过 / 73 跳过 / 0 失败） | Surefire 的 `Tests run` 含 skip，不能写成 255 passed；73 个 skip 需要真实 MySQL / Docker |
 | 5.1 inline E2E | 101 / 0 / 0 | Mock |
 | 5.1 MQ E2E | 27 / 0 / 0 | Mock LLM + 真 RabbitMQ + 真 Worker |
 | 5.2 学习轨迹 E2E | 94 / 0 / 0 | Mock |
+| 5.3 服务端 E2E（2026-10-30） | **47 / 0 / 0** | Spring SSE → Agent → 真实 `deepseek-flash` |
 | 离线评测 | 40/40，124/124 断言 | 不调用模型 |
 | RAG / 5.3 | 真实模型结果，失败样本保留 | 见测试矩阵 |
 
@@ -346,33 +354,52 @@ bash scripts/phase6-demo.sh
 | --- | --- | --- |
 | 单元 / E2E / 演示 | **Mock LLM** | 检索、上下文、持久化、SSE、状态流转 |
 | RAG 评测（2026-10-26） | 真实 `qwen-plus` | 检索与引用表现；不是教学效果 |
-| 5.3 真实模型行为 | 8 次调用 | A/D 通过，B `PARTIAL`，C `FAIL` |
-| 5.3.2 历史回答复验 | **0 次真实调用** | 只有离线回放和 Mock SSE；不能声称 C 已通过 |
+| 5.3 真实模型行为（2026-10-27 历史） | 8 次调用 | A/D 通过，B `PARTIAL`，C `FAIL`；失败样本保留 |
+| 5.3 真实模型复验（2026-10-30） | **6 次调用 / 5 场景** | A/B/C/D `PASS`；C-only `PASS`（fallback）；见复验报告 |
+| 5.3 服务端 E2E（2026-10-30） | **3 轮聊天 + 3 次 inline 分析，47 / 0** | Spring SSE 契约、消息 / run 落库、真实模型分析、显式复盘上下文均通过 |
+| 5.3.2 历史回答复验（2026-10-30） | **已用真实模型复验** | C 不再编造原因；C-only 被否定句误判后走 fallback |
 | 真实 Qdrant / broker / MySQL 集成 | 5（Agent）+ 73（Spring）个环境门控 skip | 本轮未执行 |
 
 真实模型切换方式：
 
 ```bash
 AILS_LLM_PROVIDER=openai
-AILS_LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-AILS_LLM_MODEL=qwen-plus
+AILS_LLM_BASE_URL=https://api.deepseek.com/v1
+AILS_LLM_MODEL=deepseek-flash
+AILS_LLM_MAX_TOKENS=4096
 AILS_LLM_API_KEY=<从本地 gitignored 配置或环境变量注入>
 ```
 
 `provider=openai` 但缺 Key 时启动即报错，不会静默退回 Mock。
 Embedding 同理，不会从 `openai` 静默退回 `hash`。
 
-**未完成验收的结论：** 历史回答校验器能拦截已知失败样本，但真实模型下次是否合规
-未被验证；因此不能把「历史回答已可靠遵守证据边界」写成交付结论。
+**2026-10-30 复验结论：** 真实模型在 A/B/C/D 四个场景中不再编造未记录的学习过程；
+C-only 的模型回答也正确拒绝了编造，但被 `history_guard` 的否定句规则误判，
+最终由确定性 fallback 交付。因此可以写「已完成单轮真实模型行为复验」，
+但不能写「真实模型已稳定遵守证据边界」：C-only 依赖 fallback，且只跑了一轮。
+完整证据见 [docs/testing/phase53-real-model-20261030.md](docs/testing/phase53-real-model-20261030.md)。
+
+**2026-10-30 服务端 E2E：** 另起 8081 后端 + 8000 真实模型 Agent，通过公开 API 完成
+普通问题、错误解释、显式复盘 3 轮，47 / 0 通过；`message.start → delta → end`、
+消息 / `agent_run` 落库、inline 分析 `agent-v1`、显式复盘 `trajectory` 注入均核对。
+首轮还暴露并修复了一个真实模型契约漂移：`verificationDecision.trigger` 被模型写成
+自由文本，导致整轮分析失败并退回 `rules-v1`；修复后重新验收通过。
+这不代表 Flutter、MQ 真实模型链路或文档 RAG 已验收。证据见
+[docs/testing/phase53-spring-e2e-20261030.md](docs/testing/phase53-spring-e2e-20261030.md)。
 
 ---
 
-## 10. 已知缺陷、未完成验收与运行限制
+## 10. 已知缺陷、验收边界与运行限制
 
 详见 [docs/delivery/KNOWN_LIMITATIONS.md](docs/delivery/KNOWN_LIMITATIONS.md)。摘要：
 
-- **真实模型验收未完成**：5.3.2 为 0 次调用；5.3 的 C 仍 `FAIL`，B 为 `PARTIAL`；
+- **真实模型已做 Agent Runtime 复验 + Spring 服务端 E2E，但仍不是完整产品验收**：
+  5 场景 A/B/C/D `PASS`、C-only 依赖 fallback；服务端 3 轮 47 / 0。Flutter、MQ 真实模型、
+  文档引用场景、重复采样 / 人工评分仍未执行；`deepseek-flash` 在 `max_tokens=1024`
+  时会截断长回答，本轮已改为 4096；
 - **历史校验是句子级启发式**：不能覆盖所有同义改写；非常规措辞可能不触发复盘；
+  C-only 已出现「不能反过来断言你以前没有这个错误」被误判为 `no_history_denial`
+  的真实误报，导致一次多余重生成并最终 fallback；
   显式复盘首字延迟被推迟到完整回答生成后，触发重生成时约等于两次生成；
 - **Flutter 前端未实现**：仍是计数器脚手架；
 - **业务缺口**：导出 / 导入 / 学习计划返回 501；测试判分是长度 + 概念名启发式；

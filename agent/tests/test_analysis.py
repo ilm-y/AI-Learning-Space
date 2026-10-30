@@ -218,6 +218,34 @@ async def test_structured_output_is_sanitized_before_it_reaches_the_backend(sett
     assert result.analyzer_version == ANALYZER_VERSION
 
 
+async def test_invalid_verification_trigger_does_not_discard_evidence(settings):
+    """真实模型会把 trigger 写成自由文本；它只是附加建议，不能拖垮 Evidence。"""
+    payload = {
+        "evidenceCandidates": [
+            {
+                "conceptId": 10,
+                "evidenceType": "USER_EXPLANATION",
+                "observation": "TLB miss 不等于缺页中断",
+                "correctness": "INCORRECT",
+            }
+        ],
+        "verificationDecision": {
+            "action": "ASK_LATER",
+            "trigger": "用户把 TLB miss 直接当成缺页处理的学习",
+            "reason": "需要确认用户是否区分 TLB miss 与缺页",
+        },
+    }
+    runtime = AgentRuntime(settings, _JsonLLM(payload))
+
+    result = await runtime.analyze(make_analyze_request("TLB miss 就等于缺页中断。"))
+
+    assert len(result.evidence_candidates) == 1
+    assert result.evidence_candidates[0].correctness is EvidenceCorrectness.INCORRECT
+    assert result.verification_decision.action is VerificationAction.ASK_LATER
+    assert result.verification_decision.trigger is None
+    assert result.verification_decision.reason == "需要确认用户是否区分 TLB miss 与缺页"
+
+
 async def test_fenced_json_is_accepted(settings):
     """真实模型经常把 JSON 包在 Markdown 围栏里，这是允许的。"""
     text = """好的，分析如下：
