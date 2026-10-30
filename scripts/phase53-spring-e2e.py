@@ -516,6 +516,7 @@ def main() -> int:
         db_port=db_port,
         db_user=db_user,
         db_password=db_password,
+        db_name=os.getenv("MYSQL_DB", "ails"),
         analysis_timeout=args.analysis_timeout,
     )
 
