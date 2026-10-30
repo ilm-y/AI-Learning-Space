@@ -9,6 +9,7 @@ import com.ails.backend.entity.LearningSession;
 import com.ails.backend.enums.SessionStatus;
 import com.ails.backend.mapper.ConversationMapper;
 import com.ails.backend.mapper.LearningSessionMapper;
+import com.ails.backend.mapper.LearningSpaceMapper;
 import com.ails.backend.model.SessionResolver;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +44,7 @@ public class SessionService {
 
     private final LearningSessionMapper sessionMapper;
     private final ConversationMapper conversationMapper;
+    private final LearningSpaceMapper spaceMapper;
     private final LearningSpaceService spaceService;
 
     /**
@@ -69,6 +71,17 @@ public class SessionService {
             // 已经定过归属了。这里读回来而不是返回 null —— 对绝大多数消息来说
             // 「已经归属的那个 Session」才是调用方要的东西。
             return sessionMapper.selectById(conversation.getSessionId());
+        }
+        if (detectedConceptNames == null || detectedConceptNames.isEmpty()) {
+            return null;
+        }
+        // 同一空间下的「第一次归属判定」必须串行：否则并发事务都看到「没有候选」，
+        // 各自 CREATE 出重复 Session；同时 conversation.session_id 的外键检查会给
+        // session 行加共享锁，随后 sessionMapper.updateById 再升级为排他锁，
+        // 两个事务各持一把 S 锁等 X 锁 —— 实测直接死锁回滚一个请求。
+        // 锁空间行而不是全局锁：不同空间互不阻塞；判定完成后立即进入写库，持锁很短。
+        if (spaceMapper.lockById(conversation.getLearningSpaceId()) == null) {
+            return null;
         }
         List<SessionResolver.Candidate> candidates = candidates(conversation.getUserId(),
                 conversation.getLearningSpaceId());
@@ -198,15 +211,19 @@ public class SessionService {
                     conversation.getId(), sessionId);
             return null;
         }
-        conversation.setSessionId(sessionId);
-        conversationMapper.updateById(conversation);
-
         session.setLastActiveAt(LocalDateTime.now());
         if (session.getStatus() == SessionStatus.PAUSED) {
             // 又在这里学起来了，就不是「暂停」了（§十一：ATTACH → ACTIVE）
             session.setStatus(SessionStatus.ACTIVE);
         }
+        // 先写 session，再写 conversation.session_id。
+        // 反过来的话，conversation 的外键检查会先给 session 行加 S 锁，紧接着
+        // sessionMapper.updateById 又要升级成 X 锁；两个并发 ATTACH 各持 S、互等 X，
+        // 就是 FK 检查引发的经典死锁。固定成「先 X 后 FK」的顺序后不会再出现。
         sessionMapper.updateById(session);
+
+        conversation.setSessionId(sessionId);
+        conversationMapper.updateById(conversation);
         return session;
     }
 
