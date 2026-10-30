@@ -18,6 +18,10 @@ evaluation/phase3/artifacts/phase3-smoke-d09/
 evaluation/phase5_budget/reports/**/runs*.jsonl
 # 个人面试准备笔记：不进入仓库（本文件由本地维护）。
 docs/interview-project-deep-dive.md
+# JVM 崩溃 / 重放日志：本地排障产物，不提交
+hs_err_pid*.log
+replay_pid*.log
+
 # 本地日志默认不提交；仅保留关键证据日志（Phase 4.1 索引回收、Phase 6–9 交付验证）。
 evaluation/**/*.log
 !evaluation/phase4_1/index-recovery-it.log
