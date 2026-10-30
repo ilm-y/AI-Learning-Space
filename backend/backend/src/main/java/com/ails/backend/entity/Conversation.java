@@ -2,6 +2,7 @@ package com.ails.backend.entity;
 
 import com.ails.backend.enums.ConversationStatus;
 import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -47,6 +48,20 @@ public class Conversation {
 
     /** 最后消息时间 */
     private LocalDateTime lastMessageAt;
+
+    /**
+     * 对话内最后分配的消息序号（0 = 尚未分配）。
+     * <p>
+     * 分配走 {@code ConversationMapper.incrementLastMessageSeq} 的原子自增，
+     * 不读 {@code MAX(message.sequence_no)}：后者需要在 message 的
+     * {@code uk_msg_conv_seq} 上做锁定范围读，空对话会锁住相邻对话之间的间隙，
+     * 并发写不同对话时互相等待，实测出现 {@code Deadlock found when trying to get lock}。
+     * <p>
+     * <b>必须禁止 updateById 回写。</b> 实体是先读后改的，读到的值可能已经过期；
+     * 若 updateById 把它一起写回，会把并发分配出去的序号覆盖掉。
+     */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Integer lastMessageSeq;
 
     @TableLogic(value = "null", delval = "now()")
     private LocalDateTime deletedAt;

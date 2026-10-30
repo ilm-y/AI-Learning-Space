@@ -132,6 +132,10 @@ CREATE TABLE IF NOT EXISTS `conversation` (
     `title`             VARCHAR(255)          DEFAULT NULL,
     `status`            ENUM ('ACTIVE', 'ARCHIVED') NOT NULL DEFAULT 'ACTIVE',
     `last_message_at`   DATETIME              DEFAULT NULL,
+    -- 对话内消息序号的分配计数器：每次 append 原子 +1 后读回，0 表示尚未分配。
+    -- 不用 SELECT MAX(sequence_no) + FOR UPDATE：那会锁住相邻对话之间的索引间隙，
+    -- 并发写不同对话时互相等待，实测会死锁。
+    `last_message_seq`  INT          NOT NULL DEFAULT 0 COMMENT '最后分配的消息序号，0 = 尚未分配',
     `deleted_at`        DATETIME              DEFAULT NULL COMMENT '软删标记',
     `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

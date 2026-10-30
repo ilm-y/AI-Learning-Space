@@ -26,14 +26,17 @@ import java.util.List;
  * 消息的读写与对话内序号分配。
  * <p>
  * <b>关于 sequence_no：</b>不能写成 {@code SELECT MAX(sequence_no) + 1}。两个并发请求会读到
- * 同一个最大值、算出同一个序号，然后一起写进去。这里的做法是先在事务里
- * {@code SELECT ... FOR UPDATE} 锁住所属 conversation 那一行，再在锁内取最大序号 ——
- * 同一对话的消息写入因此被串行化，跨对话仍然并发。
+ * 同一个最大值、算出同一个序号，然后一起写进去。这里的做法是在
+ * {@code conversation.last_message_seq} 上做原子自增（{@code UPDATE ... SET x = x + 1}），
+ * 同一对话因此被串行化，不同对话各锁各的主键行，互不影响。
  * <p>
- * <b>「锁内取最大序号」这一步本身也有讲究：它必须是锁定读，不能是普通 SELECT。</b>
- * 只加行锁、然后普通地查 MAX，看起来天经地义，实际是错的 —— 详见
- * {@link #nextSequenceNo}。数据库侧另有 {@code UNIQUE(conversation_id, sequence_no)}
- * 兜底，真撞上了会直接报错而不是静默错序。
+ * 早期实现是在事务里锁 conversation 行，再 {@code SELECT MAX(sequence_no) ... FOR UPDATE}。
+ * 序号本身没错，但在 message 的 {@code uk_msg_conv_seq} 上做范围锁定读会锁住索引间隙；
+ * 空对话尤其明显：相邻对话的锁定区间互相覆盖，并发写不同对话时出现死锁
+ * （实测 12 并发里 3 个 500）。计数器把分配动作收敛到一行主键 UPDATE，没有间隙锁。
+ * <p>
+ * 数据库侧仍保留 {@code UNIQUE(conversation_id, sequence_no)} 兜底，真撞上了会直接报错
+ * 而不是静默错序；但它是最后一道防线，不该指望它来保证正确性。
  */
 @Service
 @RequiredArgsConstructor
@@ -186,33 +189,30 @@ public class MessageService {
     /**
      * 取对话内下一个序号。
      * <p>
-     * 两步，缺一不可：
+     * 依赖 {@code conversation.last_message_seq} 的原子自增：UPDATE 本身持有该行写锁，
+     * 同一对话的并发 append 在这里排队；不同对话锁的是不同主键行，不会互相阻塞。
+     * 自增后在<b>同一事务</b>里读回，读到的是自己刚写入的值。
+     * <p>
+     * 这里踩过两次坑，都值得保留：
      * <ol>
-     *   <li>{@code FOR UPDATE} 锁住 conversation 行，把同一对话的并发写入串行化
-     *       （跨对话仍然并发）；</li>
-     *   <li>在锁内取当前最大序号 —— 这一步也必须是<b>锁定读</b>，
-     *       见 {@link MessageMapper#selectMaxSequenceNoForUpdate}：
-     *       普通 SELECT 读的是事务开始时钉下的快照，拿锁也救不回来。</li>
+     *   <li>最初用 {@code SELECT MAX(sequence_no) + 1}，同一对话并发直接撞
+     *       {@code Duplicate entry '7-3' for key 'message.uk_msg_conv_seq'}；</li>
+     *   <li>改成「锁 conversation 行 + 锁定读 MAX」后，单对话正确，但跨对话并发会死锁：
+     *       {@code ORDER BY sequence_no DESC LIMIT 1 FOR UPDATE} 在空区间上加间隙锁，
+     *       相邻对话的区间互相覆盖，12 并发里 3 个请求 500。</li>
      * </ol>
-     * <p>
-     * 这里踩过一次：只做了第 1 步、第 2 步用的是 {@code selectObjs}，同一对话并发发 20 条消息时
-     * 一半直接 500（{@code Duplicate entry '7-3' for key 'message.uk_msg_conv_seq'}）。
-     * 原因是调用方在走到这里之前已经普通读过了 conversation 与 learning_space，
-     * 事务的快照在那时就定住了 —— 行锁确实把两个事务排成了一队，
-     * 但后进去的那个看到的仍是「对方插入之前」的 MAX。
-     * <p>
-     * 数据库侧 {@code UNIQUE(conversation_id, sequence_no)} 仍然留着兜底：真撞上会直接报错，
-     * 而不是静默错序。但它是最后一道防线，不该指望它来保证正确性。
+     * 计数器方案把这两个问题一起消掉：分配只碰 conversation 的主键行，没有范围扫描。
      */
     private int nextSequenceNo(Conversation conversation) {
-        Conversation locked = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
-                .eq(Conversation::getId, conversation.getId())
-                .last("FOR UPDATE"));
-        if (locked == null) {
+        int updated = conversationMapper.incrementLastMessageSeq(conversation.getId());
+        if (updated == 0) {
             throw BusinessException.notFound("对话不存在");
         }
-        Integer max = messageMapper.selectMaxSequenceNoForUpdate(conversation.getId());
-        return (max == null ? 0 : max) + 1;
+        Integer last = conversationMapper.selectLastMessageSeq(conversation.getId());
+        if (last == null) {
+            throw BusinessException.notFound("对话不存在");
+        }
+        return last;
     }
 
     private Conversation requireActiveConversation(Long userId, Long conversationId) {

@@ -15,8 +15,9 @@ import java.time.LocalDateTime;
 /**
  * 消息表（message）。
  * <p>
- * sequence_no 是对话内顺序，靠「锁 conversation 行再取下一个序号」保证并发安全，
- * 而不是 SELECT MAX(sequence_no) + 1（并发会拿到同一个数字）。
+ * sequence_no 是对话内顺序，由 {@code conversation.last_message_seq} 原子自增分配
+ * （见 {@code ConversationMapper.incrementLastMessageSeq}），而不是
+ * SELECT MAX(sequence_no) + 1（并发会拿到同一个数字，锁定读 MAX 还会引入间隙锁）。
  */
 @Data
 @TableName("message")
