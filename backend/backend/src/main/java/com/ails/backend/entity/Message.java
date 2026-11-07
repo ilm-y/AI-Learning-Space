@@ -46,6 +46,15 @@ public class Message {
      */
     private Boolean truncated;
 
+    /**
+     * 结构化来源引用（JSON 数组），只对助手回复有值。
+     * <p>
+     * 元素形如 {@code {documentId, chunkId, chunkIndex, sourceTitle}}；不存 chunk
+     * 正文。历史读取时按当前数据库状态重新判断来源是否仍可访问，见
+     * {@link com.ails.backend.service.CitationService}。
+     */
+    private String citations;
+
     /** 对话内顺序，从 1 开始 */
     private Integer sequenceNo;
 

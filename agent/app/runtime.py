@@ -46,6 +46,7 @@ from app.citation_filter import (
 from app.citations import (
     CitationReport,
     provided_labels_from_context,
+    structured_citations,
     validate_citations,
 )
 from app.config import Settings
@@ -238,7 +239,7 @@ class AgentRuntime:
             # **实际交付文本**，正常应为 0 invalid；它仍写入 trace，供离线评估
             # 复核「过滤后是否还有漏网标注」。模型原本产出的越界标注记录在
             # CITATION_FILTER，不会因为交付文本被清洗而丢失证据。
-            self.validate_citations(prepared)
+            citation_report = self.validate_citations(prepared)
 
             # finish_reason=length 意味着模型因 Token 上限停止：已经产出的文本可以
             # 保留展示，但这一轮不能被当作正常完成。终态信息随 done 一起下发，
@@ -260,6 +261,10 @@ class AgentRuntime:
                     "elapsedMs": trace.elapsed_ms,
                     "finishReason": completion.finish_reason,
                     "truncated": truncated,
+                    # 结构化来源随终态一起交给后端。正文里的 `[资料《…》#…]`
+                    # 仍然是事实上的展示标签，但客户端不再只能靠正则去猜：
+                    # documentId / chunkId 才是可追溯、可校验权限的第一手字段。
+                    "citations": structured_citations(citation_report),
                 },
             )
         except (RetrievalError, LLMError) as exc:

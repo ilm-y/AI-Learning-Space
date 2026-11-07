@@ -5,6 +5,8 @@ import com.ails.backend.agent.AgentStreamHandler;
 import com.ails.backend.agent.StreamCompletion;
 import com.ails.backend.common.BusinessException;
 import com.ails.backend.dto.agent.ChatAgentRequest;
+import com.ails.backend.dto.conversation.CitationMetadata;
+import com.ails.backend.dto.conversation.CitationResponse;
 import com.ails.backend.entity.AgentRun;
 import com.ails.backend.entity.Conversation;
 import com.ails.backend.entity.LearningSession;
@@ -25,7 +27,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -54,7 +58,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <pre>
  *   event: message.start   data: { runId, conversationId }   // 首事件，必有
  *   event: message.delta   data: { delta }                    // 若干次增量文本
- *   event: message.end     data: { messageId, runId }         // 成功终态
+ *   event: message.end     data: { messageId, runId, citations } // 成功终态；citations 可为空数组
  *   event: message.error   data: { runId, code, message }     // 失败终态
  * </pre>
  * runId 是一条 {@code agent_run}（run_type = CHAT）的主键，从第一个事件起就存在，
@@ -265,18 +269,27 @@ public class ChatService {
                     boolean truncated = terminal.truncated();
                     Message assistantMessage = null;
                     try {
+                        // 引用只在这里做一次转换：Agent DTO → 可持久化的快照。
+                        // 持久化成功后才随 message.end 下发，保证「看到引用」和
+                        // 「重新加载消息还能看到引用」是同一份事实。
+                        List<CitationMetadata> citations = terminal.citations().stream()
+                                .map(CitationMetadata::fromAgent)
+                                .filter(Objects::nonNull)
+                                .toList();
                         // 把 buffer 里的全文存成一条助手消息 —— 从这一刻起 GET /messages 才能看到 AI 回复。
                         // 截断时保留已经生成的部分内容，但持久化层同时记下「不完整」。
-                        assistantMessage = truncated
-                                ? messageService.appendAssistantMessage(
-                                        conversation.getId(), buffer.toString(), true)
-                                : messageService.appendAssistantMessage(
-                                        conversation.getId(), buffer.toString());
+                        assistantMessage = messageService.appendAssistantMessage(
+                                conversation.getId(), buffer.toString(), truncated, citations);
                         // 结束事件：messageId 让前端把「刚流式出来的那段字」锚定到消息列表的具体行上。
                         // 正常完成保持原有字段不变；截断时追加明确标记，旧客户端可忽略。
                         Map<String, Object> end = new LinkedHashMap<>();
                         end.put("messageId", assistantMessage.getId());
                         end.put("runId", run.getId());
+                        // SSE 是实时链路：这些来源刚刚通过检索白名单，因此 available=true。
+                        // 历史读取（GET /messages）会按届时的文档状态重新计算可用性。
+                        end.put("citations", citations.stream()
+                                .map(citation -> CitationResponse.from(citation, true))
+                                .toList());
                         if (truncated) {
                             end.put("truncated", true);
                             end.put("finishReason", terminal.finishReason());

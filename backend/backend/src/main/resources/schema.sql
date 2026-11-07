@@ -156,6 +156,7 @@ CREATE TABLE IF NOT EXISTS `message` (
     `content`         LONGTEXT    NOT NULL COMMENT 'Markdown 格式',
     `tokens`          INT                  DEFAULT NULL,
     `truncated`       TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '助手回复是否因 Token 上限被截断',
+    `citations`       JSON                 DEFAULT NULL COMMENT '助手回复的结构化来源 [{documentId,chunkId,chunkIndex,sourceTitle}]；不存 chunk 正文',
     `sequence_no`     INT         NOT NULL COMMENT '对话内顺序，从 1 开始',
     `deleted_at`      DATETIME             DEFAULT NULL COMMENT '软删标记',
     `created_at`      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,

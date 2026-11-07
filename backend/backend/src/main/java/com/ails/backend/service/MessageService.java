@@ -2,6 +2,8 @@ package com.ails.backend.service;
 
 import com.ails.backend.common.BusinessException;
 import com.ails.backend.dto.agent.ChatHistoryMessage;
+import com.ails.backend.dto.conversation.CitationMetadata;
+import com.ails.backend.dto.conversation.CitationResponse;
 import com.ails.backend.dto.conversation.MessageResponse;
 import com.ails.backend.entity.Conversation;
 import com.ails.backend.entity.Message;
@@ -21,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 消息的读写与对话内序号分配。
@@ -45,15 +48,23 @@ public class MessageService {
     private final MessageMapper messageMapper;
     private final ConversationMapper conversationMapper;
     private final ConversationService conversationService;
+    private final CitationService citationService;
 
     @Transactional(readOnly = true)
     public List<MessageResponse> listByConversation(Long userId, Long conversationId) {
         conversationService.ownedConversation(userId, conversationId);
-        return messageMapper.selectList(new LambdaQueryWrapper<Message>()
-                        .eq(Message::getConversationId, conversationId)
-                        .orderByAsc(Message::getSequenceNo)
-                        .orderByAsc(Message::getId))
-                .stream().map(MessageResponse::from).toList();
+        List<Message> messages = messageMapper.selectList(new LambdaQueryWrapper<Message>()
+                .eq(Message::getConversationId, conversationId)
+                .orderByAsc(Message::getSequenceNo)
+                .orderByAsc(Message::getId));
+        // 引用可用性按**当前**文档 / chunk 状态计算，而不是写入时的布尔值：
+        // 文档删除或重新索引后，历史消息必须显式变成「来源已不可用」。
+        Map<Long, List<CitationResponse>> citations =
+                citationService.resolveForMessages(userId, messages);
+        return messages.stream()
+                .map(message -> MessageResponse.from(message,
+                        citations.getOrDefault(message.getId(), List.of())))
+                .toList();
     }
 
     /**
@@ -84,12 +95,24 @@ public class MessageService {
      */
     @Transactional
     public Message appendAssistantMessage(Long conversationId, String content, boolean truncated) {
+        return appendAssistantMessage(conversationId, content, truncated, List.of());
+    }
+
+    /**
+     * 落一条助手消息，同时保存 Agent 校验通过的结构化来源。
+     * <p>
+     * 引用只保存身份与标题快照，不保存 chunk 正文；可用性在读取时重新判断。
+     * 截断回答同样保存引用：已经展示给用户的来源标签不能因为没有分析价值就消失。
+     */
+    @Transactional
+    public Message appendAssistantMessage(Long conversationId, String content, boolean truncated,
+                                          List<CitationMetadata> citations) {
         Conversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
             throw BusinessException.notFound("对话不存在");
         }
         return append(conversation, MessageRole.ASSISTANT, MessageType.TEXT, content,
-                truncated ? Boolean.TRUE : null);
+                truncated ? Boolean.TRUE : null, citations);
     }
 
     /**
@@ -165,11 +188,11 @@ public class MessageService {
     // ================= 内部实现 =================
 
     private Message append(Conversation conversation, MessageRole role, MessageType type, String content) {
-        return append(conversation, role, type, content, null);
+        return append(conversation, role, type, content, null, List.of());
     }
 
     private Message append(Conversation conversation, MessageRole role, MessageType type,
-                           String content, Boolean truncated) {
+                           String content, Boolean truncated, List<CitationMetadata> citations) {
         Message message = new Message();
         message.setConversationId(conversation.getId());
         message.setRole(role);
@@ -177,6 +200,8 @@ public class MessageService {
         message.setContent(content);
         // 只在截断时写 true；普通消息保持 null，交给数据库默认值 0。
         message.setTruncated(truncated);
+        // 空引用写 NULL；JSON 序列化只在这里发生，读取侧统一经过 CitationService。
+        message.setCitations(citationService.serialize(citations));
         message.setTokens(estimateTokens(content));
         message.setSequenceNo(nextSequenceNo(conversation));
         messageMapper.insert(message);

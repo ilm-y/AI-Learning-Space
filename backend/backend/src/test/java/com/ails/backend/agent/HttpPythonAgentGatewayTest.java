@@ -1,5 +1,6 @@
 package com.ails.backend.agent;
 
+import com.ails.backend.dto.agent.AgentCitation;
 import com.ails.backend.dto.agent.ChatAgentRequest;
 import com.ails.backend.dto.agent.ChatHistoryMessage;
 import com.ails.backend.enums.MessageRole;
@@ -334,6 +335,40 @@ class HttpPythonAgentGatewayTest {
         assertThat(lastConnectionHeader.get())
                 .as("明文 HTTP 下不应出现 h2c 升级头")
                 .doesNotContainIgnoringCase("Upgrade");
+    }
+
+    @Test
+    @DisplayName("done 携带 citations：解析为结构化引用，畸形条目丢弃、重复条目去重")
+    void parsesStructuredCitations() throws IOException {
+        HttpServer server = startServer(200, """
+                event: done
+                data: {"runId":1,"citations":[{"documentId":10,"chunkId":1,"chunkIndex":0,"sourceTitle":"zenframe.md"},{"documentId":10,"chunkId":1,"chunkIndex":0,"sourceTitle":"重复条目"},{"documentId":11,"chunkId":2,"sourceTitle":"内存管理.md"},{"documentId":0,"chunkId":3,"sourceTitle":"非法文档"},{"documentId":12,"sourceTitle":"缺少 chunk"},{"documentId":13,"chunkId":4,"sourceTitle":"  "},{"documentId":"14","chunkId":5,"sourceTitle":"类型错误"}]}
+
+                """);
+
+        RecordingHandler handler = new RecordingHandler();
+        gateway(server).streamReply(sampleRequest(), handler);
+
+        assertThat(handler.completions).hasSize(1);
+        assertThat(handler.completions.get(0).citations()).containsExactly(
+                new AgentCitation(10L, 1L, 0, "zenframe.md"),
+                new AgentCitation(11L, 2L, null, "内存管理.md"));
+    }
+
+    @Test
+    @DisplayName("done 没有 citations 字段：终态引用为空，旧 Agent 不因此失败")
+    void missingCitationsIsCompatible() throws IOException {
+        HttpServer server = startServer(200, """
+                event: done
+                data: {"runId":1}
+
+                """);
+
+        RecordingHandler handler = new RecordingHandler();
+        gateway(server).streamReply(sampleRequest(), handler);
+
+        assertThat(handler.completions).hasSize(1);
+        assertThat(handler.completions.get(0).citations()).isEmpty();
     }
 
     // ---------- 脚手架 ----------

@@ -24,7 +24,8 @@ SSE 事件（Backend 与 Agent 之间的内网契约，与对前端的 message.*
 meta    { runId, detectedConcepts, estimatedTokens, warnings }
 delta   { delta }
 done    { runId, detectedConcepts, estimatedTokens, elapsedMs,
-          finishReason, truncated }   # finishReason=length ⇒ truncated=true
+          finishReason, truncated,    # finishReason=length ⇒ truncated=true
+          citations }                # [{documentId, chunkId, chunkIndex, sourceTitle}]
 error   { runId, message }
 ```
 """

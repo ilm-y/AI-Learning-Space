@@ -3,7 +3,10 @@ package com.ails.backend.service;
 import com.ails.backend.agent.AgentGateway;
 import com.ails.backend.agent.AgentStreamHandler;
 import com.ails.backend.agent.StreamCompletion;
+import com.ails.backend.dto.agent.AgentCitation;
 import com.ails.backend.dto.agent.ChatAgentRequest;
+import com.ails.backend.dto.conversation.CitationMetadata;
+import com.ails.backend.dto.conversation.CitationResponse;
 import com.ails.backend.entity.AgentRun;
 import com.ails.backend.entity.Conversation;
 import com.ails.backend.entity.Message;
@@ -15,13 +18,18 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -100,7 +108,7 @@ class ChatServiceTest {
     @Test
     @DisplayName("正常 SSE 流：助手消息落库一次、分析触发一次")
     void normalStreamPersistsOnceAndAnalyzesOnce() {
-        when(messageService.appendAssistantMessage(CONVERSATION_ID, ANSWER))
+        when(messageService.appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList()))
                 .thenReturn(assistantMessage());
         handlerWithDeltaAndComplete();
 
@@ -109,7 +117,7 @@ class ChatServiceTest {
 
         chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
 
-        verify(messageService).appendAssistantMessage(CONVERSATION_ID, ANSWER);
+        verify(messageService).appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList());
         verify(analysisDispatchService).dispatch(
                 conversation, userMessage, ANSWER, ASSISTANT_MESSAGE_ID, "token", opening);
         assertThat(emitter.sendCount).isEqualTo(3); // start / delta / end
@@ -126,7 +134,7 @@ class ChatServiceTest {
     @Test
     @DisplayName("首个 delta 发送抛运行时异常：仍完成落库并触发分析")
     void sendFailureDoesNotSkipPersistenceOrAnalysis() {
-        when(messageService.appendAssistantMessage(CONVERSATION_ID, ANSWER))
+        when(messageService.appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList()))
                 .thenReturn(assistantMessage());
         handlerWithDeltaAndComplete();
 
@@ -136,7 +144,7 @@ class ChatServiceTest {
 
         chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
 
-        verify(messageService, times(1)).appendAssistantMessage(CONVERSATION_ID, ANSWER);
+        verify(messageService, times(1)).appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList());
         verify(analysisDispatchService, times(1)).dispatch(
                 conversation, userMessage, ANSWER, ASSISTANT_MESSAGE_ID, "token", opening);
         assertThat(completedRun().getStatus()).isEqualTo(AgentRunStatus.COMPLETED);
@@ -145,7 +153,7 @@ class ChatServiceTest {
     @Test
     @DisplayName("助手消息持久化后 complete() 抛异常：仍触发分析，且不重复保存")
     void completeFailureAfterPersistenceStillAnalyzes() {
-        when(messageService.appendAssistantMessage(CONVERSATION_ID, ANSWER))
+        when(messageService.appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList()))
                 .thenReturn(assistantMessage());
         handlerWithDeltaAndComplete();
 
@@ -155,7 +163,7 @@ class ChatServiceTest {
         chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
 
         assertThat(emitter.completed).isTrue();
-        verify(messageService, times(1)).appendAssistantMessage(CONVERSATION_ID, ANSWER);
+        verify(messageService, times(1)).appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList());
         verify(analysisDispatchService, times(1)).dispatch(
                 conversation, userMessage, ANSWER, ASSISTANT_MESSAGE_ID, "token", opening);
         assertThat(completedRun().getStatus()).isEqualTo(AgentRunStatus.COMPLETED);
@@ -164,7 +172,7 @@ class ChatServiceTest {
     @Test
     @DisplayName("截断回答：部分内容落库并标记 truncated，run=TRUNCATED，不触发分析")
     void truncatedStreamPersistsPartialButSkipsAnalysis() {
-        when(messageService.appendAssistantMessage(CONVERSATION_ID, ANSWER, true))
+        when(messageService.appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(true), anyList()))
                 .thenReturn(assistantMessage());
         doAnswer(invocation -> {
             AgentStreamHandler handler = invocation.getArgument(1);
@@ -179,7 +187,7 @@ class ChatServiceTest {
         chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
 
         // 已生成的部分仍要保存，用户重进对话时不会看到空洞
-        verify(messageService).appendAssistantMessage(CONVERSATION_ID, ANSWER, true);
+        verify(messageService).appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(true), anyList());
         // 不完整回答不能作为完整学习证据
         verifyNoInteractions(analysisDispatchService);
         assertThat(emitter.sendCount).isEqualTo(3); // start / delta / end
@@ -191,7 +199,7 @@ class ChatServiceTest {
     @Test
     @DisplayName("助手消息落库失败：不启动学习分析")
     void assistantPersistenceFailureDoesNotAnalyze() {
-        when(messageService.appendAssistantMessage(CONVERSATION_ID, ANSWER))
+        when(messageService.appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList()))
                 .thenThrow(new RuntimeException("database unavailable"));
         handlerWithDeltaAndComplete();
 
@@ -203,6 +211,38 @@ class ChatServiceTest {
         verifyNoInteractions(analysisDispatchService);
         assertThat(completedRun().getStatus()).isEqualTo(AgentRunStatus.FAILED);
         assertThat(emitter.completed).isTrue();
+    }
+
+    @Test
+    @DisplayName("Agent 返回结构化引用：随助手消息落库，并出现在 message.end")
+    @SuppressWarnings("unchecked")
+    void structuredCitationsArePersistedAndSentInEndEvent() {
+        when(messageService.appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList()))
+                .thenReturn(assistantMessage());
+        AgentCitation citation = new AgentCitation(10L, 1L, 0, "zenframe.md");
+        doAnswer(invocation -> {
+            AgentStreamHandler handler = invocation.getArgument(1);
+            handler.onDelta(ANSWER);
+            handler.onComplete(new StreamCompletion(null, false, List.of(citation)));
+            return null;
+        }).when(agentGateway).streamReply(any(ChatAgentRequest.class), any(AgentStreamHandler.class));
+
+        TestEmitter emitter = new TestEmitter(false, false);
+        chatService = serviceWith(emitter);
+
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
+
+        // ① 引用交给持久化层（落库后 GET /messages 才能恢复）
+        ArgumentCaptor<List<CitationMetadata>> stored = ArgumentCaptor.forClass(List.class);
+        verify(messageService).appendAssistantMessage(
+                eq(CONVERSATION_ID), eq(ANSWER), eq(false), stored.capture());
+        assertThat(stored.getValue())
+                .containsExactly(new CitationMetadata(10L, 1L, 0, "zenframe.md"));
+
+        // ② 同一份引用出现在 message.end，实时链路不需要另查一次
+        Map<String, Object> end = emitter.payloadOf("message.end");
+        assertThat(end.get("citations"))
+                .isEqualTo(List.of(new CitationResponse(10L, 1L, 0, "zenframe.md", true)));
     }
 
     private void handlerWithDeltaAndComplete() {
@@ -244,6 +284,7 @@ class ChatServiceTest {
 
         private final boolean failOnSecondSend;
         private final boolean failComplete;
+        private final List<SseEventBuilder> events = new ArrayList<>();
         private int sendCount;
         private boolean completed;
 
@@ -254,10 +295,32 @@ class ChatServiceTest {
 
         @Override
         public void send(SseEventBuilder builder) {
+            events.add(builder);
             sendCount++;
             if (failOnSecondSend && sendCount == 2) {
                 throw new NullPointerException("client disconnected during send");
             }
+        }
+
+        /** 取出指定事件的 data 载荷（未序列化，仍是 send 时传入的对象）。 */
+        private Map<String, Object> payloadOf(String eventName) {
+            for (SseEventBuilder builder : events) {
+                Set<ResponseBodyEmitter.DataWithMediaType> parts = builder.build();
+                boolean matches = parts.stream().anyMatch(part ->
+                        part.getData() instanceof String text
+                                && text.contains("event:" + eventName));
+                if (!matches) {
+                    continue;
+                }
+                for (ResponseBodyEmitter.DataWithMediaType part : parts) {
+                    if (part.getData() instanceof Map<?, ?> payload) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> typed = (Map<String, Object>) payload;
+                        return typed;
+                    }
+                }
+            }
+            return Map.of();
         }
 
         @Override

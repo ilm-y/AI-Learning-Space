@@ -3,6 +3,7 @@ package com.ails.backend.service;
 import com.ails.backend.agent.AgentGateway;
 import com.ails.backend.agent.AgentStreamHandler;
 import com.ails.backend.agent.StreamCompletion;
+import com.ails.backend.dto.agent.AgentCitation;
 import com.ails.backend.dto.agent.ChatAgentRequest;
 import com.ails.backend.entity.Conversation;
 import com.ails.backend.entity.Message;
@@ -44,6 +45,7 @@ import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -248,7 +250,8 @@ class ChatSseIntegrationTest {
     @DisplayName("助手消息持久化失败：发送 message.error，run=FAILED，禁止启动分析")
     void assistantPersistenceFailureSendsErrorAndSkipsAnalysis() throws Exception {
         doThrow(new RuntimeException("database unavailable"))
-                .when(messageService).appendAssistantMessage(eq(conversationId), anyString());
+                .when(messageService).appendAssistantMessage(
+                        eq(conversationId), anyString(), eq(false), anyList());
 
         List<SseEvent> events = new ArrayList<>();
         try (SseStream stream = openStream(conversationId, token, QUESTION)) {
@@ -355,6 +358,55 @@ class ChatSseIntegrationTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(assistant.get("truncated").asBoolean()).isTrue();
+    }
+
+    // ===================== 4.2 来源引用闭环 =====================
+
+    @Test
+    @DisplayName("结构化引用：SSE 下发 → 落库 → 历史恢复；文档删除后 available=false，跨用户不可读")
+    void citationsRoundTripAndReflectDocumentAvailability() throws Exception {
+        Long documentId = insertDocument(userId, spaceId, "zenframe.md");
+        Long chunkId = insertChunk(documentId, 0, "TLB 缓存的是页表项。");
+        agentGateway.withCitations(
+                List.of(new AgentCitation(documentId, chunkId, 0, "zenframe.md")));
+
+        // ① 实时链路：引用随 message.end 下发
+        try (SseStream stream = openStream(conversationId, token, QUESTION)) {
+            SseEvent end = readUntil(stream, "message.end");
+            assertThat(end).isNotNull();
+            JsonNode live = objectMapper.readTree(end.data()).get("citations");
+            assertThat(live).hasSize(1);
+            assertCitation(live.get(0), documentId, chunkId, "zenframe.md", true);
+        }
+
+        // ② 落库的是身份快照，不含读取时才计算的 available
+        String storedJson = jdbc.queryForObject(
+                "SELECT citations FROM message WHERE role = 'ASSISTANT'", String.class);
+        JsonNode stored = objectMapper.readTree(storedJson);
+        assertThat(stored).hasSize(1);
+        assertThat(stored.get(0).get("documentId").asLong()).isEqualTo(documentId);
+        assertThat(stored.get(0).get("chunkId").asLong()).isEqualTo(chunkId);
+        assertThat(stored.get(0).get("sourceTitle").asText()).isEqualTo("zenframe.md");
+        assertThat(stored.get(0).has("available"))
+                .as("available 由读取时按当前文档状态计算，不应固化进快照")
+                .isFalse();
+
+        // ③ 重新加载历史消息：引用可恢复且当前可用
+        JsonNode history = assistantMessage(listMessages());
+        assertThat(history.get("citations")).hasSize(1);
+        assertCitation(history.get("citations").get(0), documentId, chunkId, "zenframe.md", true);
+
+        // ④ 文档软删后：历史引用明确不可用，不留下会 404 的有效链接
+        jdbc.update("UPDATE document SET deleted_at = NOW() WHERE id = ?", documentId);
+        JsonNode afterDeletion = assistantMessage(listMessages());
+        assertThat(afterDeletion.get("citations")).hasSize(1);
+        assertCitation(afterDeletion.get("citations").get(0),
+                documentId, chunkId, "zenframe.md", false);
+
+        // ⑤ 其他用户连这条对话都读不到，引用不构成绕过文档权限的入口
+        HttpResponse<String> denied = getMessages(conversationId,
+                jwtUtil.generateToken(otherUserId, "chat_sse_it_other"));
+        assertThat(denied.statusCode()).isEqualTo(404);
     }
 
     // ===================== 5. 重复请求 / 越权 =====================
@@ -464,18 +516,38 @@ class ChatSseIntegrationTest {
     }
 
     private List<JsonNode> listMessages() throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl() + "/api/conversations/" + conversationId + "/messages"))
-                .timeout(Duration.ofSeconds(10))
-                .header("Authorization", "Bearer " + token)
-                .GET()
-                .build();
-        HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        HttpResponse<String> response = getMessages(conversationId, token);
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode data = objectMapper.readTree(response.body()).get("data");
         List<JsonNode> messages = new ArrayList<>();
         data.forEach(messages::add);
         return messages;
+    }
+
+    private HttpResponse<String> getMessages(Long conversation, String authToken) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + "/api/conversations/" + conversation + "/messages"))
+                .timeout(Duration.ofSeconds(10))
+                .header("Authorization", "Bearer " + authToken)
+                .GET()
+                .build();
+        return http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    }
+
+    private static JsonNode assistantMessage(List<JsonNode> messages) {
+        return messages.stream()
+                .filter(node -> "ASSISTANT".equals(node.get("role").asText()))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private static void assertCitation(JsonNode citation, Long documentId, Long chunkId,
+                                       String sourceTitle, boolean available) {
+        assertThat(citation.get("documentId").asLong()).isEqualTo(documentId);
+        assertThat(citation.get("chunkId").asLong()).isEqualTo(chunkId);
+        assertThat(citation.get("chunkIndex").asInt()).isZero();
+        assertThat(citation.get("sourceTitle").asText()).isEqualTo(sourceTitle);
+        assertThat(citation.get("available").asBoolean()).isEqualTo(available);
     }
 
     private String baseUrl() {
@@ -514,6 +586,25 @@ class ChatSseIntegrationTest {
             Thread.sleep(50);
         }
         throw new AssertionError("等待超时：" + description);
+    }
+
+    private Long insertDocument(Long ownerId, Long learningSpaceId, String name) {
+        jdbc.update("INSERT INTO document (learning_space_id, user_id, name, file_name, "
+                        + "storage_uri, file_type, size, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'READY')",
+                learningSpaceId, ownerId, name, name, "chat-sse-it/" + name, "text/markdown", 128L);
+        return jdbc.queryForObject(
+                "SELECT id FROM document WHERE name = ? ORDER BY id DESC LIMIT 1",
+                Long.class, name);
+    }
+
+    private Long insertChunk(Long documentId, int chunkIndex, String content) {
+        jdbc.update("INSERT INTO document_chunk (document_id, index_version, chunk_index, content) "
+                        + "VALUES (?, 0, ?, ?)",
+                documentId, chunkIndex, content);
+        return jdbc.queryForObject(
+                "SELECT id FROM document_chunk WHERE document_id = ? AND chunk_index = ? "
+                        + "ORDER BY id DESC LIMIT 1",
+                Long.class, documentId, chunkIndex);
     }
 
     private Long insertUser(String username) {
@@ -580,9 +671,11 @@ class ChatSseIntegrationTest {
     static final class ControllableAgentGateway implements AgentGateway {
 
         private volatile Mode mode = Mode.NORMAL;
+        private volatile List<AgentCitation> citations = List.of();
 
         void reset() {
             mode = Mode.NORMAL;
+            citations = List.of();
         }
 
         void emptyStream() {
@@ -597,6 +690,11 @@ class ChatSseIntegrationTest {
             mode = Mode.TRUNCATED;
         }
 
+        void withCitations(List<AgentCitation> structured) {
+            mode = Mode.NORMAL;
+            citations = List.copyOf(structured);
+        }
+
         @Override
         public void streamReply(ChatAgentRequest request, AgentStreamHandler handler) {
             switch (mode) {
@@ -606,7 +704,7 @@ class ChatSseIntegrationTest {
                 case NORMAL -> {
                     handler.onDelta(ANSWER_PART_1);
                     handler.onDelta(ANSWER_PART_2);
-                    handler.onComplete();
+                    handler.onComplete(new StreamCompletion(null, false, citations));
                 }
                 case TRUNCATED -> {
                     handler.onDelta(ANSWER_PART_1);

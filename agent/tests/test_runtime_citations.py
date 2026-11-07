@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
+from app.citations import structured_citations, validate_citations
 from app.config import Settings
 from app.llm.base import ChatMessage
 from app.retriever.base import KnowledgeResult, KnowledgeStatus
@@ -164,3 +165,91 @@ async def test_runtime_accepts_valid_citation() -> None:
 
     assert report.valid == 1
     assert report.invalid == 0
+
+
+def _chunk() -> KnowledgeChunk:
+    return KnowledgeChunk(
+        id=1,
+        document_id=10,
+        chunk_index=0,
+        document_name="zenframe.md",
+        content="ZenFrame 的提醒模块通过 MQTT 发送云端定时提醒。",
+    )
+
+
+async def test_stream_done_carries_structured_citations(monkeypatch) -> None:
+    """终态事件必须携带结构化来源，客户端不再只能解析正文标签。"""
+
+    runtime = AgentRuntime(
+        Settings(_env_file=None, retriever_mode="fixture", max_context_tokens=3000),
+        FakeLLM(
+            "ZenFrame 的提醒模块通过 MQTT 发送云端定时提醒 [资料《zenframe.md》#0]。"
+        ),
+    )
+    monkeypatch.setattr(
+        "app.runtime.build_retriever", lambda *args, **kwargs: FakeRetriever(_chunk())
+    )
+    try:
+        events = [
+            event
+            async for event in runtime.stream(
+                request("ZenFrame 的提醒模块通过什么协议？")
+            )
+        ]
+    finally:
+        await runtime.aclose()
+
+    done = events[-1]
+    assert done.event == "done"
+    assert done.data["citations"] == [
+        {
+            "documentId": 10,
+            "chunkId": 1,
+            "chunkIndex": 0,
+            "sourceTitle": "zenframe.md",
+        }
+    ]
+
+
+async def test_stream_done_citations_is_empty_without_labels(monkeypatch) -> None:
+    """没有引用时下发空数组，保持旧客户端可忽略该字段。"""
+
+    runtime = AgentRuntime(
+        Settings(_env_file=None, retriever_mode="fixture", max_context_tokens=3000),
+        FakeLLM("ZenFrame 的提醒模块通过 MQTT 发送云端定时提醒。"),
+    )
+    monkeypatch.setattr(
+        "app.runtime.build_retriever", lambda *args, **kwargs: FakeRetriever(_chunk())
+    )
+    try:
+        events = [
+            event
+            async for event in runtime.stream(
+                request("ZenFrame 的提醒模块通过什么协议？")
+            )
+        ]
+    finally:
+        await runtime.aclose()
+
+    assert events[-1].event == "done"
+    assert events[-1].data["citations"] == []
+
+
+def test_structured_citations_deduplicate_and_skip_unresolvable_labels() -> None:
+    hint = _chunk()
+    report = validate_citations(
+        "第一句 [资料《zenframe.md》#0]。第二句再次引用 [资料《zenframe.md》#0]，"
+        "还有一条不存在的 [资料《missing.md》#9]。",
+        [hint],
+    )
+
+    assert report.valid == 2
+    assert report.invalid == 1
+    assert structured_citations(report) == [
+        {
+            "documentId": 10,
+            "chunkId": 1,
+            "chunkIndex": 0,
+            "sourceTitle": "zenframe.md",
+        }
+    ]

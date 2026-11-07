@@ -1,5 +1,6 @@
 package com.ails.backend.agent;
 
+import com.ails.backend.dto.agent.AgentCitation;
 import com.ails.backend.dto.agent.ChatAgentRequest;
 import com.ails.backend.security.InternalIdentitySigner;
 import com.ails.backend.utils.JsonUtil;
@@ -20,6 +21,9 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
@@ -47,7 +51,8 @@ import java.util.stream.Stream;
  *   <tr><td>{@code meta}</td><td>只记日志（命中概念、上下文规模），无对应回调</td></tr>
  *   <tr><td>{@code delta}</td><td>{@link AgentStreamHandler#onDelta(String)}</td></tr>
  *   <tr><td>{@code done}</td><td>{@link AgentStreamHandler#onComplete(StreamCompletion)}：
- *       {@code finishReason=length} / {@code truncated=true} 时保留部分内容但标记不完整</td></tr>
+ *       {@code finishReason=length} / {@code truncated=true} 时保留部分内容但标记不完整；
+ *       {@code citations} 原样解析成终态元数据，畸形条目逐条丢弃</td></tr>
  *   <tr><td>{@code error}</td><td>{@link AgentStreamHandler#onError(int, String)}</td></tr>
  * </table>
  * {@code error} 的 {@code code} <b>原样透传</b>事件里的 int，不在这里另编一套常量：
@@ -290,7 +295,8 @@ public class HttpPythonAgentGateway implements AgentGateway {
                 // truncated=false，也不能把这一轮当成正常完成。
                 boolean truncated = "length".equals(finishReason)
                         || node.path("truncated").asBoolean(false);
-                finish(handler, terminated, new StreamCompletion(finishReason, truncated));
+                finish(handler, terminated,
+                        new StreamCompletion(finishReason, truncated, parseCitations(node)));
             }
             case "error" -> finish(handler, terminated, false,
                     // 正常路径下这个 int 由上游给出；asInt 的默认值只在事件本身畸形时才会生效
@@ -298,6 +304,49 @@ public class HttpPythonAgentGateway implements AgentGateway {
                     node.path("message").asText("Agent 生成失败"));
             default -> log.debug("忽略未知事件: {}", eventName);
         }
+    }
+
+    /**
+     * 解析 {@code done.citations}。畸形条目逐条丢弃，不因为一条坏数据丢掉整轮终态。
+     * <p>
+     * 只接受正数 documentId / chunkId 和非空标题：没有数据库身份的引用无法在历史
+     * 读取时校验可用性，也无法安全地打开原文，宁可不下发。
+     */
+    private static List<AgentCitation> parseCitations(JsonNode done) {
+        JsonNode array = done.path("citations");
+        if (!array.isArray()) {
+            return List.of();
+        }
+        Map<String, AgentCitation> unique = new LinkedHashMap<>();
+        for (JsonNode item : array) {
+            Long documentId = positiveLong(item.get("documentId"));
+            Long chunkId = positiveLong(item.get("chunkId"));
+            String sourceTitle = item.path("sourceTitle").asText("").trim();
+            if (documentId == null || chunkId == null || sourceTitle.isEmpty()) {
+                continue;
+            }
+            Integer chunkIndex = nonNegativeInt(item.get("chunkIndex"));
+            String key = documentId + ":" + chunkId;
+            unique.putIfAbsent(key,
+                    new AgentCitation(documentId, chunkId, chunkIndex, sourceTitle));
+        }
+        return List.copyOf(unique.values());
+    }
+
+    private static Long positiveLong(JsonNode node) {
+        if (node == null || !node.isIntegralNumber()) {
+            return null;
+        }
+        long value = node.asLong();
+        return value > 0 ? value : null;
+    }
+
+    private static Integer nonNegativeInt(JsonNode node) {
+        if (node == null || !node.isIntegralNumber()) {
+            return null;
+        }
+        long value = node.asLong();
+        return value >= 0 && value <= Integer.MAX_VALUE ? (int) value : null;
     }
 
     /** 正常终局：把完成原因一起交给调用方，截断不能被压缩成「正常完成」。 */

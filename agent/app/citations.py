@@ -211,6 +211,42 @@ def format_source_label(chunk: KnowledgeChunk) -> str:
     return f"资料片段#{chunk.id}"
 
 
+def structured_citations(report: CitationReport) -> list[dict[str, object]]:
+    """把校验通过的标注收敛成可追溯到 chunk 的结构化来源。
+
+    只保留**合法且带数据库身份**的标注：非法标注已经被流式过滤器丢弃，不进入
+    交付文本；Fixture / 旧数据没有 document_id 或 chunk_id 时也无法生成可靠链接，
+    宁可不下发，也不让客户端拿到一条指不到任何来源的引用。
+
+    同一 `(document_id, chunk_id)` 在回答中被引用多次时只保留一次，顺序按首次
+    出现。字段命名与 Spring 侧的 DTO 对齐（camelCase）：
+    `documentId / chunkId / chunkIndex / sourceTitle`。
+
+    `chunkIndex` 不是元数据装饰：正文里的 `[资料《标题》#序号]` 靠它映射到结构化
+    来源，客户端才能把文字标签替换成可点击引用。
+    """
+    seen: set[tuple[int, int]] = set()
+    result: list[dict[str, object]] = []
+    for citation in report.citations:
+        if not citation.valid:
+            continue
+        if citation.document_id is None or citation.chunk_id is None:
+            continue
+        key = (citation.document_id, citation.chunk_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(
+            {
+                "documentId": citation.document_id,
+                "chunkId": citation.chunk_id,
+                "chunkIndex": citation.chunk_index,
+                "sourceTitle": citation.document_name,
+            }
+        )
+    return result
+
+
 def provided_labels_from_context(context, chunks: list[KnowledgeChunk]) -> list[str]:
     """只返回**真正没有被 Token 预算丢掉**的知识标注。
 
