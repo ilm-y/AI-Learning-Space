@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
@@ -57,9 +58,12 @@ class DocumentIndexCleanupServiceTest {
 
         service.cleanup(9L);
 
-        verify(agentClient).deleteOtherVersions(
-                any(Document.class), org.mockito.ArgumentMatchers.eq(3), any());
-        verify(chunkService).deleteOtherVersions(9L, 3);
+        verify(agentClient).deleteVersions(
+                any(Document.class),
+                org.mockito.ArgumentMatchers.eq(List.of(1, 2)),
+                org.mockito.ArgumentMatchers.eq(false),
+                any());
+        verify(chunkService).deleteVersions(9L, List.of(1, 2));
     }
 
     @Test
@@ -90,7 +94,7 @@ class DocumentIndexCleanupServiceTest {
         service.cleanup(9L);
 
         verifyNoInteractions(agentClient);
-        verify(chunkService, never()).deleteOtherVersions(anyLong(), anyInt());
+        verify(chunkService, never()).deleteVersions(anyLong(), any());
     }
 
     @Test
@@ -98,13 +102,13 @@ class DocumentIndexCleanupServiceTest {
         when(documentMapper.selectById(9L)).thenReturn(document(3, null));
         when(chunkService.listOtherVersions(9L, 3)).thenReturn(List.of(1));
         doThrow(new DocumentIndexException(503, "agent down"))
-                .when(agentClient).deleteOtherVersions(any(), anyInt(), any());
+                .when(agentClient).deleteVersions(any(), any(), anyBoolean(), any());
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.cleanup(9L))
                 .isInstanceOf(DocumentIndexException.class);
 
         // Agent 失败时不能先删 MySQL chunk，否则下一轮扫描无法再定位该文档。
-        verify(chunkService, never()).deleteOtherVersions(anyLong(), anyInt());
+        verify(chunkService, never()).deleteVersions(anyLong(), any());
     }
 
     @Test
@@ -122,6 +126,7 @@ class DocumentIndexCleanupServiceTest {
         document.setId(9L);
         document.setStatus(DocumentStatus.READY);
         document.setIndexVersion(indexVersion);
+        document.setIndexAttempts(3);
         document.setIndexStartedAt(startedAt);
         document.setVectorCollection("collection");
         return document;

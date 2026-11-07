@@ -421,6 +421,48 @@ async def test_delete_versions_except_keeps_only_active_version() -> None:
     assert len(fake.points[collection]) == 1
 
 
+async def test_delete_versions_only_removes_exact_versions_and_legacy_when_requested() -> None:
+    store, fake = make_store()
+    collection = await store.ensure_collection(model="hash-v1", dimension=2)
+    provider = HashEmbeddingProvider(dimension=2)
+    vectors = await provider.embed(["legacy", "v1", "v2"])
+
+    # 迁移前 point：没有 index_version 字段。
+    legacy_id = point_id_for(1, 0)
+    fake.points[collection][legacy_id] = qm.PointStruct(
+        id=legacy_id,
+        vector=vectors[0],
+        payload={"document_id": 1, "content": "legacy"},
+    )
+    for version in (1, 2):
+        await store.index_document(
+            collection_name=collection,
+            document_id=1,
+            user_id=7,
+            space_id=9,
+            document_name="notes",
+            file_type="md",
+            chunks=[ChunkVector(version, 0, f"v{version}", vectors[version])],
+            index_version=version,
+        )
+
+    await store.delete_versions(
+        collection_name=collection,
+        document_id=1,
+        versions=[1],
+        delete_legacy=True,
+    )
+
+    assert await store.count_document_points(
+        collection_name=collection, document_id=1, index_version=1
+    ) == 0
+    assert await store.count_document_points(
+        collection_name=collection, document_id=1, index_version=2
+    ) == 1
+    assert legacy_id not in fake.points[collection]
+    assert len(fake.points[collection]) == 1
+
+
 async def test_partial_write_raises_instead_of_reporting_success() -> None:
     store, fake = make_store()
     collection = await store.ensure_collection(model="hash-v1", dimension=2)

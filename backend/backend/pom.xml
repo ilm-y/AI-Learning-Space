@@ -119,6 +119,34 @@
                     </excludes>
                 </configuration>
             </plugin>
+            <!--
+              *IT 用 Failsafe 执行，不塞进 Surefire：
+              1. `mvn test` 保持快速，不启动 Testcontainers/真实 MySQL 并发用例；
+              2. `mvn verify` 在 surefire 之后执行 *IT，并在
+                 target/failsafe-reports/ 产出独立的 TEST-*.xml，供审计按单次
+                 运行产物复核；
+              3. *IT 仍然由 @EnabledIfEnvironmentVariable 门控，未设置环境时
+                 会以 skipped 出现在 failsafe XML 中，而不是被默认 include 模式
+                 静默排除。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <includes>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 

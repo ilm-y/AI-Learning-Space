@@ -172,7 +172,7 @@ public class DocumentIndexService {
         // 切换已成功。清理失败不能反过来影响 READY 状态，也不能让旧 points 被检索
         // （检索按 doc_version 过滤）。下一轮清理任务会继续重试。
         try {
-            cleanupOldVersions(document, version, previousVersion, validated.collection());
+            cleanupOldVersions(document, version, version, previousVersion, validated.collection());
         } catch (Exception e) {
             log.warn("旧索引清理失败，稍后重试: documentId={}, activeVersion={}, error={}",
                     documentId, version, e.toString());
@@ -189,12 +189,22 @@ public class DocumentIndexService {
 
     /**
      * 失败时只清理本次 attempt 的 MySQL chunk 与 Qdrant points，旧活跃版本保持不动。
+     *
+     * <p>删除前必须确认 attempt 仍是 {@code document.index_attempts} 的当前值：
+     * 租约可能已被回收任务释放，或已被新的 worker 抢占。此时本次 attempt 的
+     * chunk/points 已不是“本次构建的临时数据”的唯一可删除对象；继续执行
+     * “删除除活跃版本外的所有版本”会误删新 worker 的活跃/暂存数据。</p>
      */
-    private void rollbackStagedVersion(Document document, int attempt) {
+    void rollbackStagedVersion(Document document, int attempt) {
+        if (!stillOwnsAttempt(document.getId(), attempt, "回滚失败构建")) {
+            return;
+        }
         boolean vectorsCleaned = false;
         try {
-            // 保留文档当前活跃版本，删除其余版本（包括本次失败 attempt）。
-            agentClient.deleteOtherVersions(document, document.getIndexVersion(), document.getVectorCollection());
+            // 只删本次 attempt 的 points。保留其他所有版本：即使删除期间 lease
+            // 被新 worker 抢占，也不可能碰到新 worker 的版本。
+            agentClient.deleteVersions(document, List.of(attempt), false,
+                    document.getVectorCollection());
             vectorsCleaned = true;
         } catch (Exception e) {
             log.warn("清理失败构建的 Qdrant points 失败: documentId={}, attempt={}",
@@ -214,14 +224,56 @@ public class DocumentIndexService {
 
     /**
      * 切换成功后清理旧版本。非活跃版本本就不参与检索，因此这里允许失败。
+     *
+     * <p>只删除版本号严格小于本次 activeVersion 的旧版本，并逐个精确删除。
+     * 这样即使清理期间 lease 被新 worker 抢占、新 worker 写入了更大的
+     * index_version，本次清理也不会误删它；新版本交给后续清理任务处理。
+     * 删除前仍校验 attempt，确保旧 worker 不会以过期身份执行清理。</p>
      */
-    void cleanupOldVersions(Document document, int activeVersion, int previousVersion, String collection) {
+    void cleanupOldVersions(Document document, int attempt, int activeVersion,
+                            int previousVersion, String collection) {
+        if (!stillOwnsAttempt(document.getId(), attempt, "清理旧索引版本")) {
+            return;
+        }
+        List<Integer> stale = chunkService.listOtherVersions(document.getId(), activeVersion)
+                .stream()
+                .filter(version -> version != null && version < activeVersion)
+                .toList();
+        if (stale.isEmpty()) {
+            log.debug("没有需要清理的旧索引版本: documentId={}, activeVersion={}",
+                    document.getId(), activeVersion);
+            return;
+        }
+        boolean deleteLegacy = stale.contains(0);
         // 先清理 Agent 向量、再删 MySQL 旧 chunk：若 Agent 失败，chunk 记录仍在，
         // 定时清理任务还能重新发现这个文档并重试；反过来失败则会永久留下孤儿向量。
-        agentClient.deleteOtherVersions(document, activeVersion, collection);
-        chunkService.deleteOtherVersions(document.getId(), activeVersion);
-        log.info("Cleaned old index versions: documentId={}, activeVersion={}, previousVersion={}",
-                document.getId(), activeVersion, previousVersion);
+        agentClient.deleteVersions(document, stale, deleteLegacy, collection);
+        chunkService.deleteVersions(document.getId(), stale);
+        log.info("Cleaned old index versions: documentId={}, activeVersion={}, previousVersion={}, stale={}",
+                document.getId(), activeVersion, previousVersion, stale);
+    }
+
+    /**
+     * 删除前的 fencing 校验：只有仍持有当前 attempt 的 worker 才能做破坏性清理。
+     *
+     * <p>注意这不是完整的跨存储事务；真正的安全边界是后面的“精确版本删除”。
+     * 本校验负责拦住“lease 已被回收/新 worker 已接管”的常见路径，精确删除负责
+     * 拦住“校验之后新 worker 才接管”的窄窗口。</p>
+     */
+    private boolean stillOwnsAttempt(Long documentId, int attempt, String action) {
+        Document current = documentMapper.selectById(documentId);
+        if (current == null
+                || current.getDeletedAt() != null
+                || current.getStatus() == DocumentStatus.DELETING
+                || current.getStatus() == DocumentStatus.DELETED
+                || !Objects.equals(current.getIndexAttempts(), attempt)) {
+            log.warn("放弃{}：attempt 已失效, documentId={}, attempt={}, currentAttempt={}, status={}",
+                    action, documentId, attempt,
+                    current == null ? null : current.getIndexAttempts(),
+                    current == null ? null : current.getStatus());
+            return false;
+        }
+        return true;
     }
 
     // ===================== 状态 =====================

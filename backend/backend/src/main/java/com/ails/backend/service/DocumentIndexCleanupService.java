@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 非活跃索引版本的延迟清理。
@@ -65,15 +66,35 @@ public class DocumentIndexCleanupService {
             return;
         }
         int activeVersion = document.getIndexVersion();
+        int attempts = document.getIndexAttempts() == null ? 0 : document.getIndexAttempts();
         List<Integer> stale = chunkService.listOtherVersions(documentId, activeVersion);
         if (stale.isEmpty()) {
             return;
         }
+
+        // 删除前重新校验：扫描与删除之间可能已有新 worker 抢到租约并写入更高版本。
+        // 只删除“扫描时已存在且 <= 当时 attempt”的版本，避免把新版本列入删除清单。
+        Document current = documentMapper.selectById(documentId);
+        if (current == null || current.getIndexStartedAt() != null
+                || !Objects.equals(current.getIndexVersion(), activeVersion)
+                || !Objects.equals(current.getIndexAttempts(), attempts)) {
+            log.warn("放弃清理旧索引版本：文档租约/活跃版本已变化, documentId={}, "
+                            + "activeVersion={}, attempts={}",
+                    documentId, activeVersion, attempts);
+            return;
+        }
+        List<Integer> deletable = stale.stream()
+                .filter(version -> version != null && version <= attempts)
+                .toList();
+        if (deletable.isEmpty()) {
+            return;
+        }
         // 先删 Agent 向量再删 MySQL chunk：Agent 失败时 chunk 记录仍在，下一轮
         // 扫描还能发现并重试；反过来会留下没有记录可定位的孤儿向量。
-        agentClient.deleteOtherVersions(document, activeVersion, document.getVectorCollection());
-        chunkService.deleteOtherVersions(documentId, activeVersion);
+        agentClient.deleteVersions(document, deletable, deletable.contains(0),
+                document.getVectorCollection());
+        chunkService.deleteVersions(documentId, deletable);
         log.info("Cleaned stale index versions: documentId={}, activeVersion={}, stale={}",
-                documentId, activeVersion, stale);
+                documentId, activeVersion, deletable);
     }
 }

@@ -18,12 +18,13 @@
 3. 闭环链路：`CitationReport` → `done.citations` → `StreamCompletion.citations` → `CitationMetadata` → `message.citations`（JSON）→ `GET /messages` 的 `citations`。SSE 的 `message.end` 也同步携带同一份引用，实时与历史看到的是同一份事实。
 4. **只存身份与标题，不存 chunk 正文。** 历史引用是否可用在读取时重新计算：文档存在、属于当前用户、chunk 存在且属于该文档。任一不满足即 `available=false`，客户端显示“来源已不可用”，不会留下会 404 的有效链接。
 5. 权限边界：引用只随“属于当前用户的对话”的消息列表返回；没有新增“按引用 id 直接读 chunk”的接口，文档原文仍走原有按用户鉴权的文档接口。
-6. 本机真实执行结果：
-   - 后端完整单测套件：`./mvnw -o clean test` → **321 tests, 0 failures, 0 errors, 74 skipped**，退出码 0。
+6. 本机真实执行结果（2026-11-07 最终单次全量，全部门控开启）：
+   - 后端 `./mvnw.cmd -B clean verify`：Surefire **335 tests, 0 failures, 0 errors, 11 skipped**；
+     Failsafe **4 tests, 0 failures, 0 errors, 0 skipped**。
    - Citation 定向测试：`ChatServiceTest` 6/6、`HttpPythonAgentGatewayTest` 15/15、`CitationServiceTest` 8/8。
    - SSE + MySQL 集成测试：`ChatSseIntegrationTest` **9/9**（含新增引用闭环用例）。
    - 迁移脚本升级路径：在专用库 `ails_phase3_migration_it` 上从“缺 `message.citations` 的旧 schema”升级，schema 与全新建库一致，集成测试 **9/9**，重复执行幂等。
-   - Agent 完整套件：`python -m pytest -q` → **405 passed, 6 skipped, 1 xfailed**。
+   - Agent 完整套件：`python -m pytest -q` → **415 passed, 0 skipped, 1 xfailed**。
 
 ---
 
@@ -282,13 +283,17 @@ mysql -uroot -p ails < backend/backend/src/main/resources/schema-migration-phase
 
 | 命令 | 结果 |
 | --- | --- |
-| `cd agent && python -m pytest -q` | **405 passed, 6 skipped, 1 xfailed** |
-| `cd backend/backend && ./mvnw -o clean test` | 退出码 0；surefire XML 汇总 **321 tests, 0 failures, 0 errors, 74 skipped** |
+| `cd agent && python -m pytest -q`（全门控） | **415 passed, 0 skipped, 1 xfailed** |
+| `cd backend/backend && ./mvnw.cmd -B clean verify`（全门控） | Surefire **335 tests, 0 failures, 0 errors, 11 skipped**；Failsafe **4 / 0 / 0 / 0** |
 | `./mvnw -o -q -Dtest=ChatServiceTest,HttpPythonAgentGatewayTest,CitationServiceTest test` | **6 + 15 + 8，全部通过** |
 | `AILS_CHAT_SSE_IT=true AILS_IT_MYSQL_PASSWORD=*** ./mvnw -o -q -Dtest=ChatSseIntegrationTest test` | **9/9 通过**（重建后的 `ails_chat_sse_it`） |
 | 同上，但 `AILS_CHAT_SSE_IT_MYSQL_URL` 指向 `ails_phase3_migration_it` | **9/9 通过**（迁移后的旧 schema，见 §7.4） |
 
-> 计数修正：此前摘要里的 `325 tests` 来自未清理的 `target/surefire-reports`，其中混入了此前显式执行、但不在 Surefire 默认模式内的报告（如 `*IT`）。本轮执行 `./mvnw -o clean test` 后重新聚合，权威结果为 **321 / 0 / 0 / 74**；321 = Phase 2 的 309 + 本轮新增 12 条测试（11 条执行、1 条环境门控跳过）。
+> 计数说明：Phase 3 收尾时无门控的默认套件曾为 **321 / 0 / 0 / 74**，那是历史基线。
+> 2026-11-07 最终单次全量显式开启 MySQL/Qdrant/RabbitMQ/Agent 门控后，Surefire 为
+> **335 / 0 / 0 / 11**，Failsafe 为 **4 / 0 / 0 / 0**；Agent 为 **415 / 0 / 1**。
+> 两套数字不可混用。11 条 skip 的逐项原因见
+> [`INTEGRATION_VERIFICATION.md`](INTEGRATION_VERIFICATION.md) §3.3。
 
 集成测试环境说明：`ails_chat_sse_it` 是旧 schema 遗留库，缺少 `conversation.last_message_seq` 与 `document_chunk.index_version`，首次运行时所有 HTTP 用例 500。该库是专用集成测试库（每个用例开始都会清空业务表），已删除并由启动时的 `schema.sql` 重建后复跑通过。这个问题与本轮代码无关，但记录在此，避免把环境问题误判成通过。
 
@@ -309,7 +314,8 @@ mysql -uroot -p ails < backend/backend/src/main/resources/schema-migration-phase
 
 #### 轮前基线（Phase 2 结束时）
 
-来源：`INTEGRATION_VERIFICATION.md` §4.1，后端完整套件 **309 run / 0 fail / 0 error / 73 skipped**。
+来源：Phase 2 收尾时的历史全量报告，后端未开启门控套件 **309 run / 0 fail / 0 error / 73 skipped**。
+该数字仅用于解释 Phase 3 的 skip 增量，最终单次全量见本节末尾。
 
 | 测试类 | skip 条数 | 门控 |
 | --- | ---: | --- |
@@ -326,9 +332,10 @@ mysql -uroot -p ails < backend/backend/src/main/resources/schema-migration-phase
 | `BackendApplicationTests` | 1 | 类上显式 `@Disabled` |
 | **合计** | **73** | — |
 
-#### 轮后基线（Phase 3 收尾，`./mvnw -o clean test`）
+#### 历史基线（Phase 3 收尾，未开启门控；**非最终全量**）
 
-**321 run / 0 fail / 0 error / 74 skipped**。逐类对照：
+**321 run / 0 fail / 0 error / 74 skipped**。此表只用于说明 Phase 3 新增用例对 skip 数的影响，
+不是最终单次全量证据。逐类对照：
 
 | 测试类 | 轮前 | 轮后 | 变化 |
 | --- | ---: | ---: | ---: |
@@ -356,7 +363,19 @@ mysql -uroot -p ails < backend/backend/src/main/resources/schema-migration-phase
 | 本轮实际执行 | **已执行并通过**：在重建后的 `ails_chat_sse_it` 上 9/9；在迁移验证库 `ails_phase3_migration_it` 上同样 9/9 |
 | 对 Phase 3 结论的影响 | 无。无环境变量时它只是未执行；带门控运行结果是 PASS，不把 skip 当作通过 |
 
-数量核对：Phase 2 的 309 条 + 本轮新增 12 条 = 321 条（`ChatServiceTest` +1、`HttpPythonAgentGatewayTest` +2、`CitationServiceTest` +8、`ChatSseIntegrationTest` +1）。其中 11 条在普通套件中执行，1 条（上述集成用例）被门控跳过，因此 skip 从 73 增至 74。
+数量核对（历史）：Phase 2 的 309 条 + 本轮新增 12 条 = 321 条（`ChatServiceTest` +1、`HttpPythonAgentGatewayTest` +2、`CitationServiceTest` +8、`ChatSseIntegrationTest` +1）。其中 11 条在普通套件中执行，1 条（上述集成用例）被门控跳过，因此 skip 从 73 增至 74。
+
+#### 最终单次全量（2026-11-07 19:20，`./mvnw.cmd -B clean verify`）
+
+| 套件 | tests | failures | errors | skipped |
+| --- | ---: | ---: | ---: | ---: |
+| Surefire | 335 | 0 | 0 | 11 |
+| Failsafe | 4 | 0 | 0 | 0 |
+
+`ChatSseIntegrationTest` 在本次全量中为 **9 / 0 skipped / 0 failures**，真实执行；
+`ChatSseOrderingProbeTest` 为 **1 / 0 / 0 / 0**，仍是诊断探针，不计入契约结论。
+11 条 skip 只有 `BackendApplicationTests` 1 条与 `AnalysisMqIntegrationTest` 10 条。
+Agent 同轮最终全量为 **415 passed / 0 skipped / 1 xfailed**。
 
 ### 7.4 迁移脚本升级路径验证
 

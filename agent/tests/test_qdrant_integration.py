@@ -17,6 +17,7 @@ import os
 import uuid
 
 import pytest
+from qdrant_client.http import models as qm
 
 from app.embedding import HashEmbeddingProvider
 from app.vectorstore.qdrant_store import (
@@ -185,6 +186,71 @@ async def test_real_staged_version_switch_and_cleanup() -> None:
         ) == 0
         assert await store.count_document_points(
             collection_name=collection, document_id=101, index_version=1
+        ) == 1
+    finally:
+        try:
+            await store._client.delete_collection(collection)
+        finally:
+            await store.aclose()
+
+
+async def test_real_exact_version_delete_preserves_other_versions() -> None:
+    prefix = f"ails_it_{uuid.uuid4().hex[:10]}"
+    store = QdrantDocumentStore(
+        url=URL,
+        api_key=os.getenv("AILS_QDRANT_API_KEY", ""),
+        timeout_seconds=10,
+        collection_prefix=prefix,
+        upsert_batch_size=2,
+    )
+    provider = HashEmbeddingProvider(dimension=3)
+    collection = collection_name_for(prefix, provider.model, provider.dimension)
+
+    try:
+        await store.ensure_collection(model=provider.model, dimension=provider.dimension)
+        vectors = await provider.embed(["legacy", "v1", "v2"])
+
+        # 模拟迁移前 point：没有 index_version 字段。
+        legacy_id = point_id_for(101, 0)
+        await store._client.upsert(
+            collection_name=collection,
+            points=[
+                qm.PointStruct(
+                    id=legacy_id,
+                    vector=vectors[0],
+                    payload={"document_id": 101, "content": "legacy"},
+                )
+            ],
+            wait=True,
+        )
+        for version in (1, 2):
+            await store.index_document(
+                collection_name=collection,
+                document_id=101,
+                user_id=7,
+                space_id=9,
+                document_name="notes",
+                file_type="md",
+                chunks=[ChunkVector(version, 0, f"v{version}", vectors[version])],
+                index_version=version,
+            )
+
+        # 只删 v1 + legacy；v2 必须保留。
+        await store.delete_versions(
+            collection_name=collection,
+            document_id=101,
+            versions=[1],
+            delete_legacy=True,
+        )
+
+        assert await store.count_document_points(
+            collection_name=collection, document_id=101, index_version=1
+        ) == 0
+        assert await store.count_document_points(
+            collection_name=collection, document_id=101, index_version=2
+        ) == 1
+        assert await store.count_document_points(
+            collection_name=collection, document_id=101
         ) == 1
     finally:
         try:

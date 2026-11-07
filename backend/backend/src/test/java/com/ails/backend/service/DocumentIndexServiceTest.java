@@ -150,6 +150,7 @@ class DocumentIndexServiceTest {
         when(chunkService.stageChunks(any(), any(), eq(1))).thenReturn(List.of(saved));
         when(agentClient.index(any(), any())).thenReturn(indexResponse());
         when(documentMapper.update(isNull(), any())).thenReturn(1);
+        when(chunkService.listOtherVersions(42L, 1)).thenReturn(List.of());
 
         service.runIndex(42L, 1);
 
@@ -160,7 +161,8 @@ class DocumentIndexServiceTest {
         order.verify(agentClient).index(any(), any());
         order.verify(chunkService).updateVectorRefs(42L, 1, Map.of(100L, "point-100"));
         order.verify(documentMapper).update(isNull(), any());
-        order.verify(chunkService).deleteOtherVersions(42L, 1);
+        // 本次构建没有更早版本可清理。
+        verify(chunkService, never()).deleteVersions(any(), any());
 
         ArgumentCaptor<AgentIndexRequest> request = ArgumentCaptor.forClass(AgentIndexRequest.class);
         verify(agentClient).index(any(), request.capture());
@@ -179,8 +181,9 @@ class DocumentIndexServiceTest {
         when(chunkService.stageChunks(any(), any(), eq(1))).thenReturn(List.of(savedChunk()));
         when(agentClient.index(any(), any())).thenReturn(indexResponse());
         when(documentMapper.update(isNull(), any())).thenReturn(1);
+        when(chunkService.listOtherVersions(42L, 1)).thenReturn(List.of(0));
         doThrow(new RuntimeException("qdrant cleanup unavailable"))
-                .when(agentClient).deleteOtherVersions(any(), eq(1), any());
+                .when(agentClient).deleteVersions(any(), any(), eq(true), any());
 
         service.runIndex(42L, 1);
 
@@ -206,7 +209,7 @@ class DocumentIndexServiceTest {
 
         // 只删本次 attempt 的 chunk；活跃版本 1 的 chunk 不动。
         verify(chunkService).deleteVersion(42L, 2);
-        verify(chunkService, never()).deleteOtherVersions(any(), anyInt());
+        verify(chunkService, never()).deleteVersions(any(), any());
         // READY 重建失败保持 READY。
         ArgumentCaptor<Wrapper<Document>> captor = updateCaptor();
         verify(documentMapper).update(isNull(), captor.capture());
@@ -226,7 +229,7 @@ class DocumentIndexServiceTest {
         when(agentClient.index(any(), any()))
                 .thenThrow(new DocumentIndexException(503, "embedding unavailable"));
         doThrow(new DocumentIndexException(503, "qdrant unavailable"))
-                .when(agentClient).deleteOtherVersions(any(), anyInt(), any());
+                .when(agentClient).deleteVersions(any(), any(), eq(false), any());
         when(documentMapper.update(isNull(), any())).thenReturn(1);
 
         service.runIndex(42L, 2);

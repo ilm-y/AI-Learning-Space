@@ -18,16 +18,17 @@
 | 所有应用层状态写入收敛到唯一入口 | 通过 | `memory.setStatus` 仅剩 `MemoryService.java:602`；§3 |
 | 跨用户仍为 404 | 通过（服务层） | T10、T11 |
 | Agent 路径不产生非法迁移 | 通过 | T16–T21 |
-| Memory 读取 / Agent 流程无回归 | 通过 | 集成验证轮重跑：完整 Spring Boot 309 测试（含 Phase 2 新增）+ Python Agent 402 测试；Phase 1 相关测试无回归 |
-| 新增 skip 不超过基线 | 通过 | 完整套件基线 73，集成验证轮仍为 73；Phase 1 新增 22 条与并发 IT 4 条均未 skip（IT 由门控显式执行） |
+| Memory 读取 / Agent 流程无回归 | 通过 | 最终单次全量：后端 **339 tests**（Surefire 335 + Failsafe 4）0 失败 / 11 skipped，Agent **415 passed / 0 skipped / 1 xfailed**；Phase 1 相关测试无回归 |
+| 新增 skip 不超过基线 | 通过 | 最终全量 11 skipped，均为既有门控（`BackendApplicationTests` 1 + `AnalysisMqIntegrationTest` 10）；Phase 1 新增 22 条与并发 IT 4 条均为真实执行通过 |
 | 未自动提交 Git | 通过 | `git log -1` 仍为 `4732e40` |
 
-完整 Spring Boot 结果：**Tests run: 277, Failures: 0, Errors: 0, Skipped: 73**（基线 255 / 0 / 0 / 73，新增 22 条全部执行）。
+Phase 1B 初版历史结果（**非最终全量**）：**Tests run: 277, Failures: 0, Errors: 0, Skipped: 73**（基线 255 / 0 / 0 / 73，新增 22 条全部执行）。
 
-> **2026-11-07 集成验证轮补充**：在真实 MySQL 8.0.37 上新增 `MemoryStateMachineConcurrencyIT`（4 条），
-> 显式执行 **4 PASS / 0 FAIL / 0 SKIP**；完整 Spring Boot 套件重跑为 **309 / 0 / 0 / 73**
-> （309 包含 Phase 2 新增测试，Phase 1 相关测试无回归）。详见 §4.4 与
-> [`INTEGRATION_VERIFICATION.md`](INTEGRATION_VERIFICATION.md)。
+> **2026-11-07 最终单次全量复核**：在真实 MySQL 8.0.37 上，`MemoryStateMachineConcurrencyIT`（4 条）
+> 已通过 Maven Failsafe 执行并产出 `target/failsafe-reports/TEST-*.xml`，结果 **4 PASS / 0 FAIL / 0 SKIP**。
+> `mvn clean verify` 的 Surefire 汇总为 **335 tests / 0 failures / 0 errors / 11 skipped**，
+> 后端合计 **339 条 / 328 通过 / 11 跳过**；Agent 全量为 **415 passed / 0 skipped / 1 xfailed**。
+> 详见 §4.4、§4.5 与 [`INTEGRATION_VERIFICATION.md`](INTEGRATION_VERIFICATION.md)。
 
 ---
 
@@ -348,13 +349,17 @@ cd backend/backend
 
 ### 4.3 补充回归
 
+> 本节前三行为 Phase 1B 初版/集成验证轮的历史命令与结果（**非最终单次全量**）。
+> 最终全量结果见末行与 §4.5。
+
 | 回归范围 | 命令 | 结果 |
 | --- | --- | --- |
-| 完整 Spring Boot | `./mvnw -B clean test` | **277 run / 0 fail / 0 error / 73 skipped** |
-| Agent 相关后端 | `./mvnw -B -Dtest='*Agent*Test,*Analysis*Test,MemorySourceConcurrencyTest,TurnAnalysisServiceTest' test` | **71 run / 0 fail / 0 error / 0 skipped** |
-| Python Agent | `cd agent && python -m pytest -q` | **383 passed / 5 skipped / 1 xfailed** |
+| 完整 Spring Boot（历史） | `./mvnw -B clean test` | **277 run / 0 fail / 0 error / 73 skipped** |
+| Agent 相关后端（历史） | `./mvnw -B -Dtest='*Agent*Test,*Analysis*Test,MemorySourceConcurrencyTest,TurnAnalysisServiceTest' test` | **71 run / 0 fail / 0 error / 0 skipped** |
+| Python Agent（历史） | `cd agent && python -m pytest -q` | **383 passed / 5 skipped / 1 xfailed** |
+| **最终单次全量** | `./mvnw.cmd -B clean verify` + `python -m pytest -q` | 后端 **339 / 0 fail / 0 error / 11 skipped**（Surefire 335 + Failsafe 4）；Agent **415 passed / 0 skipped / 1 xfailed** |
 
-Agent 后端回归覆盖：`HttpPythonAgentAnalysisGatewayTest`（10）、`HttpPythonAgentGatewayTest`（13）、`AnalysisResultConsumerTest`（9）、`AnalysisResultProcessorTest`（7）、`AnalysisStaleRunCompensatorTest`（5）、`AnalysisTaskPublisherTest`（6）、`AnalysisTaskServiceTest`（8）、`AgentAnalysisWriteServiceTest`（3）、`AnalysisDispatchServiceTest`（4）、`MemorySourceConcurrencyTest`（3）、`TurnAnalysisServiceTest`（3）。`AnalysisMqIntegrationTest` 在未启用 Docker/RabbitMQ 时运行 0 条，不计入 71。
+Agent 后端回归覆盖：`HttpPythonAgentAnalysisGatewayTest`（10）、`HttpPythonAgentGatewayTest`（13）、`AnalysisResultConsumerTest`（9）、`AnalysisResultProcessorTest`（7）、`AnalysisStaleRunCompensatorTest`（5）、`AnalysisTaskPublisherTest`（6）、`AnalysisTaskServiceTest`（8）、`AgentAnalysisWriteServiceTest`（3）、`AnalysisDispatchServiceTest`（4）、`MemorySourceConcurrencyTest`（3）、`TurnAnalysisServiceTest`（3）。历史记录中 `AnalysisMqIntegrationTest` 在未启用 Docker/RabbitMQ 时运行 0 条；最终全量中该类的 10 条已作为 **10 skipped** 进入 Surefire XML，不再静默消失，但仍未真实执行（Docker/Testcontainers Npipe HTTP 400）。
 
 ### 4.4 真实 MySQL 并发集成验证（2026-11-07 补跑）
 
@@ -413,13 +418,36 @@ HTTP 层使用 standalone MockMvc + 真实 `MemoryController`；数据层使用�
 | 结果 | 22/22 PASS（单测） | 22/22 PASS（单测）+ 4/4 PASS（真实 MySQL IT） |
 
 没有为通过而削弱断言：单测保留；IT 断言的是数据库最终状态，不是响应码。
-IT 类名以 `IT` 结尾，不在 Maven Surefire 默认 include 模式内，因此完整
-`mvn test` 的 309/73 基线不变；它通过 `-Dtest=MemoryStateMachineConcurrencyIT`
-显式执行。
+最终证据链修复后，`*IT` 由 Maven Failsafe 在 `mvn clean verify` 中统一执行，
+`MemoryStateMachineConcurrencyIT` 不再依赖 `-Dtest=...` 的临时定向命令，
+而是产出 `target/failsafe-reports/TEST-com.ails.backend.service.MemoryStateMachineConcurrencyIT.xml`
+（`tests=4 / failures=0 / errors=0 / skipped=0`）。该结果与 Surefire 的 335 条来自
+同一次 `clean verify`，可直接复核。
+
+### 4.5 最终单次全量证据（2026-11-07 19:20）
+
+命令：`backend/backend` 下 `./mvnw.cmd -B clean verify`（全部 `AILS_*_IT` 门控开启）。
+产物：
+
+```text
+target/surefire-reports/  classes=46  tests=335  failures=0  errors=0  skipped=11
+target/failsafe-reports/  classes=1   tests=4    failures=0  errors=0  skipped=0
+```
+
+- Phase 1 相关 `MemoryStateMachineTest` 19/19、`MemoryControllerTest` 3/3、
+  `MemorySourceConcurrencyTest` 3/3，均在 Surefire 中通过。
+- `MemoryStateMachineConcurrencyIT` 4/4 在 Failsafe 中通过。
+- 11 条 skip 只有 `BackendApplicationTests` 1 条（永久 `@Disabled`）与
+  `AnalysisMqIntegrationTest` 10 条（Docker 不可见，显式 skip）。
+- Agent 全量 **415 passed / 0 skipped / 1 xfailed**。
 
 ---
 
-## 5. skip 数量对比
+## 5. skip 数量对比（Phase 1B 初版历史）
+
+> 本节是 Phase 1B 初版的历史对比，**不是最终单次全量**。最终全量为
+> Surefire **335 / 0 / 0 / 11** + Failsafe **4 / 0 / 0 / 0**；skip 从历史 73 降至 11，
+> 原因是最终全量显式开启了所有可执行的门控，而不是删除了测试。
 
 | 指标 | 改造前基线 | 改造后 | 差值 |
 | --- | --- | --- | --- |
@@ -447,9 +475,10 @@ IT 类名以 `IT` 结尾，不在 Maven Surefire 默认 include 模式内，因�
 
 说明：Phase 1B 初版没有把 T14/T15/T21 写成真实 MySQL 集成测试，以避免新增门控 skip；
 2026-11-07 集成验证轮新增 `MemoryStateMachineConcurrencyIT`（4 条），使用 `AILS_MEMORY_IT`
-门控并**显式执行**，结果 4/4 PASS（§4.4）。该类名以 `IT` 结尾，不在 Maven Surefire
-默认 include 模式内，因此完整 `mvnw.cmd test` 的计数仍是 **309 / 0 / 0 / 73**；
-它没有把任何测试改成 skip，也没有削弱原有 22 条单测。既有 73 条 skip 的分布与基线一致。
+门控并**显式执行**，结果 4/4 PASS（§4.4）。最终证据链修复后，该类由 Failsafe 在
+`mvn clean verify` 中执行，计入 **4 条 / 0 skip**，不再被 Surefire 默认 include 排除。
+最终全量仍是 **11 skipped**（`BackendApplicationTests` 1 + `AnalysisMqIntegrationTest` 10），
+没有因为 Phase 1 新增测试而增加 skip，也没有削弱原有 22 条单测。
 
 ---
 
@@ -574,7 +603,8 @@ cd backend/backend
 ```
 
 预期回到 Phase 1B 基线：**Tests run: 255, Failures: 0, Errors: 0, Skipped: 73**。
-（当前工作区已包含 Phase 2 改动，完整套件为 309 / 73；回滚 Phase 2 后才会回到 255。）
+（当前工作区已包含 Phase 2/3 与 Failsafe 配置；最终单次全量为
+Surefire 335 / 0 / 0 / 11 + Failsafe 4 / 0 / 0 / 0。回滚 Phase 2/3 后才会回到 255。）
 
 ### 8.5 如果未来已经提交
 
@@ -602,8 +632,10 @@ git revert <phase1b-commit>
 - MyBatis-Plus：3.5.7
 - Maven Surefire：3.2.5
 - Phase 1B 初版环境未启动 MySQL、RabbitMQ、Docker；相关集成测试按既有门控跳过（73 条）。
-- 2026-11-07 集成验证轮启动了真实 MySQL 8.0.37（`127.0.0.1:3306`）与 Docker 中的 Qdrant
-  （`ails-qdrant`，`6333`）；完整套件仍为 309/73，`MemoryStateMachineConcurrencyIT` 显式执行 4/4 PASS。
+- 2026-11-07 最终单次全量启动了真实 MySQL 8.0.37（`127.0.0.1:3306`）、Qdrant
+  （`ails-qdrant`，`6333`）、RabbitMQ（`ails-rabbitmq`，`5672`）与 FastAPI Agent（`8010`）；
+  `mvn clean verify` 结果为 Surefire **335 / 0 / 0 / 11** + Failsafe
+  **4 / 0 / 0 / 0**，`MemoryStateMachineConcurrencyIT` 4/4 PASS 且有独立 XML。
 - 本地运行日志（未提交）：`/tmp/phase1b/phase1b-baseline.log`、`phase1b-red.log`、`phase1b-green.log`、`phase1b-full.log`、`phase1b-agent.log`、`phase1b-agent-pytest.log`。
 
 ## 附录 B：本轮未做事项

@@ -39,6 +39,24 @@ public interface DocumentChunkMapper extends BaseMapper<DocumentChunk> {
             @Param("activeVersion") Integer activeVersion);
 
     /**
+     * 精确删除指定版本。用于失败回滚/旧版本清理：调用方先通过 attempt fencing
+     * 和版本白名单确定要删的版本，避免“删除除活跃版本外的全部版本”误删新构建。
+     */
+    @Delete("""
+            <script>
+            DELETE FROM document_chunk
+            WHERE document_id = #{documentId}
+              AND index_version IN
+              <foreach collection="versions" item="version" open="(" separator="," close=")">
+                #{version}
+              </foreach>
+            </script>
+            """)
+    int deleteVersions(
+            @Param("documentId") Long documentId,
+            @Param("versions") List<Integer> versions);
+
+    /**
      * 删除文档的全部 chunk（删除流程使用）。
      */
     @Delete("DELETE FROM document_chunk WHERE document_id = #{documentId}")

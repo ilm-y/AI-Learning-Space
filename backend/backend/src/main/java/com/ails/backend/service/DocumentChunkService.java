@@ -109,6 +109,14 @@ public class DocumentChunkService {
         return chunkMapper.deleteByVersion(documentId, indexVersion);
     }
 
+    /** 精确删除指定版本；空列表是 no-op。 */
+    public int deleteVersions(Long documentId, List<Integer> versions) {
+        if (versions == null || versions.isEmpty()) {
+            return 0;
+        }
+        return chunkMapper.deleteVersions(documentId, versions);
+    }
+
     public int deleteOtherVersions(Long documentId, int activeVersion) {
         return chunkMapper.deleteOtherVersions(documentId, activeVersion);
     }

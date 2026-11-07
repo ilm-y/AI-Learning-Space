@@ -153,7 +153,8 @@ async def delete(
     """删除文档向量。
 
     * `keepIndexVersion` 为空：删除该文档全部版本（文档删除）；
-    * 非空：保留该活跃版本，清理其余版本（切换后的延迟清理）。
+    * 非空：保留该活跃版本，清理其余版本（切换后的延迟清理）；
+    * `indexVersions` 非空：只删除这些精确版本，可选同时删除 legacy points。
 
     操作幂等：collection 不存在、points 已删除都返回成功，后端可以安全重试。
     """
@@ -168,7 +169,14 @@ async def delete(
     )
 
     try:
-        if payload.keep_index_version is None:
+        if payload.index_versions is not None:
+            await store.delete_versions(
+                collection_name=collection,
+                document_id=payload.document_id,
+                versions=payload.index_versions,
+                delete_legacy=payload.delete_legacy,
+            )
+        elif payload.keep_index_version is None:
             await store.delete_document(
                 collection_name=collection,
                 document_id=payload.document_id,
@@ -196,6 +204,8 @@ async def delete(
                 "documentId": payload.document_id,
                 "collection": collection,
                 "keepIndexVersion": payload.keep_index_version,
+                "indexVersions": payload.index_versions,
+                "deleteLegacy": payload.delete_legacy,
             },
         }
     )

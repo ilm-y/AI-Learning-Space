@@ -289,7 +289,9 @@ class DocumentIndexServiceIntegrationTest {
         assertThat(ready.getChunkCount()).isEqualTo(2);
         assertThat(ready.getIndexAttempts()).isEqualTo(2);
         assertThat(ready.getIndexVersion()).isEqualTo(2);
-        assertThat(chunkService.listByDocument(document.getId())).hasSize(2);
+        // READY 是 complete 提交点；旧版本清理在其后执行，失败也不影响 READY。
+        // 因此这里等待清理完成，而不是在 READY 刚可见时抢读（否则会读到 4 条）。
+        assertThat(awaitChunksOfVersion(document.getId(), 2)).hasSize(2);
         assertThat(AGENT.parseCalls.get()).isEqualTo(2);
         assertThat(AGENT.indexCalls.get()).isEqualTo(2);
     }
@@ -478,6 +480,25 @@ class DocumentIndexServiceIntegrationTest {
         }
         fail("文档未进入 " + expected + "，最后状态="
                 + (last == null ? "missing" : last.getStatus() + ", error=" + last.getIndexError()));
+        return last;
+    }
+
+    /**
+     * 等到旧版本清理完成（只剩指定版本）。READY 的提交早于清理，二者之间存在
+     * 短暂窗口；测试必须等清理结束，才能断言“清理后只剩活跃版本”。
+     */
+    private List<DocumentChunk> awaitChunksOfVersion(Long documentId, int version)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+        List<DocumentChunk> last = List.of();
+        while (System.nanoTime() < deadline) {
+            last = chunkService.listByDocument(documentId);
+            if (!last.isEmpty() && last.stream()
+                    .allMatch(chunk -> chunk.getIndexVersion() == version)) {
+                return last;
+            }
+            Thread.sleep(50);
+        }
         return last;
     }
 

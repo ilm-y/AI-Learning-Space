@@ -8,6 +8,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Binding;
@@ -68,15 +69,35 @@ class AnalysisMqIntegrationTest {
     private static Jackson2JsonMessageConverter converter;
     private static AnalysisTaskPublisher publisher;
 
+    /**
+     * Docker 不可用时的原因。{@code @BeforeAll} 里不再 abort，否则 JUnit 会在
+     * 类级别终止，Surefire XML 变成 tests=0/skipped=0，10 条用例从统计里消失。
+     * 这里只记录原因，由 {@link #skipWhenBrokerUnavailable()} 在每条用例上
+     * 触发 assumption，让 skipped 计数真实可见。
+     */
+    private static String unavailableReason;
+
     @BeforeAll
     static void setUp() {
-        if (!DockerClientFactory.instance().isDockerAvailable()) {
+        boolean dockerAvailable;
+        try {
+            dockerAvailable = DockerClientFactory.instance().isDockerAvailable();
+        } catch (RuntimeException e) {
+            // Docker 客户端本身不可用（未安装/无法连接）也按环境不具备处理；
+            // -Pmq-integration 下仍然必须显式失败，不能把「没验证」伪装成「通过」。
+            dockerAvailable = false;
+            unavailableReason = "Docker 客户端不可用：" + e.getMessage();
+        }
+        if (!dockerAvailable) {
             if (Boolean.parseBoolean(System.getProperty("ails.it.require-docker", "false"))) {
                 org.junit.jupiter.api.Assertions.fail(
                         "要求真实 RabbitMQ Broker（-Pmq-integration），但本机 Docker 不可用。"
                                 + "请启动 Docker 后重跑；直接跳过会把「没验证」伪装成「通过」。");
             }
-            Assumptions.abort("Docker 不可用，跳过真实 RabbitMQ 集成测试（跳过 ≠ 通过）");
+            if (unavailableReason == null) {
+                unavailableReason = "Docker 不可用，跳过真实 RabbitMQ 集成测试（跳过 ≠ 通过）";
+            }
+            return;
         }
         rabbit = new RabbitMQContainer("rabbitmq:3.13");
         rabbit.start();
@@ -113,9 +134,19 @@ class AnalysisMqIntegrationTest {
         }
     }
 
+    /** 每条用例执行前检查 Broker 是否就绪：不可用时产生可见的 skip，而不是整类消失。 */
+    @BeforeEach
+    void skipWhenBrokerUnavailable() {
+        Assumptions.assumeTrue(unavailableReason == null,
+                unavailableReason == null ? "RabbitMQ Broker 可用" : unavailableReason);
+    }
+
     /** 每个用例自己清场，避免上一条留下的消息影响下一条的队列计数断言。 */
     @AfterEach
     void purgeQueues() {
+        if (props == null) {
+            return;
+        }
         for (String queue : new String[]{
                 props.requestQueue(), props.retryQueue(), props.resultQueue(),
                 props.resultRetryQueue(), props.deadQueue()}) {

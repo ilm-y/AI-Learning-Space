@@ -25,14 +25,20 @@
 4. Embedding 兼容性由 `provider + model + dimension + endpoint` 指纹约束：
    索引时记录，检索白名单按指纹（旧数据按 model/provider/dimension）过滤，
    Agent 端再按 payload 指纹二次拒绝。
-5. 本机真实执行结果：
-   - 后端完整套件：`./mvnw.cmd -q test` → **309 tests, 0 failures, 0 errors, 73 skipped**，退出码 0。
-   - Agent 完整套件：`python -m pytest -q` → **402 passed, 6 skipped, 1 xfailed**。
-   - 集成验证轮（2026-11-07）：MySQL / Qdrant / 真实 Agent 已就绪，Phase 2 指定 27 条测试全部真实执行通过：
+5. 本机真实执行结果（2026-11-07 最终单次全量，`./mvnw.cmd -B clean verify`，全部门控开启）：
+   - 后端 Surefire：**335 tests, 0 failures, 0 errors, 11 skipped**；
+     Failsafe：**4 tests, 0 failures, 0 errors, 0 skipped**。
+   - Agent 完整套件：`python -m pytest -q` → **415 passed, 0 skipped, 1 xfailed**。
+   - 集成验证轮：MySQL / Qdrant / 真实 Agent 已就绪，Phase 2 原 27 条测试全部真实执行通过；
+     新增 1 条 Qdrant 精确版本删除测试后为 **28/28 PASS**：
      `DocumentServiceIntegrationTest` 7/7、`DocumentIndexServiceIntegrationTest` 15/15、
-     `DocumentIndexE2EIntegrationTest` 1/1、Qdrant 集成 3/3、knowledge E2E 1/1。
+     `DocumentIndexE2EIntegrationTest` 1/1、Qdrant 集成 4/4、knowledge E2E 1/1。
      首轮暴露的生产缺陷 D1（`DocumentChunkMapper` 的 `&lt;&gt;` 未在 `<script>` 内）已按最小改动修复，
      修复前后代码对照与回归结果见 9.4.6。
+6. RAG-01（高）已修复并验证：`rollbackStagedVersion` / `cleanupOldVersions` 增加
+   attempt fencing，并把“删除除保留版本外的所有版本”改为精确版本删除；
+   新增真实 MySQL + Qdrant 的租约回收/新 worker 接管回归测试 4/4 通过。详见 9.4.7。
+   本轮只修复 RAG-01，未重构版本化索引整体设计；RAG-02、RAG-03 仍未修复。
 
 ---
 
@@ -311,21 +317,22 @@
 
 ### 9.1 后端单元 / 本地测试
 
-执行：
+最终单次全量执行：
 
 ```powershell
 cd backend/backend
-./mvnw.cmd -q test
-# EXIT=0
+./mvnw.cmd -B clean verify
+# Surefire EXIT=0；Failsafe 在 verify 阶段执行
 ```
 
-真实汇总（surefire 报告）：
+最终真实汇总：
 
 ```text
-total=309  failures=0  errors=0  skipped=73
+surefire:  46 classes, tests=335, failures=0, errors=0, skipped=11
+failsafe:   1 class,  tests=4,   failures=0, errors=0, skipped=0
 ```
 
-文档相关类：
+文档相关类（最终 XML）：
 
 | 测试类 | 结果 |
 | --- | --- |
@@ -338,11 +345,15 @@ total=309  failures=0  errors=0  skipped=73
 | `DocumentIndexServiceTest` | 11 / 0 / 0 / 0 |
 | `DocumentServiceTest` | 16 / 0 / 0 / 0 |
 | `DocumentStorageServiceTest` | 16 / 0 / 0 / 0 |
-| `DocumentIndexServiceIntegrationTest` | 15 skipped（gated；带门控补跑见 9.4.2） |
-| `DocumentServiceIntegrationTest` | 7 skipped（gated；带门控补跑见 9.4.1） |
-| `DocumentIndexE2EIntegrationTest` | 1 skipped（gated；带门控补跑见 9.4.3） |
+| `DocumentIndexServiceIntegrationTest` | 15 / 0 / 0 / 0（真实 MySQL） |
+| `DocumentServiceIntegrationTest` | 7 / 0 / 0 / 0（真实 MySQL） |
+| `DocumentIndexE2EIntegrationTest` | 1 / 0 / 0 / 0（真实 Agent + Qdrant） |
+| `DocumentIndexFencingIntegrationTest` | 4 / 0 / 0 / 0（真实 MySQL + Qdrant） |
 
-上述“skipped”只是无环境变量时的完整套件基线；**不等于未验证**。带门控的真实执行结果以 9.4 为准。
+> 历史默认套件（不设置任何 `AILS_*_IT` 门控）曾为 **325 / 0 / 0 / 78 skipped**；
+> 该数字现在只作为历史基线保留，不是本报告“已执行”的最终证据。
+> 最终全量的 11 skipped 仅来自 `BackendApplicationTests` 1 条与
+> `AnalysisMqIntegrationTest` 10 条，详见 [`INTEGRATION_VERIFICATION.md`](INTEGRATION_VERIFICATION.md) §3.3。
 
 ### 9.2 Agent
 
@@ -351,14 +362,17 @@ total=309  failures=0  errors=0  skipped=73
 ```bash
 cd agent
 python -m pytest -q
-# 402 passed, 6 skipped, 1 xfailed
+# 415 passed, 0 skipped, 1 xfailed
 ```
 
-跳过的 6 条：
+最终全量已设置 `AILS_KNOWLEDGE_E2E=true`、`AILS_QDRANT_IT=true` 与
+`AILS_TEST_RABBITMQ_URL`，因此此前跳过的 7 条全部真实执行：
 
-- `test_knowledge_e2e.py`：需要 `AILS_KNOWLEDGE_E2E=true`；
-- `test_qdrant_integration.py` ×3：需要 `AILS_QDRANT_IT=true` 与真实 Qdrant；
-- `test_worker_broker.py` ×2：需要 `AILS_TEST_RABBITMQ_URL`（与本轮无关）。
+- `test_knowledge_e2e.py` 1 条通过（真实 DashScope Embedding + 后端 + Qdrant）；
+- `test_qdrant_integration.py` 4 条通过（真实 Qdrant）；
+- `test_worker_broker.py` 2 条通过（真实 RabbitMQ）。
+
+1 条 `xfailed` 为既有的 `test_runtime_budget_contract.py` 预期失败，不是环境跳过。
 
 ### 9.3 需求中的九类测试对照
 
@@ -377,7 +391,8 @@ python -m pytest -q
 ### 9.4 集成验证轮补跑结果（2026-11-07）
 
 本节替代原“未执行的测试”章节。所有条目均为**真实执行**。首轮失败项在 D1 修复后复跑转绿，
-未改成 skip/`@Disabled`；末段给出修复前后代码对照与 27 条全量回归结果。
+未改成 skip/`@Disabled`；末段给出修复前后代码对照、RAG-01 修复补测与全量回归结果。
+Phase 2 原 27 条测试全部通过；新增 1 条真实 Qdrant 精确版本删除测试后为 **28/28 PASS**。
 
 环境：
 
@@ -460,19 +475,20 @@ $env:AILS_IT_MYSQL_PASSWORD='...'
 
 测试设计修正（不改变断言）：原 `TestApplication` 未注册 `InternalIdentitySigner`，也未提供 `ails.internal.identity-secret`，而 `AgentDocumentClient` 对每次调用都签发身份声明，缺密钥会 fail closed。本轮在测试中补注册 `InternalIdentitySigner` 并新增 `AILS_E2E_IDENTITY_SECRET` 环境变量（测试进程与 Agent 使用同一密钥）。该修正只让测试具备可启动条件，未降低任何业务断言。
 
-#### 9.4.4 Agent 真实 Qdrant 集成（3 条）
+#### 9.4.4 Agent 真实 Qdrant 集成（4 条）
 
 ```powershell
 $env:AILS_QDRANT_IT='true'; $env:AILS_QDRANT_URL='http://127.0.0.1:6333'
 python -m pytest tests/test_qdrant_integration.py -v
 ```
 
-结果：**3 PASS / 0 FAIL / 0 SKIP**。
+结果：**4 PASS / 0 FAIL / 0 SKIP**。
 
 | 方法 | 结果 |
 | --- | --- |
 | `test_real_collection_index_reindex_and_document_scoped_delete` | PASS |
 | `test_real_staged_version_switch_and_cleanup` | PASS |
+| `test_real_exact_version_delete_preserves_other_versions` | PASS（RAG-01 新增：只删指定版本，其他版本保留） |
 | `test_real_knowledge_search_enforces_permissions_and_ranking` | PASS |
 
 #### 9.4.5 Agent knowledge E2E（1 条，真实后端 + 真实 Embedding + Qdrant）
@@ -568,9 +584,69 @@ List<Integer> selectOtherVersions(
   `repeatedIndexIsIdempotentAndIncrementsVersionOnlyOnSuccess` 第二次索引后 chunk 数由 4 恢复为期望的 2。
 - `DocumentIndexE2EIntegrationTest`：**1/1 PASS**。
   真实 Agent + Qdrant 重建后 DB chunk 与 Qdrant point 均为 2，一致性断言完整通过。
-- Phase 2 全量回归：**27/27 PASS**（DocumentService 7 + DocumentIndexService 15 +
-  DocumentIndexE2E 1 + Qdrant 集成 3 + knowledge E2E 1），无回归。
+- Phase 2 全量回归：原 27 条全部通过；新增 Qdrant 精确版本删除测试后
+  **28/28 PASS**（DocumentService 7 + DocumentIndexService 15 +
+  DocumentIndexE2E 1 + Qdrant 集成 4 + knowledge E2E 1），无回归。
 - 对照：`DocumentMapper` 的同类 SQL 使用 `<script>` + `&lt;` 工作正常，本次采用同样的 `<script>` 包装方式。
+
+#### 9.4.7 RAG-01 修复：破坏性清理增加 attempt fencing + 精确版本删除（2026-11-07）
+
+**问题回顾。** `rollbackStagedVersion` 与 `cleanupOldVersions` 原先调用
+`deleteOtherVersions`，语义是“除保留版本外全部删除”，且没有 attempt/租约校验。
+旧 worker 在租约被回收、新 worker 已接管并激活后继续执行清理，可能删除新 worker 的
+活跃/暂存 Qdrant points 与 MySQL chunks，造成 MySQL READY、检索为空。
+
+**修复范围（只改删除条件，不重构版本化索引）。**
+
+1. `DocumentIndexService` 新增 `stillOwnsAttempt(documentId, attempt, action)`：
+   删除前重新读取 `document`，要求未删除、状态不是 DELETING/DELETED，
+   且 `index_attempts` 仍等于当前 worker 持有的 attempt；不满足则记录 warn 并放弃删除。
+   - `rollbackStagedVersion`：只删除本次 `attempt` 的 Qdrant points 与 chunk。
+   - `cleanupOldVersions`：只删除版本号严格小于 `activeVersion` 的旧版本。
+2. 新增精确版本删除链路，替代“删除除保留版本外的所有版本”：
+   - Java：`AgentDeleteRequest` 增加 `indexVersions` / `deleteLegacy`；
+     `AgentDocumentClient.deleteVersions(...)`；`DocumentChunkMapper.deleteVersions(...)`。
+   - Agent：`DeleteDocumentRequest` 增加 `indexVersions` / `deleteLegacy` 校验；
+     `/agent/documents/delete` 支持精确版本分支；`QdrantDocumentStore.delete_versions(...)`
+     用 `must(document_id) + should(MatchAny(index_version), IsEmpty(index_version))` 删除。
+3. 定时清理 `DocumentIndexCleanupService` 同样加 fence：删除前二次读取，确认
+   `index_started_at` 仍为空、`index_version` 与 `index_attempts` 未变化；
+   且只删除 `version <= 捕获的 attempts` 的版本号，避免 TOCTOU 删到新版本。
+4. 兼容 legacy points：只有待删集合包含版本 0 时才带 `deleteLegacy=true`，
+   不再使用“删除除保留版本外全部”作为常规清理手段。
+
+**新增回归测试。** `DocumentIndexFencingIntegrationTest`（真实 MySQL + 真实 Qdrant，
+Fake Agent 会把删除请求真实转发到 Qdrant，因此断言的是 Qdrant points 本身）：
+
+```powershell
+$env:AILS_DOCUMENT_FENCING_IT='true'; $env:AILS_IT_MYSQL_PASSWORD='...'
+./mvnw.cmd -Dtest=DocumentIndexFencingIntegrationTest test
+```
+
+结果：**4 PASS / 0 FAIL / 0 SKIP**。
+
+| 方法 | 场景 | 断言 |
+| --- | --- | --- |
+| `staleWorkerCleanupDoesNotDeleteNewWorkersActivePoints` | A 持 attempt 1，B 已接管并激活 attempt 2；A 恢复执行 cleanup | A 的删除调用为 0；Qdrant 版本 2 的 2 个点与 MySQL 活跃 chunk 仍在 |
+| `staleWorkerRollbackDoesNotDeleteNewWorkersActivePoints` | 同上，A 恢复执行 rollback | A 的删除调用为 0；B 的活跃 points/chunks 未被删除 |
+| `currentWorkerCleanupDeletesOnlyOlderVersions` | 当前 worker 正常清理 | 仅版本 1 被删；版本 2 与活跃 chunk 保留 |
+| `currentWorkerRollbackDeletesOnlyItsOwnAttempt` | 当前 worker 回滚失败构建 | 仅本次 attempt 的版本被删；旧活跃版本保留 |
+
+测试设计说明：`repeatedIndexIsIdempotentAndIncrementsVersionOnlyOnSuccess` 原先在
+`awaitStatus(READY)` 后立即读 chunk。READY 是 `complete` 的提交点，旧版本清理在其后执行，
+因此这是测试侧竞态，不是 RAG-01 回归。现在改为 `awaitChunksOfVersion(documentId, 2)`
+等待清理完成后再断言“只剩 2 条”，断言强度未降低。
+
+**验证结果。**
+
+- 新增 fencing IT：**4/4 PASS**（真实 MySQL `ails_document_fencing_it` + 真实 Qdrant）。
+- Phase 2 全量 IT：**28/28 PASS**（原 27 条全部保留通过 + 新增 1 条 Qdrant 精确删除测试）。
+- 后端最终单次全量：Surefire **335 / 0 / 0 / 11** + Failsafe **4 / 0 / 0 / 0**。
+- Agent 最终全量：**415 passed / 0 skipped / 1 xfailed**。
+- 未提交 Git。
+
+**未修复（仍为残余风险）。** RAG-02（回滚/清理仍使用 `document` 的 collection 快照）
+与 RAG-03（缺少 Qdrant → MySQL 反向对账）不在本次范围内。
 
 ---
 
@@ -594,11 +670,16 @@ List<Integer> selectOtherVersions(
 7. **回滚旧代码前必须处理版本化 points。** 旧版 Agent 只按 `document_id` 过滤，
    会同时命中 legacy points 与 `index_version >= 1` 的 points，造成同一文档重复片段。
    回滚步骤见第 11 节。
-8. **数据库级集成测试已全部补跑通过。** 见 9.4：Phase 2 指定 27 条全部 PASS——
+8. **数据库级集成测试已全部补跑通过。** 见 9.4：Phase 2 原 27 条全部 PASS，
+   新增 Qdrant 精确版本删除测试后 **28/28 PASS**——
    `DocumentServiceIntegrationTest` 7/7、`DocumentIndexServiceIntegrationTest` 15/15、
-   `DocumentIndexE2EIntegrationTest` 1/1、Qdrant 集成 3/3、knowledge E2E 1/1。
+   `DocumentIndexE2EIntegrationTest` 1/1、Qdrant 集成 4/4、knowledge E2E 1/1。
    首轮暴露的 D1（`DocumentChunkMapper` 的 `&lt;&gt;` 未在 `<script>` 内）已按最小改动修复：
    只改两条 SQL 映射，旧版本 chunk 删除与清理扫描恢复，回归无失败。详见 9.4.6。
+9. **RAG-01 已修复，但不是跨存储原子删除。** attempt fence 负责拦住“已失去租约/已被接管”
+   的常见路径；精确版本删除负责拦住“fence 校验之后新 worker 才接管”的窄窗口。
+   若进程在“Qdrant 已删、MySQL 未删”之间崩溃，仍会留下 chunk 记录（由后续清理任务处理），
+   不会误删新版本。测试证据见 9.4.7；RAG-02 / RAG-03 仍待处理。
 
 ---
 
@@ -685,4 +766,5 @@ curl -X POST "$AGENT_BASE/agent/documents/delete" \
 - 未新增数据库、消息队列，未替换 Qdrant。
 - 未实现跨存储分布式事务（明确不做）。
 - 未重构无关的 Retriever / Agent 模块。
-- 未执行需要真实 MySQL / Qdrant / 完整 Agent 链路的测试（见 9.4）。
+- Phase 2 初版未执行需要真实 MySQL / Qdrant / 完整 Agent 链路的测试；
+  这些测试已在 9.4 与最终单次全量中补跑，不再是未执行状态。

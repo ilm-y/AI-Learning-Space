@@ -67,6 +67,8 @@ class DeleteDocumentRequest(BaseModel):
 
     - `keepIndexVersion is None`：删除全部版本（文档删除）。
     - `keepIndexVersion` 非空：保留该活跃版本，清理其余版本（切换后的延迟清理）。
+    - `indexVersions` 非空：只删除这些精确版本；`deleteLegacy` 同时删除没有
+      `index_version` 字段的迁移前 points。它与 `keepIndexVersion` 互斥。
     - `collection` 为空时按当前 Embedding 配置计算，兼容迁移前未记录 collection 的文档。
     """
 
@@ -79,6 +81,8 @@ class DeleteDocumentRequest(BaseModel):
     embedding_dimension: int | None = Field(alias="embeddingDimension", default=None, gt=0)
     embedding_fingerprint: str | None = Field(alias="embeddingFingerprint", default=None)
     keep_index_version: int | None = Field(alias="keepIndexVersion", default=None, ge=0)
+    index_versions: list[int] | None = Field(alias="indexVersions", default=None)
+    delete_legacy: bool = Field(alias="deleteLegacy", default=False)
 
     @field_validator("collection", "embedding_model", "embedding_provider",
                      "embedding_fingerprint")
@@ -88,3 +92,14 @@ class DeleteDocumentRequest(BaseModel):
             return None
         stripped = value.strip()
         return stripped or None
+
+    @model_validator(mode="after")
+    def delete_mode_is_exclusive(self) -> "DeleteDocumentRequest":
+        if self.keep_index_version is not None and self.index_versions is not None:
+            raise ValueError("keepIndexVersion 与 indexVersions 不能同时提供")
+        if self.index_versions is not None:
+            if not self.index_versions:
+                raise ValueError("indexVersions 不能为空")
+            if any(version < 0 for version in self.index_versions):
+                raise ValueError("indexVersions 不能包含负数")
+        return self

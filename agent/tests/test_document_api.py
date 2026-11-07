@@ -30,6 +30,7 @@ class FakeStore:
         self.indexed: dict | None = None
         self.deleted: list[dict] = []
         self.deleted_versions_except: list[dict] = []
+        self.deleted_versions: list[dict] = []
 
     async def ensure_collection(self, *, model: str, dimension: int) -> str:
         self.ensured = (model, dimension)
@@ -61,6 +62,23 @@ class FakeStore:
                 "collection": collection_name,
                 "documentId": document_id,
                 "keepIndexVersion": keep_index_version,
+            }
+        )
+
+    async def delete_versions(
+        self,
+        *,
+        collection_name: str,
+        document_id: int,
+        versions: list[int],
+        delete_legacy: bool = False,
+    ) -> None:
+        self.deleted_versions.append(
+            {
+                "collection": collection_name,
+                "documentId": document_id,
+                "versions": versions,
+                "deleteLegacy": delete_legacy,
             }
         )
 
@@ -274,6 +292,50 @@ def test_delete_keeps_active_version_when_requested() -> None:
         }
     ]
     assert store.deleted == []
+
+
+def test_delete_removes_only_exact_versions_and_optional_legacy() -> None:
+    store = FakeStore()
+    client = make_client(store=store)
+
+    response = client.post(
+        "/agent/documents/delete",
+        json={
+            "documentId": 5,
+            "collection": "test_hash-v1_8",
+            "indexVersions": [0, 2],
+            "deleteLegacy": True,
+        },
+        headers=HEADERS,
+    )
+
+    assert response.status_code == 200
+    assert store.deleted_versions == [
+        {
+            "collection": "test_hash-v1_8",
+            "documentId": 5,
+            "versions": [0, 2],
+            "deleteLegacy": True,
+        }
+    ]
+    assert store.deleted == []
+    assert store.deleted_versions_except == []
+
+
+def test_delete_rejects_keep_and_exact_versions_together() -> None:
+    client = make_client()
+
+    response = client.post(
+        "/agent/documents/delete",
+        json={
+            "documentId": 5,
+            "keepIndexVersion": 3,
+            "indexVersions": [1, 2],
+        },
+        headers=HEADERS,
+    )
+
+    assert response.status_code == 422
 
 
 def test_delete_requires_internal_auth_and_valid_payload() -> None:

@@ -309,6 +309,50 @@ class QdrantDocumentStore:
         except Exception as exc:  # noqa: BLE001
             raise DocumentVectorStoreError(f"Qdrant 清理旧版本失败：{exc}") from exc
 
+    async def delete_versions(
+        self,
+        *,
+        collection_name: str,
+        document_id: int,
+        versions: list[int],
+        delete_legacy: bool = False,
+    ) -> None:
+        """只删除指定版本；可选删除没有 `index_version` 字段的 legacy points。
+
+        与 `delete_versions_except` 不同，这个接口不会删除未列出的版本。调用方
+        先用 fencing/版本白名单确定删除集合，即使删除期间出现更高版本，也不会误删。
+        """
+        normalized = sorted({version for version in versions if version >= 0})
+        if not normalized and not delete_legacy:
+            return
+        try:
+            if not await self._collection_exists(collection_name):
+                return
+            should: list[qm.Condition] = []
+            if normalized:
+                should.append(
+                    qm.FieldCondition(
+                        key="index_version",
+                        match=qm.MatchAny(any=normalized),
+                    )
+                )
+            if delete_legacy:
+                should.append(
+                    qm.IsEmptyCondition(is_empty=qm.PayloadField(key="index_version"))
+                )
+            await self._client.delete(
+                collection_name=collection_name,
+                points_selector=qm.FilterSelector(
+                    filter=qm.Filter(
+                        must=[self._document_condition(document_id)],
+                        should=should,
+                    )
+                ),
+                wait=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise DocumentVectorStoreError(f"Qdrant 精确版本清理失败：{exc}") from exc
+
     async def count_document_points(
         self,
         *,

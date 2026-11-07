@@ -158,7 +158,7 @@ class DocumentIndexE2EIntegrationTest {
         assertThat(ready.getIndexAttempts()).isEqualTo(1);
         assertThat(ready.getIndexVersion()).isEqualTo(1);
 
-        assertConsistency(document.getId(), 2);
+        awaitConsistency(document.getId(), 2, Duration.ofSeconds(10));
 
         // 模拟重试：重新走完整链路，确定性 point ID 覆盖旧点，数量不翻倍。
         jdbc.update("UPDATE document SET status = 'FAILED' WHERE id = ?", document.getId());
@@ -167,7 +167,32 @@ class DocumentIndexE2EIntegrationTest {
 
         assertThat(retried.getIndexAttempts()).isEqualTo(2);
         assertThat(retried.getIndexVersion()).isEqualTo(2);
-        assertConsistency(document.getId(), 2);
+        // READY 是 complete 的提交点，旧版本清理在其后异步执行；
+        // 这里等待清理完成后再断言最终只保留活跃版本，断言强度不变。
+        awaitConsistency(document.getId(), 2, Duration.ofSeconds(10));
+    }
+
+    /**
+     * 有界等待“DB chunk 数 + Qdrant point 数都收敛到 expectedCount”。
+     * 只等待最终一致，不降低断言：超时后仍由 {@link #assertConsistency} 抛出真实差异。
+     */
+    private void awaitConsistency(Long documentId, int expectedCount, Duration timeout)
+            throws Exception {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        AssertionError last = null;
+        while (System.nanoTime() < deadline) {
+            try {
+                assertConsistency(documentId, expectedCount);
+                return;
+            } catch (AssertionError e) {
+                last = e;
+                Thread.sleep(100);
+            }
+        }
+        if (last != null) {
+            throw last;
+        }
+        assertConsistency(documentId, expectedCount);
     }
 
     private void assertConsistency(Long documentId, int expectedCount) throws Exception {

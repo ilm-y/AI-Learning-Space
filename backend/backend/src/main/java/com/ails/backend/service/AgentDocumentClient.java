@@ -25,6 +25,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -144,6 +145,30 @@ public class AgentDocumentClient {
                 document.getEmbeddingDimension(),
                 document.getEmbeddingFingerprint(),
                 keepIndexVersion), "版本清理");
+    }
+
+    /**
+     * 精确删除指定版本（以及可选的 legacy points）。
+     * <p>与 {@link #deleteOtherVersions} 不同，这个接口不会碰未列出的版本；
+     * 即使删除期间有新 worker 写入了更高版本，也不会被误删。</p>
+     */
+    public void deleteVersions(Document document, List<Integer> versions,
+                               boolean deleteLegacy, String collection) {
+        if ((versions == null || versions.isEmpty()) && !deleteLegacy) {
+            return;
+        }
+        String targetCollection = collection == null || collection.isBlank()
+                ? document.getVectorCollection() : collection;
+        sendDelete(document, new AgentDeleteRequest(
+                document.getId(),
+                targetCollection,
+                document.getEmbeddingModel(),
+                document.getEmbeddingProvider(),
+                document.getEmbeddingDimension(),
+                document.getEmbeddingFingerprint(),
+                null,
+                versions,
+                deleteLegacy), "版本清理");
     }
 
     private void sendDelete(Document document, AgentDeleteRequest request, String action) {
