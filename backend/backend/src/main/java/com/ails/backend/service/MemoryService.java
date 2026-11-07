@@ -23,10 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Agent 长期记忆的生命周期管理。
@@ -63,10 +61,13 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class MemoryService {
 
-    /** 关键词检索最多拆出多少个词去 OR。上限存在的意义是给 SQL 定一个界，不让它随输入长度膨胀。 */
-    private static final int MAX_KEYWORD_TERMS = 16;
-    /** 参与检索的词最短长度：单字命中率太低，且放进 OR 里会拖出一大堆无关记忆 */
-    private static final int MIN_KEYWORD_TERM_LENGTH = 2;
+    /**
+     * 单次检索返回的最大条数。
+     * <p>
+     * 全文检索在宽泛关键词下可能命中该用户的全部记忆；没有上界就等于把整张表读进内存。
+     * 200 远大于调用方实际需要的 top-k（Agent 默认只用前 5 条），只作为安全阀存在。
+     */
+    private static final int MAX_SEARCH_RESULTS = 200;
 
     private final MemoryMapper memoryMapper;
     private final MemorySourceMapper memorySourceMapper;
@@ -282,44 +283,65 @@ public class MemoryService {
     }
 
     /**
-     * 记忆检索（第一版为关键词匹配；接向量库后由 embeddingRef 承担）。
+     * 记忆检索（Phase 1：MySQL FULLTEXT + ngram；向量召回留到下一阶段）。
      * <p>
-     * <b>可见性按设计文档 §二十一：</b>
+     * <b>可见性按设计文档 §二十一，与旧实现完全一致：</b>
      * <pre>
      *   GLOBAL                             → 任意空间可见
      *   SPACE   AND space_id  = :spaceId   → 只在该空间可见
      *   CONCEPT AND space_id  = :spaceId
      *             AND concept_id = :conceptId → 只在该空间的这个知识点下可见
      * </pre>
-     * 老实现是 {@code learning_space_id = :spaceId} 精确匹配，而 GLOBAL 记忆的
-     * {@code learning_space_id} 是 NULL —— 于是「全局记忆永远检索不到」，
-     * 而且检索返回空列表和「真的没有匹配」长得一模一样，排查时看不出任何异常。
-     * <p>
      * 调用方给出的上下文越少，能匹配的作用域越少，这是刻意的保守：<b>检索结果会直接进
      * LLM prompt</b>，拿不准的记忆宁可少给 —— 尤其 CONCEPT 级记忆，它只在
      * 「这个空间 + 这个知识点」的上下文里才成立，只给 spaceId 就把它捞出来是错的。
      * 反之完全不给 spaceId 时不做可见性过滤（返回该用户全部 ACTIVE 记忆），
      * 因为这时调用方本来就没有声明任何上下文，也就无所谓「可见」。
      * <p>
-     * <b>keyword 不是「一个词」，而是「一段可以拆的查询文本」，按词拆开后 OR 匹配。</b>
-     * 直接把它当成单个子串去 {@code LIKE '%关键词%'} 是行不通的：调用方（Python Agent）
-     * 传的是用户原话，整句话几乎不可能原样出现在某条记忆里，于是每次都返回空列表。
-     * 拆分规则见 {@link #keywordTerms}：按空白与标点切分，中文再补一层字符二元组
-     * （中文没有词间空格，不切二元组的话一整句仍然只是一个子串）。
-     * 只要命中任意一个词就算候选，命中多的排在前面由 importance / updatedAt 决定 ——
-     * 精确排序是向量检索该干的事，这里不假装自己有那个能力。
+     * <b>为什么把 LIKE 换成 MATCH ... AGAINST：</b>旧实现把查询文本切词后逐个
+     * {@code LIKE '%term%'} OR 起来，每个词都是一次全表扫，中文还要在 Java 侧补二元组；
+     * 现在由 ngram 解析器在索引层完成二元切分，一条 {@code MATCH} 即可，
+     * 且能按相关性排序。调用方传入的仍然是「用户原话」，这是 ngram 期待的输入形态。
+     * <p>
+     * <b>空 keyword 不回退成「空结果」：</b>{@code MATCH('')} 恒为空集，但旧语义与
+     * 调用方契约都是「没输入关键词 = 返回该用户的 ACTIVE 记忆列表」。所以空查询走
+     * {@link #listActiveVisible}，保持行为不变。
+     * <p>
+     * <b>排序变化（有意为之）：</b>从 {@code importance / updatedAt} 改为
+     * {@code 相关性 / importance / updatedAt / id}。相关性是这次改造的目的；
+     * 后三个字段只用来保证同一分数下的顺序稳定。
+     * <p>
+     * <b>索引缺失不吞异常：</b>如果老库没有执行
+     * {@code schema-migration-memory-fulltext.sql}，MySQL 会报
+     * {@code Can't find FULLTEXT index matching the column list}。这必须作为部署错误
+     * 暴露出来，而不是伪装成「没有相关记忆」—— 空列表和检索失效长得一模一样是最难排查的。
      */
     @Transactional(readOnly = true)
     public List<MemoryResponse> search(Long userId, Long spaceId, Long conceptId, String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return listActiveVisible(userId, spaceId, conceptId);
+        }
+        return memoryMapper
+                .searchFulltext(userId, spaceId, conceptId, keyword.trim(), MAX_SEARCH_RESULTS)
+                .stream()
+                .map(MemoryResponse::from)
+                .toList();
+    }
+
+    /**
+     * 不带关键词时的可见性查询，保持 Phase 1 之前的返回语义。
+     * <p>
+     * 可见性条件必须包在 {@code and(...)} 里：不包的话作用域里的 OR 会和外层条件平铺成
+     * {@code user_id = ? AND status = ? OR scope_type = 'GLOBAL'}，OR 一铺开前面两个条件
+     * 就白写了 —— 直接变成「所有用户的全局记忆」，这是最危险的一类拼接错误。
+     */
+    private List<MemoryResponse> listActiveVisible(Long userId, Long spaceId, Long conceptId) {
         LambdaQueryWrapper<Memory> query = new LambdaQueryWrapper<Memory>()
                 .eq(Memory::getUserId, userId)
                 .eq(Memory::getStatus, MemoryStatus.ACTIVE)
                 .orderByDesc(Memory::getImportance)
                 .orderByDesc(Memory::getUpdatedAt);
 
-        // 必须包在 and(...) 里：不包的话作用域里的 OR 会和外层条件平铺成
-        // `user_id = ? AND status = ? OR scope_type = 'GLOBAL'`，OR 一铺开前面两个条件就白写了
-        // —— 直接变成「所有用户的全局记忆」，这是最危险的一类拼接错误。
         if (spaceId != null) {
             query.and(w -> {
                 w.eq(Memory::getScopeType, MemoryScopeType.GLOBAL);
@@ -332,58 +354,7 @@ public class MemoryService {
                 }
             });
         }
-
-        List<String> terms = keywordTerms(keyword);
-        if (!terms.isEmpty()) {
-            query.and(w -> {
-                for (String term : terms) {
-                    w.or().like(Memory::getContent, term);
-                }
-            });
-        }
         return memoryMapper.selectList(query).stream().map(MemoryResponse::from).toList();
-    }
-
-    /**
-     * 把查询文本拆成用于 LIKE 的词。
-     * <p>
-     * 两层：
-     * <ol>
-     *   <li>按空白与中英标点切分成词 —— 英文/有空格的语言到这一步就够了；</li>
-     *   <li>对<b>含中文</b>且长度大于 2 的词，再补上相邻两字的二元组。中文句子没有词边界，
-     *       不切的话「我不太理解递归和分治」整体只是一个子串，永远匹配不到内容为「递归」的记忆；
-     *       切成「递归」「分治」这类二元组后就能命中。代价是有假阳性（「和分」这种跨词组合），
-     *       对「找出可能相关的记忆交给 Agent 参考」这个用途可以接受。</li>
-     * </ol>
-     */
-    private List<String> keywordTerms(String keyword) {
-        if (!StringUtils.hasText(keyword)) {
-            return List.of();
-        }
-        Set<String> terms = new LinkedHashSet<>();
-        for (String part : keyword.trim().split("[\\s,，。.、;；:：!！?？\"'“”‘’()（）\\[\\]【】/\\\\|]+")) {
-            String token = part.trim();
-            if (token.length() < MIN_KEYWORD_TERM_LENGTH) {
-                continue;
-            }
-            terms.add(token);
-            if (!containsCjk(token)) {
-                continue;
-            }
-            for (int i = 0; i + 2 <= token.length(); i++) {
-                terms.add(token.substring(i, i + 2));
-            }
-            if (terms.size() >= MAX_KEYWORD_TERMS) {
-                break;
-            }
-        }
-        // 拆出来的词太多时只取前 MAX_KEYWORD_TERMS 个：SQL 里每多一个 OR 就多一次
-        // LIKE 全表扫，而排在后面的是长句尾部，通常也不是用户真正想问的东西
-        return terms.stream().limit(MAX_KEYWORD_TERMS).toList();
-    }
-
-    private static boolean containsCjk(String text) {
-        return text.codePoints().anyMatch(cp -> cp >= 0x4E00 && cp <= 0x9FFF);
     }
 
     @Transactional(readOnly = true)

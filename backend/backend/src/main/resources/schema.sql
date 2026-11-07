@@ -327,6 +327,11 @@ CREATE TABLE IF NOT EXISTS `memory` (
     KEY `idx_memory_space` (`learning_space_id`),
     KEY `idx_memory_concept` (`concept_id`),
     KEY `idx_memory_type_status` (`memory_type`, `status`),
+    -- 中文全文检索：默认 FULLTEXT 按空格分词，中文整句会变成一个 token，必须用 ngram。
+    -- 分词粒度由建索引时的 ngram_token_size（默认 2）决定；单字查询永远不命中。
+    -- CREATE TABLE IF NOT EXISTS 不会给已存在的表补索引，老库必须执行
+    -- schema-migration-memory-fulltext.sql。
+    FULLTEXT KEY `ft_memory_content` (`content`) WITH PARSER ngram,
     CONSTRAINT `fk_memory_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
     CONSTRAINT `fk_memory_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`),
     CONSTRAINT `fk_memory_concept` FOREIGN KEY (`concept_id`) REFERENCES `concept` (`id`)
@@ -343,6 +348,38 @@ CREATE TABLE IF NOT EXISTS `memory_source` (
     UNIQUE KEY `uk_memory_source` (`memory_id`, `source_type`, `source_id`),
     KEY `idx_ms_memory` (`memory_id`),
     CONSTRAINT `fk_ms_memory` FOREIGN KEY (`memory_id`) REFERENCES `memory` (`id`) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- 模块 11：Transactional Outbox（Memory → 向量索引的可靠事件表）
+--
+-- 本轮（Phase 1）只建表，不写代码使用：先让结构就位，后续阶段接入 Publisher / Relay。
+-- 同一个业务事务里写 memory 与 outbox_event，由后台 Relay 轮询投递到 Agent，
+-- 保证「记忆写成功」与「向量索引事件已记录」不会只发生一半。
+--
+-- 刻意不建外键：Outbox 是基础设施表，Memory 也永不物理删除。
+CREATE TABLE IF NOT EXISTS `outbox_event` (
+    `id`              BIGINT       NOT NULL AUTO_INCREMENT,
+    `event_type`      VARCHAR(32)  NOT NULL COMMENT 'MEMORY_UPSERT / MEMORY_DELETE',
+    `aggregate_type`  VARCHAR(32)  NOT NULL DEFAULT 'MEMORY',
+    `aggregate_id`    BIGINT       NOT NULL COMMENT 'memory.id',
+    `payload`         JSON         NOT NULL COMMENT '自包含快照，Relay 不依赖处理时的库内状态',
+    `status`          ENUM ('PENDING', 'PROCESSING', 'DONE', 'DEAD') NOT NULL DEFAULT 'PENDING',
+    `attempt_count`   INT          NOT NULL DEFAULT 0,
+    `max_attempts`    INT          NOT NULL DEFAULT 8,
+    `next_attempt_at` DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `locked_by`       VARCHAR(64)           DEFAULT NULL,
+    `locked_at`       DATETIME(3)           DEFAULT NULL,
+    `last_error`      VARCHAR(500)          DEFAULT NULL COMMENT '只存错误摘要，不存堆栈/内容',
+    `dedup_key`       VARCHAR(191)          DEFAULT NULL COMMENT '仅回填脚本使用；正常写入为 NULL',
+    `created_at`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at`      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+                                   ON UPDATE CURRENT_TIMESTAMP(3),
+    `completed_at`    DATETIME(3)           DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_outbox_dedup` (`dedup_key`),
+    KEY `idx_outbox_due` (`status`, `next_attempt_at`, `id`),
+    KEY `idx_outbox_aggregate` (`aggregate_type`, `aggregate_id`, `id`),
+    KEY `idx_outbox_lease` (`status`, `locked_at`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- 模块 12：主动验证任务（测试嵌入当前对话）
