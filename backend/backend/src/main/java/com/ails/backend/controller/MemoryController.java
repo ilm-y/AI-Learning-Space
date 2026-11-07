@@ -1,9 +1,11 @@
 package com.ails.backend.controller;
 
 import com.ails.backend.common.ApiResponse;
+import com.ails.backend.dto.memory.HybridMemorySearchResponse;
 import com.ails.backend.dto.memory.MemoryRequest;
 import com.ails.backend.dto.memory.MemoryResponse;
 import com.ails.backend.enums.MemoryStatus;
+import com.ails.backend.service.HybridSearchService;
 import com.ails.backend.service.MemoryService;
 import com.ails.backend.utils.SecurityUtil;
 import jakarta.validation.Valid;
@@ -32,6 +34,7 @@ import java.util.List;
 public class MemoryController {
 
     private final MemoryService memoryService;
+    private final HybridSearchService hybridSearchService;
 
     @GetMapping
     public ApiResponse<List<MemoryResponse>> list(@RequestParam(required = false) Long spaceId,
@@ -52,6 +55,22 @@ public class MemoryController {
                                                     @RequestParam(required = false) Long conceptId,
                                                     @RequestParam(required = false) String keyword) {
         return ApiResponse.ok(memoryService.search(SecurityUtil.currentUserId(), spaceId, conceptId, keyword));
+    }
+
+    /**
+     * 混合检索：MySQL FULLTEXT + Agent 向量召回，RRF 融合后回 MySQL 复核。
+     *
+     * <p>返回体带 {@code status}（OK / DEGRADED_* / UNAVAILABLE / BLANK_QUERY）与
+     * 每路排名。旧 {@code /search} 保留原返回结构，供已接入的 Python Agent 继续使用。</p>
+     */
+    @GetMapping("/search/hybrid")
+    public ApiResponse<HybridMemorySearchResponse> hybridSearch(
+            @RequestParam(required = false) Long spaceId,
+            @RequestParam(required = false) Long conceptId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer limit) {
+        return ApiResponse.ok(hybridSearchService.search(
+                SecurityUtil.currentUserId(), spaceId, conceptId, keyword, limit));
     }
 
     @GetMapping("/{id}")

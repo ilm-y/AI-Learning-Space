@@ -1,6 +1,7 @@
 package com.ails.backend.service;
 
 import com.ails.backend.common.GlobalExceptionHandler;
+import com.ails.backend.config.MemorySearchConfig;
 import com.ails.backend.config.MyBatisMetaObjectHandler;
 import com.ails.backend.config.MybatisPlusConfig;
 import com.ails.backend.controller.MemoryController;
@@ -11,6 +12,7 @@ import com.ails.backend.enums.MemoryStatus;
 import com.ails.backend.enums.MemoryType;
 import com.ails.backend.model.MemoryCandidateDraft;
 import com.ails.backend.security.AuthUser;
+import com.ails.backend.security.InternalIdentitySigner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -79,6 +81,9 @@ class MemoryStateMachineConcurrencyIT {
     private MemoryService memoryService;
 
     @Autowired
+    private HybridSearchService hybridSearchService;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     private MockMvc mockMvc;
@@ -98,12 +103,12 @@ class MemoryStateMachineConcurrencyIT {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new MemoryController(memoryService))
+                .standaloneSetup(new MemoryController(memoryService, hybridSearchService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
 
         for (String table : List.of(
-                "evidence_source", "understanding_revision", "learning_evidence",
+                "outbox_event", "evidence_source", "understanding_revision", "learning_evidence",
                 "learning_understanding", "learning_state", "memory_source", "memory",
                 "agent_run", "message", "conversation", "concept", "learning_space", "user")) {
             jdbc.update("DELETE FROM `" + table + "`");
@@ -340,7 +345,12 @@ class MemoryStateMachineConcurrencyIT {
             ConceptService.class,
             LearningSpaceService.class,
             MybatisPlusConfig.class,
-            MyBatisMetaObjectHandler.class
+            MyBatisMetaObjectHandler.class,
+            MemoryOutboxPublisher.class,
+            HybridSearchService.class,
+            MemorySearchConfig.class,
+            AgentMemoryClient.class,
+            InternalIdentitySigner.class
     })
     static class TestApplication {
     }

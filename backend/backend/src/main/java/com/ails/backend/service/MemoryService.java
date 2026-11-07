@@ -1,6 +1,7 @@
 package com.ails.backend.service;
 
 import com.ails.backend.common.BusinessException;
+import com.ails.backend.dto.memory.HybridMemoryHit;
 import com.ails.backend.dto.memory.MemoryRequest;
 import com.ails.backend.dto.memory.MemoryResponse;
 import com.ails.backend.entity.Concept;
@@ -73,11 +74,16 @@ public class MemoryService {
     private final MemorySourceMapper memorySourceMapper;
     private final LearningSpaceService spaceService;
     private final ConceptService conceptService;
+    private final MemoryOutboxPublisher outboxPublisher;
+    private final HybridSearchService hybridSearchService;
 
     /** 用户自己创建的 Memory：直接生效，不需要确认 */
     @Transactional
     public MemoryResponse create(Long userId, MemoryRequest request) {
-        return MemoryResponse.from(persist(userId, request, MemoryStatus.ACTIVE));
+        Memory memory = persist(userId, request, MemoryStatus.ACTIVE);
+        // 与 INSERT 共用当前事务：提交失败时事件一起回滚，不会留下「永远不索引」的记忆。
+        outboxPublisher.publishUpsert(memory);
+        return MemoryResponse.from(memory);
     }
 
     /**
@@ -318,43 +324,14 @@ public class MemoryService {
      */
     @Transactional(readOnly = true)
     public List<MemoryResponse> search(Long userId, Long spaceId, Long conceptId, String keyword) {
-        if (!StringUtils.hasText(keyword)) {
-            return listActiveVisible(userId, spaceId, conceptId);
-        }
-        return memoryMapper
-                .searchFulltext(userId, spaceId, conceptId, keyword.trim(), MAX_SEARCH_RESULTS)
+        // 走混合检索（FULLTEXT + 向量 + RRF + 回源复核）。任一外部依赖不可用时
+        // HybridSearchService 会降级为单路；两路都失败才返回空，并带 UNAVAILABLE 状态。
+        // 旧端点仍返回 List<MemoryResponse>，调用方契约不变。
+        return hybridSearchService.search(userId, spaceId, conceptId, keyword, MAX_SEARCH_RESULTS)
+                .items()
                 .stream()
-                .map(MemoryResponse::from)
+                .map(HybridMemoryHit::memory)
                 .toList();
-    }
-
-    /**
-     * 不带关键词时的可见性查询，保持 Phase 1 之前的返回语义。
-     * <p>
-     * 可见性条件必须包在 {@code and(...)} 里：不包的话作用域里的 OR 会和外层条件平铺成
-     * {@code user_id = ? AND status = ? OR scope_type = 'GLOBAL'}，OR 一铺开前面两个条件
-     * 就白写了 —— 直接变成「所有用户的全局记忆」，这是最危险的一类拼接错误。
-     */
-    private List<MemoryResponse> listActiveVisible(Long userId, Long spaceId, Long conceptId) {
-        LambdaQueryWrapper<Memory> query = new LambdaQueryWrapper<Memory>()
-                .eq(Memory::getUserId, userId)
-                .eq(Memory::getStatus, MemoryStatus.ACTIVE)
-                .orderByDesc(Memory::getImportance)
-                .orderByDesc(Memory::getUpdatedAt);
-
-        if (spaceId != null) {
-            query.and(w -> {
-                w.eq(Memory::getScopeType, MemoryScopeType.GLOBAL);
-                w.or(o -> o.eq(Memory::getScopeType, MemoryScopeType.SPACE)
-                        .eq(Memory::getLearningSpaceId, spaceId));
-                if (conceptId != null) {
-                    w.or(o -> o.eq(Memory::getScopeType, MemoryScopeType.CONCEPT)
-                            .eq(Memory::getLearningSpaceId, spaceId)
-                            .eq(Memory::getConceptId, conceptId));
-                }
-            });
-        }
-        return memoryMapper.selectList(query).stream().map(MemoryResponse::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -365,6 +342,9 @@ public class MemoryService {
     @Transactional
     public MemoryResponse update(Long userId, Long memoryId, MemoryRequest request) {
         Memory memory = ownedMemory(userId, memoryId);
+
+        // 写前快照：只有参与索引的字段变化时才需要更新向量。
+        IndexedSnapshot before = IndexedSnapshot.of(memory);
 
         // 状态迁移先走唯一入口：ARCHIVED → 非 ARCHIVED 会得到精确的转换错误。
         // 字段编辑是否允许取决于迁移前的状态：ARCHIVED 整体拒绝，CANDIDATE / ACTIVE 允许。
@@ -391,6 +371,9 @@ public class MemoryService {
         memory.setContent(request.content().trim());
         memory.setImportance(request.importance());
         requireUpdated(memoryMapper.updateById(memory), "记忆已被其他请求修改，请刷新后重试");
+        // 必须在 updateById 成功之后发事件：乐观锁失败会抛 409 并回滚事务，
+        // 事件随之回滚，不会残留一条指向未生效状态的事件。
+        publishIndexChange(before, memory);
         return MemoryResponse.from(memory);
     }
 
@@ -402,14 +385,73 @@ public class MemoryService {
     public void archive(Long userId, Long memoryId) {
         Memory memory = ownedMemory(userId, memoryId);
         if (memory.getStatus() == MemoryStatus.ARCHIVED) {
-            // DELETE 幂等：已经归档，不重复写库，也不刷新 updated_at / version。
+            // DELETE 幂等：已经归档，不重复写库，也不刷新 updated_at / version，不发事件。
             return;
         }
+        MemoryStatus before = memory.getStatus();
         applyStatusTransition(memory, MemoryStatus.ARCHIVED);
         requireUpdated(memoryMapper.updateById(memory), "记忆已被其他请求修改，请刷新后重试");
+        // 只有真正进入过索引的 ACTIVE 记忆才需要删点；CANDIDATE 从未写入向量库。
+        if (before == MemoryStatus.ACTIVE) {
+            outboxPublisher.publishDelete(memory);
+        }
     }
 
     // ================= 内部工具 =================
+
+    /**
+     * 参与向量索引的字段快照。
+     *
+     * <p>只有这些字段变化才需要更新向量；{@code status} 单独处理：
+     * ACTIVE → ACTIVE 不发事件，ACTIVE → ARCHIVED 发 DELETE。</p>
+     */
+    private record IndexedSnapshot(
+            MemoryStatus status,
+            String content,
+            MemoryScopeType scopeType,
+            String scopeKey,
+            Long learningSpaceId,
+            Long conceptId,
+            MemoryType memoryType,
+            Float importance) {
+
+        static IndexedSnapshot of(Memory memory) {
+            return new IndexedSnapshot(
+                    memory.getStatus(),
+                    memory.getContent(),
+                    memory.getScopeType(),
+                    memory.getScopeKey(),
+                    memory.getLearningSpaceId(),
+                    memory.getConceptId(),
+                    memory.getMemoryType(),
+                    memory.getImportance());
+        }
+    }
+
+    /**
+     * 统一决定 UPSERT / DELETE / 不发事件。
+     *
+     * <p>规则见设计文档 §4.1.1：CANDIDATE 从索引；CANDIDATE → ACTIVE 补发 UPSERT；
+     * ACTIVE → ARCHIVED 发 DELETE；ACTIVE → ACTIVE 无实际变化不发。</p>
+     */
+    private void publishIndexChange(IndexedSnapshot before, Memory memory) {
+        if (before.status() == MemoryStatus.ARCHIVED) {
+            return;
+        }
+        if (memory.getStatus() == MemoryStatus.ARCHIVED) {
+            if (before.status() == MemoryStatus.ACTIVE) {
+                outboxPublisher.publishDelete(memory);
+            }
+            return;
+        }
+        if (memory.getStatus() != MemoryStatus.ACTIVE) {
+            // CANDIDATE → CANDIDATE：不索引候选。
+            return;
+        }
+        if (!IndexedSnapshot.of(memory).equals(before)) {
+            outboxPublisher.publishUpsert(memory);
+        }
+    }
 
     /**
      * 一条记忆的完整身份：作用域 + 作用域内的标识。

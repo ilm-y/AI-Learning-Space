@@ -82,4 +82,16 @@ public final class JsonUtil {
             throw new IllegalStateException("JSON 序列化失败", e);
         }
     }
+
+    /**
+     * 把 JSON 解析成指定类型。用于 Outbox 自包含 payload 这类结构固定的快照；
+     * 解析失败直接抛出，由调用方归类为永久失败或部署错误，绝不静默跳过。
+     */
+    public static <T> T fromJson(String json, Class<T> type) {
+        try {
+            return MAPPER.readValue(json, type);
+        } catch (Exception e) {
+            throw new IllegalStateException("JSON 解析失败: " + json, e);
+        }
+    }
 }

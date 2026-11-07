@@ -35,11 +35,19 @@ class MemorySourceConcurrencyTest {
     private LearningSpaceService spaceService;
     @Mock
     private ConceptService conceptService;
+    @Mock
+    private MemoryOutboxPublisher outboxPublisher;
+    @Mock
+    private HybridSearchService hybridSearchService;
+
+    private MemoryService newService() {
+        return new MemoryService(memoryMapper, memorySourceMapper, spaceService,
+                conceptService, outboxPublisher, hybridSearchService);
+    }
 
     @Test
     void duplicateSourceFromConcurrentRunStillReportsAdded() {
-        MemoryService service = new MemoryService(
-                memoryMapper, memorySourceMapper, spaceService, conceptService);
+        MemoryService service = newService();
 
         when(memoryMapper.selectOne(any())).thenReturn(null);
         doAnswer(invocation -> {
@@ -61,8 +69,7 @@ class MemorySourceConcurrencyTest {
 
     @Test
     void duplicateSourceFromAnotherConstraintIsNotSwallowed() {
-        MemoryService service = new MemoryService(
-                memoryMapper, memorySourceMapper, spaceService, conceptService);
+        MemoryService service = newService();
 
         when(memoryMapper.selectOne(any())).thenReturn(null);
         doAnswer(invocation -> {
@@ -81,8 +88,7 @@ class MemorySourceConcurrencyTest {
 
     @Test
     void concurrentInsertOfSameMemoryKeyIsTreatedAsExisting() {
-        MemoryService service = new MemoryService(
-                memoryMapper, memorySourceMapper, spaceService, conceptService);
+        MemoryService service = newService();
 
         // 第一次按 (userId, scopeKey, memoryKey) 查不到；insert 撞唯一键；
         // 再查能拿到并发事务插入的那一行 —— 这才是可以安全吞掉的冲突。

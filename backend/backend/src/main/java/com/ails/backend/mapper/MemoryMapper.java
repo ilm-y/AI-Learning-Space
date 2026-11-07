@@ -65,4 +65,69 @@ public interface MemoryMapper extends BaseMapper<Memory> {
                                @Param("conceptId") Long conceptId,
                                @Param("query") String query,
                                @Param("limit") int limit);
+
+    /**
+     * 混合检索的<b>回源复核</b>：按 id 取回 MySQL 中的权威行，并再次施加
+     * {@code user_id / status = 'ACTIVE' / 可见性} 三重过滤。
+     *
+     * <p>这一步是整套设计的安全底线：Qdrant 里的陈旧、越权、孤儿数据都不会
+     * 因为向量分高就进入结果。调用方必须丢弃本查询查不到的 id，不能只信向量库。</p>
+     *
+     * <p>{@code ids} 不能为空；调用方在空集合时应直接跳过查询（MySQL 的
+     * {@code IN ()} 是语法错误）。</p>
+     */
+    @Select("""
+            <script>
+            SELECT m.*
+            FROM memory m
+            WHERE m.id IN
+            <foreach collection="ids" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+              AND m.user_id = #{userId}
+              AND m.status = 'ACTIVE'
+            <if test="spaceId != null">
+              AND (
+                    m.scope_type = 'GLOBAL'
+                 OR (m.scope_type = 'SPACE' AND m.learning_space_id = #{spaceId})
+                 <if test="conceptId != null">
+                 OR (m.scope_type = 'CONCEPT' AND m.learning_space_id = #{spaceId}
+                                               AND m.concept_id = #{conceptId})
+                 </if>
+              )
+            </if>
+            </script>
+            """)
+    List<Memory> selectVisibleByIds(@Param("userId") Long userId,
+                                    @Param("spaceId") Long spaceId,
+                                    @Param("conceptId") Long conceptId,
+                                    @Param("ids") List<Long> ids);
+
+    /**
+     * 空查询时的可见性列表，保持 Phase 1 之前「没输入关键词就返回 ACTIVE 列表」的语义。
+     */
+    @Select("""
+            <script>
+            SELECT m.*
+            FROM memory m
+            WHERE m.user_id = #{userId}
+              AND m.status = 'ACTIVE'
+            <if test="spaceId != null">
+              AND (
+                    m.scope_type = 'GLOBAL'
+                 OR (m.scope_type = 'SPACE' AND m.learning_space_id = #{spaceId})
+                 <if test="conceptId != null">
+                 OR (m.scope_type = 'CONCEPT' AND m.learning_space_id = #{spaceId}
+                                               AND m.concept_id = #{conceptId})
+                 </if>
+              )
+            </if>
+            ORDER BY m.importance DESC, m.updated_at DESC, m.id ASC
+            LIMIT #{limit}
+            </script>
+            """)
+    List<Memory> selectVisibleList(@Param("userId") Long userId,
+                                   @Param("spaceId") Long spaceId,
+                                   @Param("conceptId") Long conceptId,
+                                   @Param("limit") int limit);
 }

@@ -113,6 +113,43 @@ ails:
       cleanup-initial-delay-ms: ${AILS_DOCUMENT_CLEANUP_INITIAL_DELAY_MS:120000}
       cleanup-batch-size: ${AILS_DOCUMENT_CLEANUP_BATCH_SIZE:50}
 
+  # ===================== Memory 混合检索 =====================
+  memory:
+    # MySQL FULLTEXT + Agent/Qdrant 向量召回，RRF 融合后回源复核。
+    search:
+      # 每路召回上限；最终条数由请求的 limit 决定。
+      recall-k: ${AILS_MEMORY_RECALL_K:50}
+      default-limit: ${AILS_MEMORY_DEFAULT_LIMIT:10}
+      # 旧 /api/memories/search 的历史安全阀是 200；新 /search/hybrid 默认只取 10。
+      max-limit: ${AILS_MEMORY_MAX_LIMIT:200}
+      rrf-k: ${AILS_MEMORY_RRF_K:60}
+      lexical-weight: ${AILS_MEMORY_LEXICAL_WEIGHT:1.0}
+      vector-weight: ${AILS_MEMORY_VECTOR_WEIGHT:1.0}
+      # 两路并行，各自超时；任何一路失败都降级为单路，不让检索整体报错。
+      lexical-timeout-ms: ${AILS_MEMORY_LEXICAL_TIMEOUT_MS:1500}
+      vector-timeout-ms: ${AILS_MEMORY_VECTOR_TIMEOUT_MS:2000}
+      executor-core-size: ${AILS_MEMORY_SEARCH_CORE_POOL_SIZE:4}
+      executor-max-size: ${AILS_MEMORY_SEARCH_MAX_POOL_SIZE:8}
+      executor-queue-capacity: ${AILS_MEMORY_SEARCH_QUEUE_CAPACITY:64}
+
+    # Transactional Outbox：Memory 写事务内落事件，后台 Relay 轮询同步到 Agent。
+    outbox:
+      enabled: ${AILS_MEMORY_OUTBOX_ENABLED:true}
+      interval-ms: ${AILS_MEMORY_OUTBOX_INTERVAL_MS:2000}
+      initial-delay-ms: ${AILS_MEMORY_OUTBOX_INITIAL_DELAY_MS:10000}
+      batch-size: ${AILS_MEMORY_OUTBOX_BATCH_SIZE:100}
+      max-batch-per-tick: ${AILS_MEMORY_OUTBOX_MAX_BATCH_PER_TICK:1000}
+      # 租约必须大于一次 sync 的最坏耗时（Agent 索引 + 网络）。
+      lease-seconds: ${AILS_MEMORY_OUTBOX_LEASE_SECONDS:120}
+      max-attempts: ${AILS_MEMORY_OUTBOX_MAX_ATTEMPTS:8}
+      # 指数退避：2s → 4s → ... → 封顶 5 分钟，±20% 抖动。
+      base-delay-ms: ${AILS_MEMORY_OUTBOX_BASE_DELAY_MS:2000}
+      max-delay-ms: ${AILS_MEMORY_OUTBOX_MAX_DELAY_MS:300000}
+      jitter-ratio: ${AILS_MEMORY_OUTBOX_JITTER_RATIO:0.2}
+      cleanup-interval-ms: ${AILS_MEMORY_OUTBOX_CLEANUP_INTERVAL_MS:86400000}
+      cleanup-initial-delay-ms: ${AILS_MEMORY_OUTBOX_CLEANUP_INITIAL_DELAY_MS:60000}
+      cleanup-batch-size: ${AILS_MEMORY_OUTBOX_CLEANUP_BATCH_SIZE:1000}
+
   agent:
     # AgentGateway 的实现选择，决定「后端把问题发给谁」：
     #   stub —— StubAgentGateway，本机回显，不依赖任何外部进程（默认值，见类注释）

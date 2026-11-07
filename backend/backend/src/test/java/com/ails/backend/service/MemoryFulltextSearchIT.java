@@ -2,12 +2,15 @@ package com.ails.backend.service;
 
 import com.ails.backend.config.MyBatisMetaObjectHandler;
 import com.ails.backend.config.MybatisPlusConfig;
+import com.ails.backend.config.MemorySearchConfig;
 import com.ails.backend.dto.memory.MemoryRequest;
 import com.ails.backend.dto.memory.MemoryResponse;
+import com.ails.backend.entity.Memory;
 import com.ails.backend.enums.MemorySourceType;
 import com.ails.backend.enums.MemoryStatus;
 import com.ails.backend.enums.MemoryType;
 import com.ails.backend.mapper.MemoryMapper;
+import com.ails.backend.security.InternalIdentitySigner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -245,6 +248,31 @@ class MemoryFulltextSearchIT {
         assertThat(ids).hasSize(2);
     }
 
+    // ===================== 回源复核 =====================
+
+    @Test
+    @DisplayName("F9 回源复核：跨用户 / ARCHIVED / 不可见 id 一律被 SQL 过滤")
+    void recheckFiltersIdsThatAreNotVisibleToTheCaller() {
+        Long ownActive = memoryService.create(userId,
+                request(null, null, "ft/recheck-own", "递归：本人的生效记忆", 0.5f)).id();
+        Long ownArchived = memoryService.create(userId,
+                request(null, null, "ft/recheck-archived", "递归：已归档", 0.5f)).id();
+        memoryService.archive(userId, ownArchived);
+
+        jdbc.update("INSERT INTO user (username, password_hash) VALUES (?, ?)",
+                "fulltext-recheck-other", "x");
+        Long otherUserId = jdbc.queryForObject(
+                "SELECT id FROM user WHERE username = ?", Long.class, "fulltext-recheck-other");
+        Long foreign = memoryService.create(otherUserId,
+                request(null, null, "ft/recheck-foreign", "递归：别人的生效记忆", 0.5f)).id();
+
+        // 模拟 Qdrant 返回了合法 id、已归档 id 与其他用户的 id。
+        List<Memory> visible = memoryMapper.selectVisibleByIds(
+                userId, null, null, List.of(ownActive, ownArchived, foreign));
+
+        assertThat(visible).extracting(Memory::getId).containsExactly(ownActive);
+    }
+
     // ===================== helpers =====================
 
     /** 老库没有 FULLTEXT 索引时补建；同时验证迁移脚本的 DDL 可执行。 */
@@ -300,7 +328,12 @@ class MemoryFulltextSearchIT {
             ConceptService.class,
             LearningSpaceService.class,
             MybatisPlusConfig.class,
-            MyBatisMetaObjectHandler.class
+            MyBatisMetaObjectHandler.class,
+            MemoryOutboxPublisher.class,
+            HybridSearchService.class,
+            MemorySearchConfig.class,
+            AgentMemoryClient.class,
+            InternalIdentitySigner.class
     })
     static class TestApplication {
     }

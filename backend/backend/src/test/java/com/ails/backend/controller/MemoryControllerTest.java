@@ -1,7 +1,9 @@
 package com.ails.backend.controller;
 
 import com.ails.backend.common.GlobalExceptionHandler;
+import com.ails.backend.dto.memory.HybridMemorySearchResponse;
 import com.ails.backend.entity.Memory;
+import com.ails.backend.enums.MemoryHybridStatus;
 import com.ails.backend.enums.MemoryScopeType;
 import com.ails.backend.enums.MemoryStatus;
 import com.ails.backend.enums.MemoryType;
@@ -9,7 +11,9 @@ import com.ails.backend.mapper.MemoryMapper;
 import com.ails.backend.mapper.MemorySourceMapper;
 import com.ails.backend.security.AuthUser;
 import com.ails.backend.service.ConceptService;
+import com.ails.backend.service.HybridSearchService;
 import com.ails.backend.service.LearningSpaceService;
+import com.ails.backend.service.MemoryOutboxPublisher;
 import com.ails.backend.service.MemoryService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +36,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -51,15 +56,20 @@ class MemoryControllerTest {
     private LearningSpaceService spaceService;
     @Mock
     private ConceptService conceptService;
+    @Mock
+    private MemoryOutboxPublisher outboxPublisher;
+    @Mock
+    private HybridSearchService hybridSearchService;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         MemoryService memoryService = new MemoryService(
-                memoryMapper, memorySourceMapper, spaceService, conceptService);
+                memoryMapper, memorySourceMapper, spaceService, conceptService,
+                outboxPublisher, hybridSearchService);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new MemoryController(memoryService))
+                .standaloneSetup(new MemoryController(memoryService, hybridSearchService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
@@ -126,6 +136,22 @@ class MemoryControllerTest {
 
         verify(memoryMapper, never()).selectById(any());
         verify(memoryMapper, never()).updateById(any(Memory.class));
+    }
+
+    @Test
+    @DisplayName("混合检索端点：返回 RRF 结果与降级状态，而不是裸列表")
+    void hybridEndpointExposesStatusAndWarnings() throws Exception {
+        when(hybridSearchService.search(any(), any(), any(), any(), any()))
+                .thenReturn(new HybridMemorySearchResponse(
+                        MemoryHybridStatus.DEGRADED_VECTOR, List.of(),
+                        List.of("向量检索失败：Agent 不可用"), 3L));
+
+        mockMvc.perform(get("/api/memories/search/hybrid").param("keyword", "递归"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("DEGRADED_VECTOR"))
+                .andExpect(jsonPath("$.data.items").isEmpty())
+                .andExpect(jsonPath("$.data.warnings[0]").value("向量检索失败：Agent 不可用"));
     }
 
     private static Memory memory(MemoryStatus status) {

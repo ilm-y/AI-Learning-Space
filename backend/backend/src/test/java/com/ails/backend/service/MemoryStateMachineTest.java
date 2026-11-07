@@ -61,12 +61,17 @@ class MemoryStateMachineTest {
     private LearningSpaceService spaceService;
     @Mock
     private ConceptService conceptService;
+    @Mock
+    private MemoryOutboxPublisher outboxPublisher;
+    @Mock
+    private HybridSearchService hybridSearchService;
 
     private MemoryService service;
 
     @BeforeEach
     void setUp() {
-        service = new MemoryService(memoryMapper, memorySourceMapper, spaceService, conceptService);
+        service = new MemoryService(memoryMapper, memorySourceMapper, spaceService,
+                conceptService, outboxPublisher, hybridSearchService);
         lenient().when(memoryMapper.selectCount(any())).thenReturn(0L);
         lenient().when(memoryMapper.updateById(any(Memory.class))).thenReturn(1);
         lenient().when(memorySourceMapper.selectCount(any())).thenReturn(0L);
