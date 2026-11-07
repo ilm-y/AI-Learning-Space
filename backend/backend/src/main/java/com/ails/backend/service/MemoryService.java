@@ -84,7 +84,8 @@ public class MemoryService {
      * <p>
      * 这是留给 Agent Runtime 的入口：AI 推断出的内容默认只能停在 CANDIDATE，
      * 必须由用户确认（{@link #update} 里改 status）才升到 ACTIVE。
-     * 当前还没有 Agent 往这里写，所以线上不会有 CANDIDATE 数据。
+     * 生产写入路径是 {@code AgentAnalysisWriteService.reconcileMemories} →
+     * {@link #reconcileCandidate}；本方法只负责固定落 CANDIDATE 的创建语义。
      * <p>
      * 身份撞车时和 {@link #create} 一样抛 409 而不是静默覆盖：Agent 重放同一份推断
      * 时应当能看见「已经有了」，而不是把用户已经改过的内容再盖回去。
@@ -169,7 +170,7 @@ public class MemoryService {
         applyScope(memory, scope, memoryKey);
         memory.setMemoryType(draft.memoryType());
         memory.setContent(draft.content());
-        memory.setStatus(MemoryStatus.CANDIDATE);
+        applyStatusTransition(memory, MemoryStatus.CANDIDATE);
         memory.setImportance(draft.importance());
         try {
             memoryMapper.insert(memory);
@@ -190,6 +191,10 @@ public class MemoryService {
 
     private ReconcileOutcome updateCandidate(Memory existing, MemoryCandidateDraft draft,
                                              MemorySourceType sourceType, Long sourceId) {
+        // 防御性再确认：调用方已经检查过，这里再挡一次，避免未来新增调用点绕过 Agent 边界。
+        if (existing.getStatus() != MemoryStatus.CANDIDATE) {
+            return ReconcileOutcome.SKIPPED;
+        }
         existing.setMemoryType(draft.memoryType());
         existing.setContent(draft.content());
         existing.setImportance(draft.importance());
@@ -390,6 +395,14 @@ public class MemoryService {
     public MemoryResponse update(Long userId, Long memoryId, MemoryRequest request) {
         Memory memory = ownedMemory(userId, memoryId);
 
+        // 状态迁移先走唯一入口：ARCHIVED → 非 ARCHIVED 会得到精确的转换错误。
+        // 字段编辑是否允许取决于迁移前的状态：ARCHIVED 整体拒绝，CANDIDATE / ACTIVE 允许。
+        MemoryStatus statusBeforeUpdate = memory.getStatus();
+        if (request.status() != null) {
+            applyStatusTransition(memory, request.status());
+        }
+        requireEditable(statusBeforeUpdate);
+
         // 生效值 = 请求里给了就用请求的，没给就保留原来的。
         // 不能直接读 request：PATCH 只传 content 时两个 id 都是 null，
         // 照抄会把作用域从 CONCEPT 悄悄降级成 GLOBAL —— 记忆随即对全部空间可见。
@@ -402,12 +415,10 @@ public class MemoryService {
 
         requireIdentityFree(userId, scope, memoryKey, memoryId);
         applyScope(memory, scope, memoryKey);
+        // 普通字段白名单：status 不在其中，只能由上面的 applyStatusTransition 修改。
         memory.setMemoryType(request.memoryType());
         memory.setContent(request.content().trim());
         memory.setImportance(request.importance());
-        if (request.status() != null) {
-            memory.setStatus(request.status());
-        }
         requireUpdated(memoryMapper.updateById(memory), "记忆已被其他请求修改，请刷新后重试");
         return MemoryResponse.from(memory);
     }
@@ -419,7 +430,11 @@ public class MemoryService {
     @Transactional
     public void archive(Long userId, Long memoryId) {
         Memory memory = ownedMemory(userId, memoryId);
-        memory.setStatus(MemoryStatus.ARCHIVED);
+        if (memory.getStatus() == MemoryStatus.ARCHIVED) {
+            // DELETE 幂等：已经归档，不重复写库，也不刷新 updated_at / version。
+            return;
+        }
+        applyStatusTransition(memory, MemoryStatus.ARCHIVED);
         requireUpdated(memoryMapper.updateById(memory), "记忆已被其他请求修改，请刷新后重试");
     }
 
@@ -485,7 +500,7 @@ public class MemoryService {
         applyScope(memory, scope, memoryKey);
         memory.setMemoryType(request.memoryType() == null ? MemoryType.LEARNING : request.memoryType());
         memory.setContent(request.content().trim());
-        memory.setStatus(status);
+        applyStatusTransition(memory, status);
         memory.setImportance(request.importance());
         try {
             memoryMapper.insert(memory);
@@ -547,6 +562,44 @@ public class MemoryService {
         if (rows == 0) {
             throw BusinessException.conflict(message);
         }
+    }
+
+    /**
+     * 字段编辑是否允许，取决于<b>更新前</b>的状态。
+     * <p>
+     * 不能直接看迁移后的状态：{@code CANDIDATE → ARCHIVED} 是合法的 PATCH，
+     * 迁移完成后对象已经是 ARCHIVED，再用“当前状态”判断会把这次合法请求误拒。
+     * 因此调用方保存迁移前的状态再传进来。ARCHIVED 是终态，整体拒绝编辑。
+     */
+    private static void requireEditable(MemoryStatus statusBeforeUpdate) {
+        if (statusBeforeUpdate == MemoryStatus.ARCHIVED) {
+            throw BusinessException.conflict("已归档的记忆不可修改");
+        }
+    }
+
+    /**
+     * 运行时状态迁移的唯一入口。
+     * <p>
+     * 所有 {@code setStatus} 调用都必须经过这里，包括：
+     * <ul>
+     *   <li>创建路径（{@code create} / {@code createCandidate} / {@code insertCandidate}）：
+     *       新实体还没有落库，以数据库默认值 CANDIDATE 作为“无前态”基线；</li>
+     *   <li>用户更新（{@code update}）：按转换矩阵校验；</li>
+     *   <li>归档（{@code archive}）：先做 ARCHIVED 幂等短路，再迁移。</li>
+     * </ul>
+     * Agent 的 {@code updateCandidate} 只改内容，不调用本方法，也不修改状态。
+     *
+     * @throws BusinessException 409：当前状态不允许迁移到目标状态
+     */
+    private static void applyStatusTransition(Memory memory, MemoryStatus target) {
+        MemoryStatus current = memory.getStatus() == null
+                ? MemoryStatus.CANDIDATE
+                : memory.getStatus();
+        if (!current.canTransitionTo(target)) {
+            throw BusinessException.conflict(
+                    "非法的记忆状态转换: " + current + " → " + target);
+        }
+        memory.setStatus(target);
     }
 
     private Memory ownedMemory(Long userId, Long memoryId) {
