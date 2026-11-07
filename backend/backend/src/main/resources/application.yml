@@ -131,6 +131,11 @@ ails:
     # chatStreamExecutor 的一条线程，所以不能沿用对话的 240 秒。
     # 超时后后端退回 rules-v1，用户无感知；痕迹留在 agent_run.error_message。
     analyze-timeout-ms: ${AILS_AGENT_ANALYZE_TIMEOUT_MS:90000}
+    # 记忆向量同步（POST /agent/memories/sync）与检索（POST /agent/memories/search）。
+    # 检索是混合检索的一路，必须远小于用户可感知的等待时间；同步发生在 Outbox
+    # Relay 中，可以与单次检索使用不同的预算。
+    memory-sync-timeout-ms: ${AILS_AGENT_MEMORY_SYNC_TIMEOUT_MS:5000}
+    memory-search-timeout-ms: ${AILS_AGENT_MEMORY_SEARCH_TIMEOUT_MS:2000}
 
   # ===================== 学习分析异步化 =====================
   analysis:

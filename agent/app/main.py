@@ -9,6 +9,8 @@
 | `POST /agent/context/preview` | 调试用：只检索与组装，**不调用模型**，把「这次喂了什么给模型」摊开 |
 | `POST /agent/documents/parse` | 内部接口：接收文件字节，解析并切块 |
 | `POST /agent/documents/index` | 内部接口：Embedding + Qdrant 写入 |
+| `POST /agent/memories/sync` | 内部接口：记忆向量 UPSERT / DELETE |
+| `POST /agent/memories/search` | 内部接口：记忆向量检索（只回 id 与分数） |
 | `GET /health` | 当前生效的是哪套适配器、上下文预算多大 |
 
 Chat 与 Analyze 是 PRD §24 的两个 Agent Internal API。前者生产用户可见的回答，
@@ -51,10 +53,14 @@ from app.internal_auth import (
 )
 from app.llm import build_llm_adapter
 from app.llm.base import LLMError
+from app.memories.indexer import MemoryIndexer
+from app.memories.routes import router as memories_router
+from app.memories.search import MemoryVectorSearch
 from app.retriever.base import RetrievalError
 from app.retriever.knowledge import KnowledgeSearchService
 from app.runtime import AgentRuntime, StreamEvent
 from app.schemas import AnalyzeRequest, ChatRequest
+from app.vectorstore.memory_store import QdrantMemoryStore
 from app.vectorstore.qdrant_store import QdrantDocumentStore
 
 log = logging.getLogger(__name__)
@@ -80,6 +86,24 @@ async def lifespan(app: FastAPI):
     )
     app.state.embedding_provider = embedding_provider
     app.state.qdrant_store = qdrant_store
+    memory_store = QdrantMemoryStore(
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key,
+        timeout_seconds=settings.qdrant_timeout_seconds,
+        collection_prefix=settings.memory_collection_prefix,
+    )
+    app.state.memory_store = memory_store
+    app.state.memory_indexer = MemoryIndexer(
+        provider=embedding_provider,
+        store=memory_store,
+    )
+    app.state.memory_search = MemoryVectorSearch(
+        provider=embedding_provider,
+        store=memory_store,
+        min_score=settings.memory_search_min_score,
+        timeout_seconds=settings.memory_search_timeout_seconds,
+        default_top_k=settings.memory_search_top_k,
+    )
     app.state.runtime = AgentRuntime(
         settings,
         build_llm_adapter(settings),
@@ -100,11 +124,15 @@ async def lifespan(app: FastAPI):
             try:
                 await app.state.embedding_provider.aclose()
             finally:
-                await app.state.qdrant_store.aclose()
+                try:
+                    await app.state.qdrant_store.aclose()
+                finally:
+                    await app.state.memory_store.aclose()
 
 
 app = FastAPI(title="AI Learning Space — Learning Agent", version="0.1.0", lifespan=lifespan)
 app.include_router(documents_router)
+app.include_router(memories_router)
 
 
 @app.get("/health")

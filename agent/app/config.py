@@ -127,6 +127,16 @@ class Settings(BaseSettings):
     qdrant_collection_prefix: str = "ails_documents"
     qdrant_upsert_batch_size: int = 64
 
+    # ---------- Memory 向量（内部接口）----------
+    # 与文档 collection 刻意分开：记忆向量不应被知识检索召回。
+    memory_collection_prefix: str = "ails_memories"
+    # 调用方不传 recallK 时的默认召回数；上限由请求模型限制为 200。
+    memory_search_top_k: int = 20
+    # 0 表示不做阈值过滤。RRF 只用排名，阈值会删掉唯一能召回的那条。
+    memory_search_min_score: float = 0.0
+    # 单次记忆向量检索的总时限；Spring 侧 HttpClient 还会再设一层超时。
+    memory_search_timeout_seconds: float = 2.0
+
     @field_validator("internal_delegation_secret")
     @classmethod
     def _reject_delegation_signing_secret(cls, value: str) -> str:
@@ -158,6 +168,16 @@ class Settings(BaseSettings):
             raise ValueError("embedding_batch_size 必须为正数")
         if self.qdrant_upsert_batch_size <= 0:
             raise ValueError("qdrant_upsert_batch_size 必须为正数")
+        if not self.memory_collection_prefix.strip():
+            raise ValueError("memory_collection_prefix 不能为空")
+        if self.memory_search_top_k <= 0:
+            raise ValueError("memory_search_top_k 必须为正数")
+        if not math.isfinite(self.memory_search_min_score):
+            raise ValueError("memory_search_min_score 必须是有限数值")
+        if not -1.0 <= self.memory_search_min_score <= 1.0:
+            raise ValueError("memory_search_min_score 必须在 [-1, 1] 之间")
+        if self.memory_search_timeout_seconds <= 0:
+            raise ValueError("memory_search_timeout_seconds 必须为正数")
         if self.knowledge_top_k <= 0:
             raise ValueError("knowledge_top_k 必须为正数")
         if not math.isfinite(self.knowledge_min_score):
@@ -214,6 +234,10 @@ class Settings(BaseSettings):
             "embedding_batch_size": self.embedding_batch_size,
             "qdrant_url": self.qdrant_url,
             "qdrant_collection_prefix": self.qdrant_collection_prefix,
+            "memory_collection_prefix": self.memory_collection_prefix,
+            "memory_search_top_k": self.memory_search_top_k,
+            "memory_search_min_score": self.memory_search_min_score,
+            "memory_search_timeout_seconds": self.memory_search_timeout_seconds,
         }
 
 

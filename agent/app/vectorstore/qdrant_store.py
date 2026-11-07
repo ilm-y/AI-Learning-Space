@@ -83,6 +83,53 @@ def collection_name_for(prefix: str, model: str, dimension: int) -> str:
     return name[:255]
 
 
+def assert_vector_config(name: str, info: Any, dimension: int) -> None:
+    """校验已有 collection 的向量配置与当前 Embedding 一致。
+
+    文档集合与记忆集合共用这套规则：维度或距离函数不一致时绝不写入，
+    否则会把两个不可比较的向量空间混在一起。
+    """
+    vectors = info.config.params.vectors
+    if isinstance(vectors, dict):  # named vectors：本阶段只支持单个默认向量
+        if len(vectors) != 1:
+            raise DocumentVectorStoreError(
+                f"Qdrant collection {name} 包含多个命名向量，无法安全写入"
+            )
+        vectors = next(iter(vectors.values()))
+    size = getattr(vectors, "size", None)
+    if size != dimension:
+        raise DocumentVectorStoreError(
+            f"Qdrant collection {name} 维度不一致：期望 {dimension}，实际 {size}"
+        )
+    distance = getattr(vectors, "distance", None)
+    if distance is not None and str(distance).lower() not in {
+        "distance.cosine",
+        "cosine",
+    }:
+        raise DocumentVectorStoreError(
+            f"Qdrant collection {name} 距离函数不是 COSINE：{distance}"
+        )
+
+
+async def ensure_payload_indexes(
+    client: AsyncQdrantClient,
+    name: str,
+    info: Any,
+    fields: dict[str, qm.PayloadSchemaType],
+) -> None:
+    """只补建缺失的 payload 索引，已有索引不重复创建。"""
+    existing = set((info.payload_schema or {}).keys())
+    for field_name, schema in fields.items():
+        if field_name in existing:
+            continue
+        await client.create_payload_index(
+            collection_name=name,
+            field_name=field_name,
+            field_schema=schema,
+            wait=True,
+        )
+
+
 class QdrantDocumentStore:
     def __init__(
         self,
@@ -139,38 +186,12 @@ class QdrantDocumentStore:
         return name
 
     def _assert_vector_config(self, name: str, info: Any, dimension: int) -> None:
-        vectors = info.config.params.vectors
-        if isinstance(vectors, dict):  # named vectors：本阶段只支持单个默认向量
-            if len(vectors) != 1:
-                raise DocumentVectorStoreError(
-                    f"Qdrant collection {name} 包含多个命名向量，无法安全写入"
-                )
-            vectors = next(iter(vectors.values()))
-        size = getattr(vectors, "size", None)
-        if size != dimension:
-            raise DocumentVectorStoreError(
-                f"Qdrant collection {name} 维度不一致：期望 {dimension}，实际 {size}"
-            )
-        distance = getattr(vectors, "distance", None)
-        if distance is not None and str(distance).lower() not in {
-            "distance.cosine",
-            "cosine",
-        }:
-            raise DocumentVectorStoreError(
-                f"Qdrant collection {name} 距离函数不是 COSINE：{distance}"
-            )
+        assert_vector_config(name, info, dimension)
 
     async def _ensure_payload_indexes(self, name: str, info: Any) -> None:
-        existing = set((info.payload_schema or {}).keys())
-        for field_name, schema in _PAYLOAD_INDEX_FIELDS.items():
-            if field_name in existing:
-                continue
-            await self._client.create_payload_index(
-                collection_name=name,
-                field_name=field_name,
-                field_schema=schema,
-                wait=True,
-            )
+        await ensure_payload_indexes(
+            self._client, name, info, _PAYLOAD_INDEX_FIELDS
+        )
 
     # ===================== 写入 / 删除 =====================
 
