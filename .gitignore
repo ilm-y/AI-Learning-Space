@@ -29,3 +29,7 @@ evaluation/**/*.log
 !evaluation/reports/phase7-20261029/*.log
 !evaluation/reports/phase8-20261029/*.log
 !evaluation/reports/phase9-20261029/*.log
+
+# 不属于本项目文件
+简历描述.md
+docs/delivery/INTERVIEW-DEADLOCK-DEEP-DIVE.md
