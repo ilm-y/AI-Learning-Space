@@ -11,6 +11,12 @@
 > 需要 MySQL / Qdrant / 真实 Agent 的测试若未执行，会明确标注为“未执行”，
 > 不把跳过的测试写成通过。
 
+> **测试数字模式说明（2026-11-07 补记）**：本报告中的后端数字分两种模式，不可混用。
+> **默认模式** = 不设置任何 `AILS_*_IT`，执行 `mvn -B test`，Failsafe 不执行；
+> **门控全量模式** = 打开全部 `AILS_*_IT`，执行 `mvn clean verify`。
+> 最新实测、产物与逐项差异见 [`TEST_EVIDENCE_MODES.md`](TEST_EVIDENCE_MODES.md)。
+> 文中未标注模式的历史数字只作基线。
+
 ---
 
 ## 0. 结论摘要
@@ -25,10 +31,14 @@
 4. Embedding 兼容性由 `provider + model + dimension + endpoint` 指纹约束：
    索引时记录，检索白名单按指纹（旧数据按 model/provider/dimension）过滤，
    Agent 端再按 payload 指纹二次拒绝。
-5. 本机真实执行结果（2026-11-07 最终单次全量，`./mvnw.cmd -B clean verify`，全部门控开启）：
+5. 本机真实执行结果（2026-11-07 最终单次全量，`./mvnw.cmd -B clean verify`，**门控全量模式**）：
    - 后端 Surefire：**335 tests, 0 failures, 0 errors, 11 skipped**；
      Failsafe：**4 tests, 0 failures, 0 errors, 0 skipped**。
-   - Agent 完整套件：`python -m pytest -q` → **415 passed, 0 skipped, 1 xfailed**。
+   - Agent 完整套件：`python -m pytest -q` → **415 passed, 0 skipped, 1 xfailed**
+     （历史文档声明；本轮未保留该次 pytest 原始产物）。
+   - 默认模式对照（2026-11-07 19:56 实测）：Surefire **335 / 0 / 0 / 88**（247 passed），
+     Failsafe 不执行；Agent 默认 `python -m pytest -q` 为 **408 passed / 7 skipped / 1 xfailed**
+     （原始产物见 [`artifacts/`](artifacts/)）。
    - 集成验证轮：MySQL / Qdrant / 真实 Agent 已就绪，Phase 2 原 27 条测试全部真实执行通过；
      新增 1 条 Qdrant 精确版本删除测试后为 **28/28 PASS**：
      `DocumentServiceIntegrationTest` 7/7、`DocumentIndexServiceIntegrationTest` 15/15、
@@ -348,16 +358,23 @@ failsafe:   1 class,  tests=4,   failures=0, errors=0, skipped=0
 | `DocumentIndexServiceIntegrationTest` | 15 / 0 / 0 / 0（真实 MySQL） |
 | `DocumentServiceIntegrationTest` | 7 / 0 / 0 / 0（真实 MySQL） |
 | `DocumentIndexE2EIntegrationTest` | 1 / 0 / 0 / 0（真实 Agent + Qdrant） |
-| `DocumentIndexFencingIntegrationTest` | 4 / 0 / 0 / 0（真实 MySQL + Qdrant） |
+| `DocumentIndexFencingIntegrationTest` | 4 / 0 / 0 / 0（真实 MySQL + Qdrant；**Surefire**，不是 Failsafe） |
 
-> 历史默认套件（不设置任何 `AILS_*_IT` 门控）曾为 **325 / 0 / 0 / 78 skipped**；
-> 该数字现在只作为历史基线保留，不是本报告“已执行”的最终证据。
-> 最终全量的 11 skipped 仅来自 `BackendApplicationTests` 1 条与
+> 命名说明：`DocumentIndexFencingIntegrationTest` 以 `IntegrationTest` 结尾，匹配
+> Surefire 默认的 `*Test`，但不匹配 Failsafe 的 `**/*IT.java`。因此它的 4 条
+> 已计入上面的 Surefire 335；Failsafe 的 4 条只属于 `MemoryStateMachineConcurrencyIT`。
+> 这是类名与 Failsafe include 不匹配，不是配置遗漏。详见
+> [`TEST_EVIDENCE_MODES.md`](TEST_EVIDENCE_MODES.md) §3。
+>
+> **默认模式实测（2026-11-07 19:56）**：不设置任何 `AILS_*_IT` 执行 `mvn -B test`，
+> 结果为 Surefire **335 / 0 / 0 / 88 skipped**（247 passed），Failsafe 不执行。
+> 历史默认基线 325/78 已被这次实测取代，仅作历史记录。
+> **门控全量模式**的 11 skipped 仅来自 `BackendApplicationTests` 1 条与
 > `AnalysisMqIntegrationTest` 10 条，详见 [`INTEGRATION_VERIFICATION.md`](INTEGRATION_VERIFICATION.md) §3.3。
 
 ### 9.2 Agent
 
-执行：
+**门控全量模式（历史声明）**：
 
 ```bash
 cd agent
@@ -365,14 +382,28 @@ python -m pytest -q
 # 415 passed, 0 skipped, 1 xfailed
 ```
 
-最终全量已设置 `AILS_KNOWLEDGE_E2E=true`、`AILS_QDRANT_IT=true` 与
-`AILS_TEST_RABBITMQ_URL`，因此此前跳过的 7 条全部真实执行：
+最终门控全量已设置 `AILS_KNOWLEDGE_E2E=true`、`AILS_QDRANT_IT=true` 与
+`AILS_TEST_RABBITMQ_URL`，因此此前跳过的 7 条在当次运行中真实执行：
 
 - `test_knowledge_e2e.py` 1 条通过（真实 DashScope Embedding + 后端 + Qdrant）；
 - `test_qdrant_integration.py` 4 条通过（真实 Qdrant）；
 - `test_worker_broker.py` 2 条通过（真实 RabbitMQ）。
 
 1 条 `xfailed` 为既有的 `test_runtime_budget_contract.py` 预期失败，不是环境跳过。
+
+> **证据等级**：415/0/1 是历史文档声明，本轮没有保留那一次 pytest 的原始输出；
+> 不能把它当作本轮可复核产物。
+
+**默认模式（2026-11-07 19:54 本轮实测，有原始产物）**：
+
+```bash
+cd agent
+python -m pytest -q -rs
+# 408 passed, 7 skipped, 1 xfailed in 17.51s
+```
+
+7 条 skip 即上列 knowledge E2E 1、Qdrant 4、真实 Broker 2。原始 stdout/XML 与
+运行元数据在 [`artifacts/`](artifacts/)。两种模式的数字不可混用。
 
 ### 9.3 需求中的九类测试对照
 
@@ -639,10 +670,13 @@ $env:AILS_DOCUMENT_FENCING_IT='true'; $env:AILS_IT_MYSQL_PASSWORD='...'
 
 **验证结果。**
 
-- 新增 fencing IT：**4/4 PASS**（真实 MySQL `ails_document_fencing_it` + 真实 Qdrant）。
+- 新增 fencing 集成测试：**4/4 PASS**（真实 MySQL `ails_document_fencing_it` + 真实 Qdrant；
+  运行在 **Surefire**，不是 Failsafe）。
 - Phase 2 全量 IT：**28/28 PASS**（原 27 条全部保留通过 + 新增 1 条 Qdrant 精确删除测试）。
-- 后端最终单次全量：Surefire **335 / 0 / 0 / 11** + Failsafe **4 / 0 / 0 / 0**。
-- Agent 最终全量：**415 passed / 0 skipped / 1 xfailed**。
+- 后端门控全量：Surefire **335 / 0 / 0 / 11** + Failsafe **4 / 0 / 0 / 0**。
+- Agent 门控全量：**415 passed / 0 skipped / 1 xfailed**（历史声明，本轮无原始产物）。
+- 默认模式对照：`mvn -B test` 为 Surefire **335 / 0 / 0 / 88**（247 passed），Failsafe 不执行；
+  Agent 默认 pytest 为 **408 / 7 / 1**（原始产物见 [`artifacts/`](artifacts/)）。
 - 未提交 Git。
 
 **未修复（仍为残余风险）。** RAG-02（回滚/清理仍使用 `document` 的 collection 快照）
@@ -651,6 +685,9 @@ $env:AILS_DOCUMENT_FENCING_IT='true'; $env:AILS_IT_MYSQL_PASSWORD='...'
 ---
 
 ## 10. 已知限制与残余风险
+
+> 本节是 Phase 2 视角的摘要；三阶段统一整理的七项限制（RAG-02、RAG-03、RAG-04、
+> MEM-01、CIT-01、CIT-02、MIG-01）见 [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md)。
 
 1. **不是跨存储事务。** 若 Qdrant 已写入新版本、MySQL 切换成功、随后进程崩溃，
    这是正常状态；若崩溃发生在切换前，新版本 points 属于非活跃版本，不会被检索，
