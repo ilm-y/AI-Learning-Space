@@ -1,0 +1,30 @@
+{"query_id": "L1", "category": "literal", "query": "递归和分治", "relevant_memory_ids": [10001], "note": "查询与记忆共享“递归/分治”字面词。"}
+{"query_id": "L2", "category": "literal", "query": "代码示例", "relevant_memory_ids": [10002], "note": "查询与记忆共享“代码示例”。"}
+{"query_id": "L3", "category": "literal", "query": "复习英语单词", "relevant_memory_ids": [10003], "note": "查询与记忆共享“复习/英语/单词”。"}
+{"query_id": "L4", "category": "literal", "query": "数学证明 严格推导", "relevant_memory_ids": [10004], "note": "查询与记忆共享“数学证明/严格推导”。"}
+{"query_id": "L5", "category": "literal", "query": "图表和流程图", "relevant_memory_ids": [10005], "note": "查询与记忆共享“图表/流程图”。"}
+{"query_id": "L6", "category": "literal", "query": "先写测试 再实现功能", "relevant_memory_ids": [10006], "note": "查询与记忆共享“先写测试/实现功能”。"}
+{"query_id": "L7", "category": "literal", "query": "咖啡因 失眠", "relevant_memory_ids": [10007], "note": "查询与记忆共享“咖啡因/失眠”。"}
+{"query_id": "L8", "category": "literal", "query": "事务隔离级别", "relevant_memory_ids": [10008], "note": "查询与记忆共享“事务隔离级别”。"}
+{"query_id": "L9", "category": "literal", "query": "费曼学习法", "relevant_memory_ids": [10009], "note": "查询与记忆共享“费曼学习法”。"}
+{"query_id": "L10", "category": "literal", "query": "杭州西湖跑步", "relevant_memory_ids": [10010], "note": "查询与记忆共享“杭州/西湖/跑步”。"}
+{"query_id": "S1", "category": "synonym", "query": "推荐夜宵", "relevant_memory_ids": [10011], "note": "夜宵推荐需要考虑用户不吃香菜；查询与目标记忆没有共同二元组。"}
+{"query_id": "S2", "category": "synonym", "query": "买零食要看配料表吗", "relevant_memory_ids": [10012], "note": "看配料表是为了避开花生过敏；查询与目标记忆没有共同二元组。"}
+{"query_id": "S3", "category": "synonym", "query": "怎样避免半夜被亮醒", "relevant_memory_ids": [10013], "note": "避免亮醒对应睡眠浅、怕光；查询与目标记忆没有共同二元组。"}
+{"query_id": "S4", "category": "synonym", "query": "腿脚不方便还能去登山吗", "relevant_memory_ids": [10014], "note": "腿脚不便对应膝盖手术后不能爬楼梯；查询与目标记忆没有共同二元组。"}
+{"query_id": "S5", "category": "synonym", "query": "我想领养一只布偶猫", "relevant_memory_ids": [10015], "note": "领养猫要考虑猫毛过敏；查询与目标记忆没有共同二元组。"}
+{"query_id": "S6", "category": "synonym", "query": "不用鼠标怎么操作电脑", "relevant_memory_ids": [10016], "note": "不用鼠标对应习惯在黑框里敲指令、不喜欢拖拽界面；查询与目标记忆没有共同二元组。"}
+{"query_id": "S7", "category": "synonym", "query": "可以讲得通俗一点吗", "relevant_memory_ids": [10017], "note": "通俗讲解对应多举生活类比、少堆公式；查询与目标记忆没有共同二元组。"}
+{"query_id": "S8", "category": "synonym", "query": "番茄钟应该设多长时间", "relevant_memory_ids": [10018], "note": "番茄钟时长对应学习四十分钟需要休息；查询与目标记忆没有共同二元组。"}
+{"query_id": "S9", "category": "synonym", "query": "上班路上怎么避开拥堵", "relevant_memory_ids": [10019], "note": "避开拥堵对应早高峰文一路堵车；查询与目标记忆没有共同二元组。"}
+{"query_id": "S10", "category": "synonym", "query": "写文章没思路怎么办", "relevant_memory_ids": [10020], "note": "写作没思路对应先列三个要点再展开；查询与目标记忆没有共同二元组。"}
+{"query_id": "I1", "category": "irrelevant", "query": "量子计算机的退相干时间如何测量", "relevant_memory_ids": [], "note": "与所有记忆无字面或语义关联。"}
+{"query_id": "I2", "category": "irrelevant", "query": "如何用望远镜观测木星大红斑", "relevant_memory_ids": [], "note": "与所有记忆无字面或语义关联。"}
+{"query_id": "I3", "category": "irrelevant", "query": "推荐一款适合编程的机械键盘", "relevant_memory_ids": [], "note": "与所有记忆无字面或语义关联。"}
+{"query_id": "I4", "category": "irrelevant", "query": "上海明天天气怎么样", "relevant_memory_ids": [], "note": "与所有记忆无字面或语义关联。"}
+{"query_id": "I5", "category": "irrelevant", "query": "怎么给多肉植物换盆", "relevant_memory_ids": [], "note": "与所有记忆无字面或语义关联。"}
+{"query_id": "I6", "category": "irrelevant", "query": "比特币今年的价格走势", "relevant_memory_ids": [], "note": "与所有记忆无字面或语义关联。"}
+{"query_id": "I7", "category": "irrelevant", "query": "怎么挑选降噪耳机", "relevant_memory_ids": [], "note": "与所有记忆无字面或语义关联。"}
+{"query_id": "I8", "category": "irrelevant", "query": "梵高的星空用了哪些颜色", "relevant_memory_ids": [], "note": "与所有记忆无字面或语义关联。"}
+{"query_id": "I9", "category": "irrelevant", "query": "如何修复漏水的水龙头", "relevant_memory_ids": [], "note": "与所有记忆无字面或语义关联。"}
+{"query_id": "I10", "category": "irrelevant", "query": "珠穆朗玛峰的海拔是多少", "relevant_memory_ids": [], "note": "与所有记忆无字面或语义关联。"}
