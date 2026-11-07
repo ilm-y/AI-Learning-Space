@@ -74,11 +74,40 @@ public class Document {
     /** 生成当前向量的 embedding 模型；未索引时为 NULL */
     private String embeddingModel;
 
-    /** 索引版本；每次成功重建 +1 */
+    /** 生成当前向量的 provider 名（hash / openai-compatible）；未索引时为 NULL */
+    private String embeddingProvider;
+
+    /** 生成当前向量的维度；用于删除与兼容性诊断 */
+    private Integer embeddingDimension;
+
+    /**
+     * Embedding 配置指纹（provider + model + dimension + endpoint 身份）。
+     * <p>检索白名单按它精确过滤，避免不同模型/网关的向量被混用。
+     * 迁移前的历史数据为 NULL，仅按 model 兼容。
+     */
+    private String embeddingFingerprint;
+
+    /** 索引实际写入的 Qdrant collection；删除/清理直接使用，避免重算 */
+    private String vectorCollection;
+
+    /**
+     * 当前活跃的索引构建令牌（不透明、单调递增）。
+     * <p>与 {@code document_chunk.index_version} 对应；对外只表示“当前服务的是哪一版”。
+     * 语义已从“成功次数”改为“构建令牌”，不要用它计算次数。
+     */
     private Integer indexVersion;
+
+    /** 本次构建租约开始时间；非空表示有 writer 正在构建（READY 重建时旧版本仍服务） */
+    private LocalDateTime indexStartedAt;
 
     /** 最近一次索引成功时间 */
     private LocalDateTime indexedAt;
+
+    /** 删除重试次数 */
+    private Integer deleteAttempts;
+
+    /** 最近一次删除失败摘要 */
+    private String deleteError;
 
     /**
      * 软删标记：DELETING 期间仍可见（用于重试），DELETED 后置为当前时间。

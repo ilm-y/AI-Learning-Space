@@ -15,5 +15,6 @@ public record AgentIndexRequest(
         String documentName,
         String fileName,
         String fileType,
+        Integer indexVersion,
         List<AgentIndexChunk> chunks) {
 }

@@ -3,6 +3,7 @@ package com.ails.backend.service;
 import com.ails.backend.common.BusinessException;
 import com.ails.backend.dto.document.DocumentResponse;
 import com.ails.backend.dto.document.DocumentUploadResponse;
+import com.ails.backend.dto.document.ReadyDocument;
 import com.ails.backend.entity.Document;
 import com.ails.backend.entity.LearningSpace;
 import com.ails.backend.enums.DocumentStatus;
@@ -20,7 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 /**
- * 文档上传、列表与详情。
+ * 文档上传、列表、详情、重建与删除入口。
  *
  * <p><b>权限：</b>所有 Space 级操作先调用 {@link LearningSpaceService#ownedSpace(Long, Long)}；
  * 文档详情再校验文档的 {@code user_id} 与 Space 归属。他人资源统一返回 404，
@@ -44,6 +45,7 @@ public class DocumentService {
     private final LearningSpaceService spaceService;
     private final DocumentStorageService storageService;
     private final DocumentIndexService indexService;
+    private final DocumentDeletionService deletionService;
 
     @Transactional(readOnly = true)
     public List<DocumentResponse> listBySpace(Long userId, Long spaceId) {
@@ -58,38 +60,38 @@ public class DocumentService {
     }
 
     /**
-     * 返回当前用户当前 Space 中可以被检索的文档 ID。
+     * 返回当前用户当前 Space 中可以被检索的文档及其<b>活跃索引版本</b>。
      *
      * <p>这是 Agent 知识检索的权限白名单：先做 Space 归属校验，再由 Mapper
-     * 在 SQL 里同时检查 READY、未软删、索引完整。`embeddingModel` 由 Agent
-     * 传入当前真实生效的模型名，用来排除旧模型（例如 Hash）索引的文档；
-     * 不传时返回所有模型，供管理/排查使用。</p>
+     * 在 SQL 里同时检查 READY、未软删、索引完整。Embedding 身份由 Agent 传入
+     * 当前真实生效的 provider/model/dimension/fingerprint，用来排除不兼容的旧索引；
+     * 不传 model 时返回全部，供管理/排查使用。</p>
      */
     @Transactional(readOnly = true)
-    public List<Long> listReadyDocumentIds(Long userId, Long spaceId, String embeddingModel) {
+    public List<ReadyDocument> listReadyDocuments(Long userId, Long spaceId,
+                                                  String embeddingModel,
+                                                  String embeddingProvider,
+                                                  Integer embeddingDimension,
+                                                  String embeddingFingerprint) {
         spaceService.ownedSpace(userId, spaceId);
-        String model = null;
-        if (StringUtils.hasText(embeddingModel)) {
-            model = embeddingModel.trim();
-            if (model.length() > 128) {
-                throw new BusinessException(400, "embeddingModel 超过 128 字符");
-            }
+        String model = trimToNull(embeddingModel, 128, "embeddingModel");
+        String provider = trimToNull(embeddingProvider, 64, "embeddingProvider");
+        String fingerprint = trimToNull(embeddingFingerprint, 128, "embeddingFingerprint");
+        if (embeddingDimension != null && embeddingDimension <= 0) {
+            throw new BusinessException(400, "embeddingDimension 必须为正整数");
         }
-        return documentMapper.selectReadyIndexedIds(userId, spaceId, model);
+        // fingerprint 是不透明的版本化摘要，必须与 model 一起使用；单独传 fingerprint
+        // 无法解释旧文档（迁移前 fingerprint 为 NULL）。
+        if (fingerprint != null && model == null) {
+            throw new BusinessException(400, "传入 embeddingFingerprint 时必须同时传入 embeddingModel");
+        }
+        return documentMapper.selectReadyDocuments(
+                userId, spaceId, model, provider, embeddingDimension, fingerprint);
     }
 
     @Transactional(readOnly = true)
     public DocumentResponse get(Long userId, Long documentId) {
-        Document document = documentMapper.selectById(documentId);
-        if (document == null || userId == null || !userId.equals(document.getUserId())) {
-            throw BusinessException.notFound("文档不存在");
-        }
-        try {
-            spaceService.ownedSpace(userId, document.getLearningSpaceId());
-        } catch (BusinessException e) {
-            // 不把「空间存在但不属于你」与「空间不存在」区分开，避免通过详情接口探测资源。
-            throw BusinessException.notFound("文档不存在");
-        }
+        Document document = requireOwnedDocument(userId, documentId);
         return DocumentResponse.from(document);
     }
 
@@ -104,7 +106,7 @@ public class DocumentService {
 
         Document existing = findActive(spaceId, prepared.sha256());
         if (existing != null) {
-            return new DocumentUploadResponse(DocumentResponse.from(existing), true);
+            return duplicateResponse(existing);
         }
 
         DocumentStorageService.StoredFile stored = storageService.store(spaceId, prepared);
@@ -124,6 +126,7 @@ public class DocumentService {
         document.setChunkCount(0);
         document.setIndexAttempts(0);
         document.setIndexVersion(0);
+        document.setDeleteAttempts(0);
 
         try {
             int inserted = documentMapper.insert(document);
@@ -135,7 +138,7 @@ public class DocumentService {
             storageService.deleteQuietly(stored.storageUri());
             Document winner = findActive(spaceId, prepared.sha256());
             if (winner != null) {
-                return new DocumentUploadResponse(DocumentResponse.from(winner), true);
+                return duplicateResponse(winner);
             }
             throw BusinessException.conflict("文档已存在，请刷新后重试");
         } catch (RuntimeException e) {
@@ -151,14 +154,94 @@ public class DocumentService {
 
         // 记录已提交，索引本身异步执行；submit 会同步抢到 PROCESSING 或直接置 FAILED，
         // 因此这里重新读取一次，响应中返回真实状态、attempts 与错误信息。
-        try {
-            indexService.submit(document.getId());
-        } catch (RuntimeException e) {
-            // 上传记录已经保存，不能因为异步调度层的意外异常让客户端误以为上传失败。
-            log.error("提交文档索引任务失败: documentId={}", document.getId(), e);
-        }
+        submitQuietly(document.getId());
         Document saved = documentMapper.selectById(document.getId());
         return new DocumentUploadResponse(DocumentResponse.from(saved != null ? saved : document), false);
+    }
+
+    /**
+     * 主动重建索引。READY 文档在构建期间保持 READY（旧版本继续服务），
+     * 构建失败也保持 READY；这是与“首次索引”不同的失败语义。
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public DocumentResponse reindex(Long userId, Long documentId) {
+        Document document = requireOwnedDocument(userId, documentId);
+        if (document.getStatus() == DocumentStatus.DELETING) {
+            throw BusinessException.conflict("文档正在删除中，不能重建索引");
+        }
+        if (document.getStatus() == DocumentStatus.DELETED) {
+            throw BusinessException.notFound("文档不存在");
+        }
+        submitQuietly(documentId);
+        Document saved = documentMapper.selectById(documentId);
+        return DocumentResponse.from(saved != null ? saved : document);
+    }
+
+    /**
+     * 请求删除文档。同步把状态切到 DELETING（立即退出检索白名单），
+     * 向量与文件的清理异步执行、可重试。重复删除幂等成功。
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void delete(Long userId, Long documentId) {
+        // 用不受 @TableLogic 影响的查询，才能区分“已删除（幂等成功）”与“不存在”。
+        Document document = documentMapper.selectAnyById(documentId);
+        if (document == null || userId == null || !userId.equals(document.getUserId())) {
+            throw BusinessException.notFound("文档不存在");
+        }
+        try {
+            spaceService.ownedSpace(userId, document.getLearningSpaceId());
+        } catch (BusinessException e) {
+            throw BusinessException.notFound("文档不存在");
+        }
+        if (document.getStatus() == DocumentStatus.DELETED || document.getDeletedAt() != null) {
+            return;
+        }
+        deletionService.requestDelete(document);
+    }
+
+    /**
+     * 上传去重命中时的行为：
+     * <ul>
+     *   <li>READY / PROCESSING：真正重复，直接返回；</li>
+     *   <li>FAILED / UPLOADING：上次没索引成功，重新提交；</li>
+     *   <li>DELETING：正在删除，重复上传需要等删除完成，返回 409。</li>
+     * </ul>
+     */
+    private DocumentUploadResponse duplicateResponse(Document existing) {
+        if (existing.getStatus() == DocumentStatus.DELETING) {
+            throw BusinessException.conflict("文档正在删除中，请稍后重试");
+        }
+        if (existing.getStatus() == DocumentStatus.FAILED
+                || existing.getStatus() == DocumentStatus.UPLOADING) {
+            submitQuietly(existing.getId());
+            Document refreshed = documentMapper.selectById(existing.getId());
+            return new DocumentUploadResponse(
+                    DocumentResponse.from(refreshed != null ? refreshed : existing), true);
+        }
+        return new DocumentUploadResponse(DocumentResponse.from(existing), true);
+    }
+
+    private void submitQuietly(Long documentId) {
+        try {
+            indexService.submit(documentId);
+        } catch (RuntimeException e) {
+            // 上传/重建记录已经保存，不能因为异步调度层的意外异常让客户端误以为失败。
+            log.error("提交文档索引任务失败: documentId={}", documentId, e);
+        }
+    }
+
+    private Document requireOwnedDocument(Long userId, Long documentId) {
+        Document document = documentMapper.selectById(documentId);
+        if (document == null || userId == null || !userId.equals(document.getUserId())) {
+            throw BusinessException.notFound("文档不存在");
+        }
+        try {
+            spaceService.ownedSpace(userId, document.getLearningSpaceId());
+        } catch (BusinessException e) {
+            // 不把「空间存在但不属于你」与「空间不存在」区分开，避免通过详情接口探测资源。
+            throw BusinessException.notFound("文档不存在");
+        }
+        return document;
     }
 
     /**
@@ -170,6 +253,17 @@ public class DocumentService {
                 .eq(Document::getLearningSpaceId, spaceId)
                 .eq(Document::getContentHash, contentHash)
                 .last("LIMIT 1"));
+    }
+
+    private static String trimToNull(String value, int max, String field) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() > max) {
+            throw new BusinessException(400, field + " 超过 " + max + " 字符");
+        }
+        return trimmed;
     }
 
     private static String displayName(String fileName) {

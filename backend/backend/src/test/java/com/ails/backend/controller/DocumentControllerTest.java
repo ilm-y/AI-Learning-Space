@@ -4,6 +4,7 @@ import com.ails.backend.common.BusinessException;
 import com.ails.backend.common.GlobalExceptionHandler;
 import com.ails.backend.dto.document.DocumentResponse;
 import com.ails.backend.dto.document.DocumentUploadResponse;
+import com.ails.backend.dto.document.ReadyDocument;
 import com.ails.backend.enums.DocumentStatus;
 import com.ails.backend.security.AuthUser;
 import com.ails.backend.service.DocumentService;
@@ -27,8 +28,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -126,36 +129,73 @@ class DocumentControllerTest {
     }
 
     @Test
-    void readyIdsUsesAuthenticatedUserAndForwardsEmbeddingModel() throws Exception {
-        when(documentService.listReadyDocumentIds(1L, 10L, "text-embedding-v4"))
-                .thenReturn(List.of(7L, 8L));
+    void readyIdsUsesAuthenticatedUserAndForwardsEmbeddingIdentity() throws Exception {
+        when(documentService.listReadyDocuments(
+                1L, 10L, "text-embedding-v4", "openai-compatible", 1024, "v1:abc"))
+                .thenReturn(List.of(readyDocument(7L, 3), readyDocument(8L, 1)));
 
         mockMvc.perform(get("/api/spaces/10/documents/ready-ids")
-                        .param("embeddingModel", "text-embedding-v4"))
+                        .param("embeddingModel", "text-embedding-v4")
+                        .param("embeddingProvider", "openai-compatible")
+                        .param("embeddingDimension", "1024")
+                        .param("embeddingFingerprint", "v1:abc"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data[0]").value(7))
-                .andExpect(jsonPath("$.data[1]").value(8));
+                .andExpect(jsonPath("$.data[0].id").value(7))
+                .andExpect(jsonPath("$.data[0].indexVersion").value(3))
+                .andExpect(jsonPath("$.data[1].id").value(8))
+                .andExpect(jsonPath("$.data[1].indexVersion").value(1));
 
-        verify(documentService).listReadyDocumentIds(1L, 10L, "text-embedding-v4");
+        verify(documentService).listReadyDocuments(
+                1L, 10L, "text-embedding-v4", "openai-compatible", 1024, "v1:abc");
     }
 
     @Test
     void readyIdsAllowsMissingEmbeddingModel() throws Exception {
-        when(documentService.listReadyDocumentIds(1L, 10L, null)).thenReturn(List.of());
+        when(documentService.listReadyDocuments(1L, 10L, null, null, null, null))
+                .thenReturn(List.of());
 
         mockMvc.perform(get("/api/spaces/10/documents/ready-ids"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())
                 .andExpect(jsonPath("$.data").isEmpty());
 
-        verify(documentService).listReadyDocumentIds(1L, 10L, null);
+        verify(documentService).listReadyDocuments(1L, 10L, null, null, null, null);
+    }
+
+    @Test
+    void reindexUsesAuthenticatedUser() throws Exception {
+        when(documentService.reindex(1L, 9L)).thenReturn(documentResponse());
+
+        mockMvc.perform(post("/api/documents/9/reindex"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("已提交重建"))
+                .andExpect(jsonPath("$.data.id").value(9));
+
+        verify(documentService).reindex(1L, 9L);
+    }
+
+    @Test
+    void deleteUsesAuthenticatedUserAndIsIdempotentAtControllerLevel() throws Exception {
+        mockMvc.perform(delete("/api/documents/9"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("已提交删除"));
+
+        verify(documentService).delete(1L, 9L);
+    }
+
+    private static ReadyDocument readyDocument(long id, int version) {
+        ReadyDocument ready = new ReadyDocument();
+        ready.setId(id);
+        ready.setIndexVersion(version);
+        return ready;
     }
 
     private static DocumentResponse documentResponse() {
         return new DocumentResponse(
                 9L, 10L, 1L, "notes", "notes.md", "md", 5L,
                 "a".repeat(64), DocumentStatus.UPLOADING,
-                0, 0, null, null, 0, null, null, null);
+                0, 0, null, null, 0, null, null, null,
+                null, null, null, null, null);
     }
 }

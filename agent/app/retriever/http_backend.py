@@ -40,7 +40,7 @@ from app.retriever.base import (
     KnowledgeResult,
     RetrievalError,
 )
-from app.retriever.knowledge import KnowledgeSearchService
+from app.retriever.knowledge import AllowedDocument, KnowledgeSearchService
 from app.schemas import (
     ApiResponse,
     Concept,
@@ -149,7 +149,12 @@ class HttpBackendRetriever:
                 "知识检索组件未配置，本次回答未使用文档资料。"
             )
 
-        params = {"embeddingModel": self._knowledge_search.embedding_model}
+        params = {
+            "embeddingModel": self._knowledge_search.embedding_model,
+            "embeddingProvider": self._knowledge_search.embedding_provider,
+            "embeddingDimension": self._knowledge_search.embedding_dimension,
+            "embeddingFingerprint": self._knowledge_search.embedding_fingerprint,
+        }
         try:
             data = await self._get(
                 f"/api/spaces/{query.space_id}/documents/ready-ids",
@@ -314,16 +319,46 @@ def _parse_one(data: Any, model: type):
         return None
 
 
-def _parse_ready_ids(data: Any) -> list[int] | None:
-    """解析后端 ready-ids。任何一条不合法都整体拒绝，避免部分白名单。"""
+def _parse_ready_ids(data: Any) -> list[AllowedDocument] | None:
+    """解析后端 ready-ids，任何一条不合法都整体拒绝，避免部分白名单。
+
+    兼容两种返回：
+    * 新契约 `[{"id": 1, "indexVersion": 2}]`；
+    * 旧契约 `[1, 2]`（迁移期/旧后端），视为 indexVersion=0 的 legacy 文档。
+    """
     if not isinstance(data, list):
         return None
-    result: list[int] = []
+    result: list[AllowedDocument] = []
     seen: set[int] = set()
     for value in data:
-        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        if isinstance(value, bool):
             return None
-        if value not in seen:
-            seen.add(value)
-            result.append(value)
+        if isinstance(value, int):
+            if value <= 0:
+                return None
+            document_id, index_version = value, 0
+        elif isinstance(value, dict):
+            document_id = value.get("id")
+            index_version = value.get("indexVersion", 0)
+            if (
+                isinstance(document_id, bool)
+                or not isinstance(document_id, int)
+                or document_id <= 0
+            ):
+                return None
+            if (
+                isinstance(index_version, bool)
+                or not isinstance(index_version, int)
+                or index_version < 0
+            ):
+                return None
+        else:
+            return None
+        if document_id in seen:
+            # 后端白名单按 id 唯一；重复说明状态异常，fail closed。
+            return None
+        seen.add(document_id)
+        result.append(
+            AllowedDocument(document_id=document_id, index_version=index_version)
+        )
     return result

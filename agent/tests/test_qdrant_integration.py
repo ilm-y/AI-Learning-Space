@@ -56,6 +56,8 @@ async def test_real_collection_index_reindex_and_document_scoped_delete() -> Non
             "space_id",
             "document_id",
             "chunk_id",
+            "index_version",
+            "doc_version",
         }
 
         vectors = await provider.embed(["alpha", "beta", "gamma"])
@@ -117,6 +119,80 @@ async def test_real_collection_index_reindex_and_document_scoped_delete() -> Non
             await store.aclose()
 
 
+async def test_real_staged_version_switch_and_cleanup() -> None:
+    prefix = f"ails_it_{uuid.uuid4().hex[:10]}"
+    store = QdrantDocumentStore(
+        url=URL,
+        api_key=os.getenv("AILS_QDRANT_API_KEY", ""),
+        timeout_seconds=10,
+        collection_prefix=prefix,
+        upsert_batch_size=2,
+    )
+    provider = HashEmbeddingProvider(dimension=4)
+    collection = collection_name_for(prefix, provider.model, provider.dimension)
+
+    try:
+        await store.ensure_collection(model=provider.model, dimension=provider.dimension)
+        vectors = await provider.embed(["old", "new"])
+
+        # 版本 0 是旧活跃索引；版本 1 是构建中的新索引。
+        await store.index_document(
+            collection_name=collection,
+            document_id=101,
+            user_id=7,
+            space_id=9,
+            document_name="notes",
+            file_type="md",
+            chunks=[ChunkVector(1001, 0, "old", vectors[0])],
+            index_version=0,
+        )
+        await store.index_document(
+            collection_name=collection,
+            document_id=101,
+            user_id=7,
+            space_id=9,
+            document_name="notes",
+            file_type="md",
+            chunks=[ChunkVector(1002, 0, "new", vectors[1])],
+            index_version=1,
+        )
+
+        # 两个版本同时存在，旧版本仍然可服务。
+        assert await store.count_document_points(
+            collection_name=collection, document_id=101, index_version=0
+        ) == 1
+        assert await store.count_document_points(
+            collection_name=collection, document_id=101, index_version=1
+        ) == 1
+
+        # 切换活跃版本后检索只命中新版本。
+        hits = await store.search_knowledge(
+            collection_name=collection,
+            query_vector=vectors[1],
+            user_id=7,
+            space_id=9,
+            document_versions=[(101, 1)],
+            top_k=5,
+        )
+        assert [hit.payload["content"] for hit in hits] == ["new"]
+
+        # 清理旧版本；活跃版本保持不变。
+        await store.delete_versions_except(
+            collection_name=collection, document_id=101, keep_index_version=1
+        )
+        assert await store.count_document_points(
+            collection_name=collection, document_id=101, index_version=0
+        ) == 0
+        assert await store.count_document_points(
+            collection_name=collection, document_id=101, index_version=1
+        ) == 1
+    finally:
+        try:
+            await store._client.delete_collection(collection)
+        finally:
+            await store.aclose()
+
+
 async def test_real_knowledge_search_enforces_permissions_and_ranking() -> None:
     prefix = f"ails_it_{uuid.uuid4().hex[:10]}"
     store = QdrantDocumentStore(
@@ -156,7 +232,7 @@ async def test_real_knowledge_search_enforces_permissions_and_ranking() -> None:
             query_vector=[1.0, 0.0, 0.0],
             user_id=7,
             space_id=9,
-            document_ids=[101, 202],
+            document_versions=[(101, 0), (202, 0)],
             top_k=5,
         )
 
@@ -174,7 +250,7 @@ async def test_real_knowledge_search_enforces_permissions_and_ranking() -> None:
             query_vector=[1.0, 0.0, 0.0],
             user_id=7,
             space_id=9,
-            document_ids=[303],
+            document_versions=[(303, 0)],
             top_k=5,
         ) == []
         assert await store.search_knowledge(
@@ -182,7 +258,7 @@ async def test_real_knowledge_search_enforces_permissions_and_ranking() -> None:
             query_vector=[1.0, 0.0, 0.0],
             user_id=7,
             space_id=9,
-            document_ids=[404],
+            document_versions=[(404, 0)],
             top_k=5,
         ) == []
 
@@ -192,7 +268,7 @@ async def test_real_knowledge_search_enforces_permissions_and_ranking() -> None:
             query_vector=[1.0, 0.0, 0.0],
             user_id=7,
             space_id=9,
-            document_ids=[101],
+            document_versions=[(101, 0)],
             top_k=5,
         )
         assert [hit.payload["document_id"] for hit in hits_without_505] == [101]

@@ -14,15 +14,20 @@
 | `ARCHIVED → ACTIVE` / `ACTIVE → CANDIDATE` 返回 409 且不写库 | 通过 | T1、T2、T6、T7 |
 | 合法迁移 `CANDIDATE → ACTIVE`、`CANDIDATE → ARCHIVED`、`ACTIVE → ARCHIVED` | 通过 | T3、T4、T5 |
 | 同态重复请求幂等 | 通过 | T12、T13 |
-| 并发更新不静默覆盖、冲突可识别 | 通过（单元级确定性模拟） | T14、T15、T21；真实 MySQL 并发未验证，见 §7 |
+| 并发更新不静默覆盖、冲突可识别 | 通过（真实 MySQL 并发验证） | T14、T15、T21；见 §4.4 |
 | 所有应用层状态写入收敛到唯一入口 | 通过 | `memory.setStatus` 仅剩 `MemoryService.java:602`；§3 |
 | 跨用户仍为 404 | 通过（服务层） | T10、T11 |
 | Agent 路径不产生非法迁移 | 通过 | T16–T21 |
-| Memory 读取 / Agent 流程无回归 | 通过 | 完整 Spring Boot 277 测试 + Agent 回归 71 测试 + Python Agent 383 测试 |
-| 新增 skip 不超过基线 | 通过 | 基线 73，改造后 73；新增 22 条测试全部未 skip |
+| Memory 读取 / Agent 流程无回归 | 通过 | 集成验证轮重跑：完整 Spring Boot 309 测试（含 Phase 2 新增）+ Python Agent 402 测试；Phase 1 相关测试无回归 |
+| 新增 skip 不超过基线 | 通过 | 完整套件基线 73，集成验证轮仍为 73；Phase 1 新增 22 条与并发 IT 4 条均未 skip（IT 由门控显式执行） |
 | 未自动提交 Git | 通过 | `git log -1` 仍为 `4732e40` |
 
 完整 Spring Boot 结果：**Tests run: 277, Failures: 0, Errors: 0, Skipped: 73**（基线 255 / 0 / 0 / 73，新增 22 条全部执行）。
+
+> **2026-11-07 集成验证轮补充**：在真实 MySQL 8.0.37 上新增 `MemoryStateMachineConcurrencyIT`（4 条），
+> 显式执行 **4 PASS / 0 FAIL / 0 SKIP**；完整 Spring Boot 套件重跑为 **309 / 0 / 0 / 73**
+> （309 包含 Phase 2 新增测试，Phase 1 相关测试无回归）。详见 §4.4 与
+> [`INTEGRATION_VERIFICATION.md`](INTEGRATION_VERIFICATION.md)。
 
 ---
 
@@ -328,18 +333,18 @@ cd backend/backend
 | T10 | `t10_crossUserUpdateReturns404` | 用户 A 操作用户 B 的 Memory | update/archive 均 404；不写库 | **PASS** |
 | T11 | `t11_crossUserSpaceReturns404` | PATCH 挂载他人 space | 404；不写库 | **PASS** |
 | T12 | `t12_repeatSameStatePatchIsIdempotent` | 连续两次 PATCH ACTIVE→ACTIVE | 两次成功；`updateById` 2 次；最终 ACTIVE | **PASS** |
-| T13 | `t13_repeatDeleteIsIdempotent` | 连续两次 DELETE | `updateById` 仅 1 次；最终 ARCHIVED | **PASS** |
-| T14 | `t14_concurrentConfirmAndArchiveDoNotSilentlyOverwrite` | 并发“确认” vs “归档” | 恰好 1 个 409；提交状态为 ACTIVE 或 ARCHIVED；两次更新尝试；`OptimisticLockerInnerInterceptor` 已注册 | **PASS** |
-| T15 | `t15_concurrentDoubleConfirmKeepsActive` | 并发两次确认 | 恰好 1 个 409；提交状态 ACTIVE；不会回到 CANDIDATE | **PASS** |
+| T13 | `t13_repeatDeleteIsIdempotent` | 连续两次 DELETE | `updateById` 仅 1 次；最终 ARCHIVED | **PASS**（另有真实 MySQL 并发版，§4.4） |
+| T14 | `t14_concurrentConfirmAndArchiveDoNotSilentlyOverwrite` | 并发“确认” vs “归档” | 恰好 1 个 409；提交状态为 ACTIVE 或 ARCHIVED；两次更新尝试；`OptimisticLockerInnerInterceptor` 已注册 | **PASS**（单测）；**PASS**（真实 MySQL 合法 vs 非法并发，§4.4） |
+| T15 | `t15_concurrentDoubleConfirmKeepsActive` | 并发两次确认 | 恰好 1 个 409；提交状态 ACTIVE；不会回到 CANDIDATE | **PASS**（单测）；**PASS**（真实 MySQL 并发确认，§4.4） |
 | T16 | `t16_agentAddPersistsCandidate` | Agent ADD | 结果 ADDED；插入对象 status=CANDIDATE | **PASS** |
 | T17 | `t17_agentUpdateCandidateKeepsCandidate` | Agent UPDATE 候选 | 结果 UPDATED；内容更新；status 仍 CANDIDATE | **PASS** |
 | T18 | `t18_agentUpdateActiveIsSkipped` | Agent UPDATE 生效记忆 | 结果 SKIPPED；不写库 | **PASS** |
 | T19 | `t19_agentUpdateArchivedIsSkipped` | Agent UPDATE 归档记忆 | 结果 SKIPPED；不写库；不复活 | **PASS** |
 | T20 | `t20_createCandidateIgnoresRequestedActive` | Agent 创建时请求 status=ACTIVE | 落库对象 status=CANDIDATE | **PASS** |
-| T21 | `t21_agentUpdateLosesOptimisticLockRace` | Agent 更新遇到版本冲突 | `updateById` 返回 0 → 结果 SKIPPED，不抛异常 | **PASS** |
+| T21 | `t21_agentUpdateLosesOptimisticLockRace` | Agent 更新遇到版本冲突 | `updateById` 返回 0 → 结果 SKIPPED，不抛异常 | **PASS**（单测）；**PASS**（真实 MySQL Agent UPDATE vs 用户确认，§4.4） |
 | T22 | `t22_invalidStatusEnumReturns400` | PATCH `status="RESURRECTED"` | HTTP 400；`$.code=400`；未进入 Service/Mapper | **PASS** |
 
-汇总：**22 / 22 PASS，0 Failures，0 Errors，0 Skipped**。
+汇总：**22 / 22 PASS，0 Failures，0 Errors，0 Skipped**。另有真实 MySQL 并发 IT **4 / 4 PASS**（§4.4）。
 
 ### 4.3 补充回归
 
@@ -350,6 +355,67 @@ cd backend/backend
 | Python Agent | `cd agent && python -m pytest -q` | **383 passed / 5 skipped / 1 xfailed** |
 
 Agent 后端回归覆盖：`HttpPythonAgentAnalysisGatewayTest`（10）、`HttpPythonAgentGatewayTest`（13）、`AnalysisResultConsumerTest`（9）、`AnalysisResultProcessorTest`（7）、`AnalysisStaleRunCompensatorTest`（5）、`AnalysisTaskPublisherTest`（6）、`AnalysisTaskServiceTest`（8）、`AgentAnalysisWriteServiceTest`（3）、`AnalysisDispatchServiceTest`（4）、`MemorySourceConcurrencyTest`（3）、`TurnAnalysisServiceTest`（3）。`AnalysisMqIntegrationTest` 在未启用 Docker/RabbitMQ 时运行 0 条，不计入 71。
+
+### 4.4 真实 MySQL 并发集成验证（2026-11-07 补跑）
+
+测试类：`backend/backend/src/test/java/com/ails/backend/service/MemoryStateMachineConcurrencyIT.java`（新增）。
+
+执行方式：
+
+```powershell
+cd backend/backend
+$env:AILS_MEMORY_IT='true'; $env:AILS_IT_MYSQL_PASSWORD='...'
+./mvnw.cmd -q -Dtest=MemoryStateMachineConcurrencyIT test
+```
+
+环境：MySQL 8.0.37，`127.0.0.1:3306`，独立库 `ails_memory_it`（不连接开发库 `ails`）。
+HTTP 层使用 standalone MockMvc + 真实 `MemoryController`；数据层使用真实 `MemoryService`、
+真实 MyBatis Mapper、真实 MySQL 事务与 `@Version` 乐观锁。所有断言直接读数据库最终行。
+
+结果：**4 PASS / 0 FAIL / 0 SKIP**。
+
+| 场景 | 方法 | 关键断言（数据库最终状态） | 结果 |
+| --- | --- | --- | --- |
+| T15 并发两次确认 | `concurrentDoubleConfirmOnCandidateKeepsActive` | 两个响应 ∈ {200,409}；成功次数 1–2；`version == 成功次数`；最终 `status=ACTIVE`、内容为确认值；若仅 1 次成功则必为 200+409 | PASS |
+| T14 合法 vs 非法并发 | `illegalCandidatePatchIsRejectedWhileLegalActivePatchSucceeds` | 响应恰为 200+409；最终 `status=ACTIVE`、内容为“合法更新”；内容不是“非法降级”；`version = 原版本 + 1`（非法请求未写库） | PASS |
+| T13 重复 DELETE 并发 | `concurrentDeleteOfArchivedMemoryIsIdempotent` | 两个请求均 200；最终 `status=ARCHIVED`、内容不变、`version` 不变、`updated_at` 不变 | PASS |
+| T21 Agent UPDATE vs 用户确认 | `agentUpdateRacingUserConfirmNeverOverwritesConfirmedContent` | 用户响应 ∈ {200,409}；Agent 结果 ∈ {UPDATED, SKIPPED}；用户 200 时最终必为 ACTIVE + 用户内容（版本 1 或 2）；用户 409 时 Agent 必须 UPDATED 且最终为 CANDIDATE + Agent 内容（版本 1）；不会出现“ACTIVE 却保留 Agent 内容” | PASS |
+
+真实乐观锁证据（测试日志）：
+
+```text
+# T21 本次交错：Agent 先提交 version 0→1，用户读回 version=1 后提交 version 1→2
+[pool-5-thread-2] MemoryMapper.updateById ... version=1 ... WHERE id=? AND version=0 : <== Updates: 1
+[pool-5-thread-1] MemoryMapper.updateById ... version=2 ... WHERE id=? AND version=1 : <== Updates: 1
+
+# T15 并发两次确认：一个线程先提交，另一个的 version 条件未命中
+[pool-6-thread-1] MemoryMapper.updateById : <== Updates: 1
+[pool-6-thread-2] MemoryMapper.updateById : <== Updates: 0
+```
+
+`Updates: 0` 表示条件 `WHERE id=? AND version=?` 未命中，冲突方按设计返回 409（HTTP）或
+`SKIPPED`（Agent），而不是覆盖另一方已提交的数据。T21 的结果取决于线程交错：
+本次是 Agent 先写、用户后写，因此 Agent 结果为 `UPDATED`、最终版本 2、内容为用户确认值；
+测试同时覆盖并断言另一种交错（用户先写 → Agent 得到 `SKIPPED`）的不变量。
+
+#### 改造前后对照
+
+| 维度 | 改造前（Phase 1B 初版） | 改造后（集成验证轮） |
+| --- | --- | --- |
+| 测试类型 | Mockito 单测，`updateById` 用返回值 1/0 模拟冲突 | 真实 MySQL + 真实事务 + 真实 `@Version` 乐观锁 |
+| 断言对象 | 捕获的更新对象 / `never().updateById` | 数据库最终行（status/content/version/updated_at） |
+| 并发执行 | 单线程顺序调用，模拟两次结果 | 两个线程 `CountDownLatch` 同时发起 |
+| 409 来源 | 手工构造的 `updateById=0` | MySQL 条件更新真实返回 0 行 |
+| T14 | 单测覆盖“确认 vs 归档” | 真实 MySQL 覆盖“合法 PATCH ACTIVE vs 非法 PATCH CANDIDATE” |
+| T15 | 单测覆盖并发两次确认 | 真实 MySQL 覆盖并发两次 CANDIDATE→ACTIVE |
+| T13 | 单测覆盖连续两次 DELETE | 真实 MySQL 覆盖两个线程同时 DELETE 已归档记忆 |
+| T21 | 单测覆盖 Agent 更新版本冲突 | 真实 MySQL 覆盖 Agent `reconcileCandidate` 与用户 PATCH 的真实竞争 |
+| 结果 | 22/22 PASS（单测） | 22/22 PASS（单测）+ 4/4 PASS（真实 MySQL IT） |
+
+没有为通过而削弱断言：单测保留；IT 断言的是数据库最终状态，不是响应码。
+IT 类名以 `IT` 结尾，不在 Maven Surefire 默认 include 模式内，因此完整
+`mvn test` 的 309/73 基线不变；它通过 `-Dtest=MemoryStateMachineConcurrencyIT`
+显式执行。
 
 ---
 
@@ -379,7 +445,11 @@ Agent 后端回归覆盖：`HttpPythonAgentAnalysisGatewayTest`（10）、`HttpP
 | `Phase2RealStateIntegrationTest` | 6 | 6 | 需要真实 MySQL（`AILS_PHASE2_IT=true`） |
 | **合计** | **73** | **73** | — |
 
-说明：本轮没有把 T14/T15/T21 写成真实 MySQL 集成测试，否则会新增 3 条 skip，超过基线。这 3 条改为无门控的确定性单元测试，代价是真实并发未被验证，见 §7。
+说明：Phase 1B 初版没有把 T14/T15/T21 写成真实 MySQL 集成测试，以避免新增门控 skip；
+2026-11-07 集成验证轮新增 `MemoryStateMachineConcurrencyIT`（4 条），使用 `AILS_MEMORY_IT`
+门控并**显式执行**，结果 4/4 PASS（§4.4）。该类名以 `IT` 结尾，不在 Maven Surefire
+默认 include 模式内，因此完整 `mvnw.cmd test` 的计数仍是 **309 / 0 / 0 / 73**；
+它没有把任何测试改成 skip，也没有削弱原有 22 条单测。既有 73 条 skip 的分布与基线一致。
 
 ---
 
@@ -417,12 +487,20 @@ Agent 后端回归覆盖：`HttpPythonAgentAnalysisGatewayTest`（10）、`HttpP
 
 ## 7. 未覆盖场景与已知限制
 
-1. **真实 MySQL 并发未验证（T14/T15/T21）**
-   - 设计把 T14/T15/T21 定为真实 MySQL 集成测试；本轮实现为无门控的确定性单元测试：两个线程通过 `CountDownLatch` 同时读取同一 `CANDIDATE`，Mockito 的 `updateById` 第一次返回 1、第二次返回 0，模拟乐观锁失败方；并显式断言 `MybatisPlusConfig` 注册了 `OptimisticLockerInnerInterceptor`。
-   - 未验证真实事务隔离、行锁、`version` 自增和 409 的端到端行为。原因是新增门控集成测试会把 skip 从 73 推到 76，违反本轮 skip 预算；当前环境也没有 MySQL/Docker。
-   - 既有 `Phase2RealStateIntegrationTest` 6 条真实 MySQL 用例本轮被跳过，未扩展；其中 B5 只覆盖 `create` / `createCandidate` 的初始状态，不覆盖 `update` / `archive` 的迁移。
-   - 设计表中 T3/T4/T5/T13 标注为“单测 + 集成”，本轮只实现单测半边；真实 MySQL 下的最终落库状态、`version + 1`、重复 DELETE 的“第二次无写入”均未在真实数据库验证。
-   - 所有“409 且不写库”的断言实际是 `verify(memoryMapper, never()).updateById(...)`，证明没有发出 UPDATE，而不是对真实数据库做前后快照比对。
+1. **真实 MySQL 并发已补验（T14/T15/T13/T21），仍有下列未覆盖边界**
+   - 2026-11-07 集成验证轮新增 `MemoryStateMachineConcurrencyIT`（4 条），在真实 MySQL 8.0.37
+     上执行 **4/4 PASS**；断言直接读取数据库最终 `status / content / version / updated_at`，
+     并观察到真实条件更新返回 `Updates: 0`。详见 §4.4。
+   - 仍未覆盖：原 T14 的“确认 vs 归档”精确交错（新 IT 按本轮验证规格覆盖“合法 PATCH ACTIVE
+     vs 非法 PATCH CANDIDATE”）；真实 MySQL 下的双用户 HTTP 归属场景（T10/T11 仍是服务层单测）；
+     用户 `create` 路径；`PATCH` 归档记忆 + `status=ARCHIVED` 的精确文案。
+   - T21 的真实竞争结果取决于线程交错；测试断言的是不变量（不会出现“ACTIVE 却保留 Agent 内容”、
+     版本与成功写入次数一致），而不是每次强制 Agent 进入 `SKIPPED`。本次 T21 的交错是
+     Agent 先提交、用户后读新版本再提交（Agent `UPDATED`，最终版本 2、用户内容）；
+     同一次类运行中 T15 的第二个线程得到 `Updates: 0`，证明真实条件更新冲突路径被触发
+     （HTTP 409）。
+   - `Phase2RealStateIntegrationTest` 6 条真实 MySQL 用例本轮未执行（不属于本轮指定测试清单），
+     其覆盖不计入本次结论。
 
 2. **跨用户用例是服务层单测，不是双用户 HTTP 集成**
    - T10/T11 直接构造不同 `userId` 的 Memory / 让 `ownedSpace` 抛 404，验证的是 `ownedMemory` / `ownedSpace` 既有逻辑；未走真实 JWT、过滤器、HTTP 层。
@@ -430,7 +508,8 @@ Agent 后端回归覆盖：`HttpPythonAgentAnalysisGatewayTest`（10）、`HttpP
 
 3. **用户创建路径没有新增无门控测试**
    - `create` 从直接 `setStatus(ACTIVE)` 改为 `persist → applyStatusTransition(ACTIVE)`。矩阵分支与 T3 相同（`null` 视为 CANDIDATE，CANDIDATE→ACTIVE 允许），代码审查可确认最终仍为 ACTIVE；但 22 条新测试中没有直接调用 `MemoryService.create`。
-   - 既有 `Phase2RealStateIntegrationTest.B5` 覆盖“用户 Memory 直接 ACTIVE，Agent 候选只能 CANDIDATE”，但本轮因 MySQL 门控被跳过。
+   - 既有 `Phase2RealStateIntegrationTest.B5` 覆盖“用户 Memory 直接 ACTIVE，Agent 候选只能 CANDIDATE”，
+     但本轮未执行该测试类，因此用户 `create` 路径仍没有直接的真实库断言。
 
 4. **`PATCH` 归档记忆 + `status=ARCHIVED` 的精确文案未单测**
    - 当前行为：`applyStatusTransition` 允许同态，随后 `requireEditable(ARCHIVED)` 抛 409 `"已归档的记忆不可修改"`。符合设计 §5.1 “PATCH 对归档记忆整体拒绝（包括字段编辑）”，但错误文案不是 `"ARCHIVED → ARCHIVED"`。
@@ -494,7 +573,8 @@ cd backend/backend
 ./mvnw -B clean test
 ```
 
-预期回到基线：**Tests run: 255, Failures: 0, Errors: 0, Skipped: 73**。
+预期回到 Phase 1B 基线：**Tests run: 255, Failures: 0, Errors: 0, Skipped: 73**。
+（当前工作区已包含 Phase 2 改动，完整套件为 309 / 73；回滚 Phase 2 后才会回到 255。）
 
 ### 8.5 如果未来已经提交
 
@@ -521,7 +601,9 @@ git revert <phase1b-commit>
 - Spring Boot：3.3.5
 - MyBatis-Plus：3.5.7
 - Maven Surefire：3.2.5
-- 测试环境未启动 MySQL、RabbitMQ、Docker；相关集成测试按既有门控跳过（73 条）。
+- Phase 1B 初版环境未启动 MySQL、RabbitMQ、Docker；相关集成测试按既有门控跳过（73 条）。
+- 2026-11-07 集成验证轮启动了真实 MySQL 8.0.37（`127.0.0.1:3306`）与 Docker 中的 Qdrant
+  （`ails-qdrant`，`6333`）；完整套件仍为 309/73，`MemoryStateMachineConcurrencyIT` 显式执行 4/4 PASS。
 - 本地运行日志（未提交）：`/tmp/phase1b/phase1b-baseline.log`、`phase1b-red.log`、`phase1b-green.log`、`phase1b-full.log`、`phase1b-agent.log`、`phase1b-agent-pytest.log`。
 
 ## 附录 B：本轮未做事项

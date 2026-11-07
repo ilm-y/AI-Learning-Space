@@ -16,7 +16,7 @@ from app.retriever.base import (
 )
 from app.retriever.fixture import FixtureRetriever
 from app.retriever.http_backend import HttpBackendRetriever
-from app.retriever.knowledge import KnowledgeSearchService
+from app.retriever.knowledge import AllowedDocument, KnowledgeSearchService
 from app.retriever.routing import FallbackRetriever
 from app.vectorstore.qdrant_store import KnowledgeSearchHit
 
@@ -59,21 +59,28 @@ def hit(
     score: float = 0.9,
     document_name: str = "操作系统笔记.md",
     content: str = "TLB 是页表项缓存。",
+    index_version: int | None = None,
+    doc_version: str | None = None,
+    embedding_fingerprint: str | None = None,
 ) -> KnowledgeSearchHit:
-    return KnowledgeSearchHit(
-        score=score,
-        payload={
-            "user_id": 7,
-            "space_id": 9,
-            "document_id": document_id,
-            "chunk_id": chunk_id,
-            "chunk_index": chunk_index,
-            "file_name": document_name,
-            "file_type": "md",
-            "content": content,
-            "metadata": {"headingPath": ["虚拟内存", "TLB"]},
-        },
-    )
+    payload = {
+        "user_id": 7,
+        "space_id": 9,
+        "document_id": document_id,
+        "chunk_id": chunk_id,
+        "chunk_index": chunk_index,
+        "file_name": document_name,
+        "file_type": "md",
+        "content": content,
+        "metadata": {"headingPath": ["虚拟内存", "TLB"]},
+    }
+    if index_version is not None:
+        payload["index_version"] = index_version
+    if doc_version is not None:
+        payload["doc_version"] = doc_version
+    if embedding_fingerprint is not None:
+        payload["embedding_fingerprint"] = embedding_fingerprint
+    return KnowledgeSearchHit(score=score, payload=payload)
 
 
 def service(
@@ -107,7 +114,7 @@ async def test_success_returns_traceable_fields_and_filters_by_threshold() -> No
             hit(chunk_id=12, chunk_index=3, score=0.10, content="无关内容"),
         ]
     )
-    result = await service(store=store).search(query(min_score=0.35), [101])
+    result = await service(store=store).search(query(min_score=0.35), [AllowedDocument(101, 0)])
 
     assert result.status is KnowledgeStatus.SUCCESS
     assert [chunk.id for chunk in result.chunks] == [11]
@@ -121,13 +128,13 @@ async def test_success_returns_traceable_fields_and_filters_by_threshold() -> No
     assert result.candidates == 2
     assert store.calls[0]["user_id"] == 7
     assert store.calls[0]["space_id"] == 9
-    assert store.calls[0]["document_ids"] == [101]
+    assert store.calls[0]["document_versions"] == [(101, 0)]
     assert store.calls[0]["top_k"] == 5
 
 
 async def test_all_hits_below_threshold_are_reported_not_faked_as_success() -> None:
     store = FakeStore(hits=[hit(score=0.2)])
-    result = await service(store=store).search(query(min_score=0.35), [101])
+    result = await service(store=store).search(query(min_score=0.35), [AllowedDocument(101, 0)])
 
     assert result.chunks == []
     assert result.status is KnowledgeStatus.THRESHOLD_FILTERED
@@ -146,7 +153,7 @@ async def test_empty_allowlist_never_calls_embedding_or_qdrant() -> None:
 
 async def test_malformed_allowlist_fails_closed() -> None:
     store = FakeStore()
-    result = await service(store=store).search(query(), [101, 0])  # type: ignore[list-item]
+    result = await service(store=store).search(query(), [AllowedDocument(101, 0), 0])  # type: ignore[list-item]
 
     assert result.status is KnowledgeStatus.DEGRADED
     assert store.calls == []
@@ -154,16 +161,43 @@ async def test_malformed_allowlist_fails_closed() -> None:
 
 async def test_payload_outside_allowlist_is_rejected() -> None:
     store = FakeStore(hits=[hit(document_id=999, score=0.9)])
-    result = await service(store=store).search(query(), [101])
+    result = await service(store=store).search(query(), [AllowedDocument(101, 0)])
 
     assert result.chunks == []
     assert result.status is KnowledgeStatus.DEGRADED
     assert "字段不完整" in (result.warning or "")
 
 
+async def test_payload_from_inactive_version_is_rejected() -> None:
+    # 白名单活跃版本是 3，但 Qdrant 返回了旧版本 2 的 point。
+    store = FakeStore(hits=[hit(index_version=2, doc_version="101:2", score=0.9)])
+    result = await service(store=store).search(query(), [AllowedDocument(101, 3)])
+
+    assert result.chunks == []
+    assert result.status is KnowledgeStatus.DEGRADED
+
+
+async def test_payload_with_matching_active_version_is_accepted() -> None:
+    store = FakeStore(hits=[hit(index_version=3, doc_version="101:3", score=0.9)])
+    result = await service(store=store).search(query(), [AllowedDocument(101, 3)])
+
+    assert result.status is KnowledgeStatus.SUCCESS
+    assert [chunk.document_id for chunk in result.chunks] == [101]
+
+
+async def test_payload_with_incompatible_embedding_fingerprint_is_rejected() -> None:
+    store = FakeStore(
+        hits=[hit(embedding_fingerprint="v1:another-gateway", score=0.9)]
+    )
+    result = await service(store=store).search(query(), [AllowedDocument(101, 0)])
+
+    assert result.chunks == []
+    assert result.status is KnowledgeStatus.DEGRADED
+
+
 async def test_missing_payload_fields_degrade_to_empty_knowledge() -> None:
     broken = KnowledgeSearchHit(score=0.9, payload={"document_id": 101})
-    result = await service(store=FakeStore(hits=[broken])).search(query(), [101])
+    result = await service(store=FakeStore(hits=[broken])).search(query(), [AllowedDocument(101, 0)])
 
     assert result.chunks == []
     assert result.status is KnowledgeStatus.DEGRADED
@@ -172,7 +206,7 @@ async def test_missing_payload_fields_degrade_to_empty_knowledge() -> None:
 async def test_embedding_failure_degrades() -> None:
     result = await service(
         provider=FailingProvider(RuntimeError("embedding down"))
-    ).search(query(), [101])
+    ).search(query(), [AllowedDocument(101, 0)])
 
     assert result.chunks == []
     assert result.status is KnowledgeStatus.DEGRADED
@@ -181,7 +215,7 @@ async def test_embedding_failure_degrades() -> None:
 async def test_qdrant_failure_degrades() -> None:
     store = FakeStore()
     store.error = RuntimeError("qdrant down")
-    result = await service(store=store).search(query(), [101])
+    result = await service(store=store).search(query(), [AllowedDocument(101, 0)])
 
     assert result.status is KnowledgeStatus.DEGRADED
     assert "依赖不可用" in (result.warning or "")
@@ -190,7 +224,7 @@ async def test_qdrant_failure_degrades() -> None:
 async def test_retrieval_timeout_degrades() -> None:
     result = await service(
         provider=SlowProvider(dimension=8), timeout=0.01
-    ).search(query(), [101])
+    ).search(query(), [AllowedDocument(101, 0)])
 
     assert result.status is KnowledgeStatus.DEGRADED
     assert "超时" in (result.warning or "")
@@ -208,17 +242,17 @@ class RecordingSearch(KnowledgeSearchService):
             timeout_seconds=5,
         )
         self.result = result or KnowledgeResult(status=KnowledgeStatus.NO_MATCH)
-        self.calls: list[tuple[KnowledgeQuery, list[int]]] = []
+        self.calls: list[tuple[KnowledgeQuery, list[AllowedDocument]]] = []
 
     @property
     def embedding_model(self) -> str:
         return MODEL
 
-    async def search(self, query, allowed_document_ids):
-        if not allowed_document_ids:
+    async def search(self, query, allowed_documents):
+        if not allowed_documents:
             # 与真实实现一致：空白名单在进入 Qdrant 之前就返回。
             return KnowledgeResult(status=KnowledgeStatus.NO_VALID_DOCUMENTS)
-        self.calls.append((query, allowed_document_ids))
+        self.calls.append((query, allowed_documents))
         return self.result
 
 
@@ -254,7 +288,53 @@ async def test_http_ready_ids_are_used_and_model_is_sent() -> None:
     assert seen["path"] == "/api/spaces/9/documents/ready-ids"
     assert seen["model"] == MODEL
     assert seen["auth"] == "Bearer user-jwt"
-    assert search.calls[0][1] == [101, 202]
+    assert search.calls[0][1] == [AllowedDocument(101, 0), AllowedDocument(202, 0)]
+
+
+async def test_http_ready_ids_accepts_active_index_versions() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "code": 0,
+                "data": [
+                    {"id": 101, "indexVersion": 3},
+                    {"id": 202, "indexVersion": 1},
+                ],
+            },
+        )
+
+    search = RecordingSearch(KnowledgeResult(chunks=[]))
+    retriever = http_retriever(handler, search)
+    try:
+        await retriever.get_knowledge(query())
+    finally:
+        await retriever.aclose()
+
+    assert search.calls[0][1] == [AllowedDocument(101, 3), AllowedDocument(202, 1)]
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        [{"id": 101, "indexVersion": 3}, {"id": 101, "indexVersion": 4}],
+        [{"id": 0, "indexVersion": 1}],
+        [{"id": 101, "indexVersion": -1}],
+        [{"id": "101", "indexVersion": 1}],
+    ],
+)
+async def test_http_ready_ids_rejects_malformed_versions(data) -> None:
+    search = RecordingSearch()
+    retriever = http_retriever(
+        lambda request: httpx.Response(200, json={"code": 0, "data": data}), search
+    )
+    try:
+        result = await retriever.get_knowledge(query())
+    finally:
+        await retriever.aclose()
+
+    assert result.status is KnowledgeStatus.DEGRADED
+    assert search.calls == []
 
 
 async def test_fatal_401_from_backend_is_retrieval_error() -> None:

@@ -47,16 +47,18 @@ class FakeQdrantClient:
     async def create_payload_index(
         self, *, collection_name: str, field_name: str, field_schema, wait: bool
     ) -> None:
-        assert field_schema == qm.PayloadSchemaType.INTEGER
+        assert field_schema in {
+            qm.PayloadSchemaType.INTEGER,
+            qm.PayloadSchemaType.KEYWORD,
+        }
         self.payload_indexes[collection_name].add(field_name)
 
     async def delete(self, *, collection_name: str, points_selector, wait: bool) -> None:
-        document_id = points_selector.filter.must[0].match.value
         points = self.points[collection_name]
         for point_id in [
             point_id
             for point_id, point in points.items()
-            if point.payload["document_id"] == document_id
+            if _matches(filter_obj=points_selector.filter, payload=point.payload)
         ]:
             del points[point_id]
 
@@ -66,11 +68,10 @@ class FakeQdrantClient:
             self.points[collection_name][str(point.id)] = point
 
     async def count(self, *, collection_name: str, count_filter, exact: bool):
-        document_id = count_filter.must[0].match.value
         total = sum(
             1
             for point in self.points[collection_name].values()
-            if point.payload["document_id"] == document_id
+            if _matches(filter_obj=count_filter, payload=point.payload)
         )
         return SimpleNamespace(count=total)
 
@@ -110,18 +111,29 @@ class FakeQdrantClient:
 
 
 def _matches(*, filter_obj, payload: dict) -> bool:
-    for condition in filter_obj.must:
-        value = payload.get(condition.key)
-        match = condition.match
-        if isinstance(match, qm.MatchAny):
-            if value not in match.any:
-                return False
-        elif isinstance(match, qm.MatchValue):
-            if value != match.value:
-                return False
-        else:  # pragma: no cover
-            raise AssertionError(f"unexpected match type: {type(match)}")
-    return True
+    for condition in filter_obj.must or []:
+        if not _matches_condition(condition=condition, payload=payload):
+            return False
+    for condition in filter_obj.must_not or []:
+        if _matches_condition(condition=condition, payload=payload):
+            return False
+    should = filter_obj.should or []
+    return not should or any(
+        _matches_condition(condition=condition, payload=payload)
+        for condition in should
+    )
+
+
+def _matches_condition(*, condition, payload: dict) -> bool:
+    if isinstance(condition, qm.IsEmptyCondition):
+        return payload.get(condition.is_empty.key) is None
+    value = payload.get(condition.key)
+    match = condition.match
+    if isinstance(match, qm.MatchAny):
+        return value in match.any
+    if isinstance(match, qm.MatchValue):
+        return value == match.value
+    raise AssertionError(f"unexpected match type: {type(match)}")  # pragma: no cover
 
 
 def make_store() -> tuple[QdrantDocumentStore, FakeQdrantClient]:
@@ -161,6 +173,8 @@ async def test_ensure_collection_creates_indexes_only_once() -> None:
         "space_id",
         "document_id",
         "chunk_id",
+        "index_version",
+        "doc_version",
     }
 
 
@@ -286,15 +300,17 @@ async def test_search_applies_user_space_and_document_allowlist_filters() -> Non
         query_vector=[1.0, 0.0],
         user_id=7,
         space_id=9,
-        document_ids=[101],
+        document_versions=[(101, 0)],
         top_k=5,
     )
 
     assert [hit.payload["document_id"] for hit in hits] == [101]
-    assert fake.query_calls[-1]["filter"].must[0].key == "user_id"
-    assert fake.query_calls[-1]["filter"].must[1].key == "space_id"
-    assert fake.query_calls[-1]["filter"].must[2].key == "document_id"
-    assert fake.query_calls[-1]["filter"].must[2].match.any == [101]
+    query_filter = fake.query_calls[-1]["filter"]
+    assert query_filter.must[0].key == "user_id"
+    assert query_filter.must[1].key == "space_id"
+    # version=0 走迁移前兼容分支：按 document_id 过滤。
+    assert query_filter.should[0].key == "document_id"
+    assert query_filter.should[0].match.any == [101]
 
 
 async def test_search_with_empty_allowlist_never_queries_qdrant() -> None:
@@ -306,7 +322,7 @@ async def test_search_with_empty_allowlist_never_queries_qdrant() -> None:
         query_vector=[1.0, 0.0],
         user_id=1,
         space_id=1,
-        document_ids=[],
+        document_versions=[],
         top_k=5,
     )
 
@@ -334,3 +350,143 @@ async def test_qdrant_write_failure_is_explicit() -> None:
             file_type="txt",
             chunks=chunks,
         )
+
+
+async def test_new_version_does_not_overwrite_old_version() -> None:
+    store, fake = make_store()
+    collection = await store.ensure_collection(model="hash-v1", dimension=2)
+    provider = HashEmbeddingProvider(dimension=2)
+    vectors = await provider.embed(["old", "new"])
+
+    old = await store.index_document(
+        collection_name=collection,
+        document_id=1,
+        user_id=7,
+        space_id=9,
+        document_name="notes",
+        file_type="md",
+        chunks=[ChunkVector(1, 0, "old", vectors[0])],
+        index_version=0,
+    )
+    new = await store.index_document(
+        collection_name=collection,
+        document_id=1,
+        user_id=7,
+        space_id=9,
+        document_name="notes",
+        file_type="md",
+        chunks=[ChunkVector(2, 0, "new", vectors[1])],
+        index_version=1,
+    )
+
+    # 两个版本可以同时存在；新版本 point ID 与旧版本不同。
+    assert old[1] != new[2]
+    assert await store.count_document_points(
+        collection_name=collection, document_id=1, index_version=0
+    ) == 1
+    assert await store.count_document_points(
+        collection_name=collection, document_id=1, index_version=1
+    ) == 1
+    assert len(fake.points[collection]) == 2
+
+
+async def test_delete_versions_except_keeps_only_active_version() -> None:
+    store, fake = make_store()
+    collection = await store.ensure_collection(model="hash-v1", dimension=2)
+    provider = HashEmbeddingProvider(dimension=2)
+    vectors = await provider.embed(["a", "b"])
+
+    for version in (0, 1):
+        await store.index_document(
+            collection_name=collection,
+            document_id=1,
+            user_id=7,
+            space_id=9,
+            document_name="notes",
+            file_type="md",
+            chunks=[ChunkVector(version + 1, 0, f"v{version}", vectors[version])],
+            index_version=version,
+        )
+
+    await store.delete_versions_except(
+        collection_name=collection, document_id=1, keep_index_version=1
+    )
+
+    assert await store.count_document_points(
+        collection_name=collection, document_id=1, index_version=0
+    ) == 0
+    assert await store.count_document_points(
+        collection_name=collection, document_id=1, index_version=1
+    ) == 1
+    assert len(fake.points[collection]) == 1
+
+
+async def test_partial_write_raises_instead_of_reporting_success() -> None:
+    store, fake = make_store()
+    collection = await store.ensure_collection(model="hash-v1", dimension=2)
+    provider = HashEmbeddingProvider(dimension=2)
+    vectors = await provider.embed(["a", "b"])
+
+    real_upsert = fake.upsert
+
+    async def lossy_upsert(*, collection_name: str, points, wait: bool) -> None:
+        await real_upsert(collection_name=collection_name, points=points[:1], wait=wait)
+
+    fake.upsert = lossy_upsert  # type: ignore[method-assign]
+
+    with pytest.raises(DocumentVectorStoreError, match="写入不完整"):
+        await store.index_document(
+            collection_name=collection,
+            document_id=1,
+            user_id=1,
+            space_id=1,
+            document_name="one",
+            file_type="txt",
+            chunks=[
+                ChunkVector(1, 0, "a", vectors[0]),
+                ChunkVector(2, 1, "b", vectors[1]),
+            ],
+            index_version=3,
+        )
+
+
+async def test_versioned_search_filters_by_active_doc_version() -> None:
+    store, fake = make_store()
+    collection = await store.ensure_collection(model="hash-v1", dimension=2)
+    provider = HashEmbeddingProvider(dimension=2)
+    vectors = await provider.embed(["old", "new"])
+
+    await store.index_document(
+        collection_name=collection,
+        document_id=101,
+        user_id=7,
+        space_id=9,
+        document_name="notes",
+        file_type="md",
+        chunks=[ChunkVector(1, 0, "old", vectors[0])],
+        index_version=1,
+    )
+    await store.index_document(
+        collection_name=collection,
+        document_id=101,
+        user_id=7,
+        space_id=9,
+        document_name="notes",
+        file_type="md",
+        chunks=[ChunkVector(2, 0, "new", vectors[1])],
+        index_version=2,
+    )
+
+    hits = await store.search_knowledge(
+        collection_name=collection,
+        query_vector=[1.0, 0.0],
+        user_id=7,
+        space_id=9,
+        document_versions=[(101, 2)],
+        top_k=5,
+    )
+
+    assert [hit.payload["content"] for hit in hits] == ["new"]
+    query_filter = fake.query_calls[-1]["filter"]
+    assert query_filter.should[0].key == "doc_version"
+    assert query_filter.should[0].match.any == ["101:2"]

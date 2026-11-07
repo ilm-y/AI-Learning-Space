@@ -412,8 +412,15 @@ CREATE TABLE IF NOT EXISTS `document` (
     `index_attempts`    INT           NOT NULL DEFAULT 0,
     `index_error`       VARCHAR(1024)          DEFAULT NULL,
     `embedding_model`   VARCHAR(128)           DEFAULT NULL,
-    `index_version`     INT           NOT NULL DEFAULT 0,
+    `embedding_provider` VARCHAR(64)            DEFAULT NULL COMMENT 'hash / openai-compatible',
+    `embedding_dimension` INT                  DEFAULT NULL COMMENT '向量维度',
+    `embedding_fingerprint` VARCHAR(128)        DEFAULT NULL COMMENT 'provider+model+dimension+endpoint 指纹',
+    `vector_collection` VARCHAR(255)           DEFAULT NULL COMMENT '实际写入的 Qdrant collection',
+    `index_version`     INT           NOT NULL DEFAULT 0 COMMENT '当前活跃构建令牌，与 document_chunk.index_version 对应',
+    `index_started_at`  DATETIME               DEFAULT NULL COMMENT '构建租约开始时间；非空表示有 writer',
     `indexed_at`        DATETIME               DEFAULT NULL,
+    `delete_attempts`   INT           NOT NULL DEFAULT 0,
+    `delete_error`      VARCHAR(1024)          DEFAULT NULL,
     `deleted_at`        DATETIME               DEFAULT NULL COMMENT '软删标记，MyBatis-Plus @TableLogic',
     `active_content_hash` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin
         GENERATED ALWAYS AS (CASE WHEN `deleted_at` IS NULL THEN `content_hash` ELSE NULL END) STORED
@@ -424,6 +431,7 @@ CREATE TABLE IF NOT EXISTS `document` (
     UNIQUE KEY `uk_doc_space_active_hash` (`learning_space_id`, `active_content_hash`),
     KEY `idx_doc_space` (`learning_space_id`),
     KEY `idx_doc_space_status` (`learning_space_id`, `status`),
+    KEY `idx_doc_status_started` (`status`, `index_started_at`),
     KEY `idx_doc_user` (`user_id`),
     CONSTRAINT `fk_doc_space` FOREIGN KEY (`learning_space_id`) REFERENCES `learning_space` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
@@ -432,6 +440,7 @@ CREATE TABLE IF NOT EXISTS `document` (
 CREATE TABLE IF NOT EXISTS `document_chunk` (
     `id`            BIGINT       NOT NULL AUTO_INCREMENT,
     `document_id`   BIGINT       NOT NULL,
+    `index_version` INT          NOT NULL DEFAULT 0 COMMENT '所属索引构建令牌',
     `chunk_index`   INT          NOT NULL,
     `content`       TEXT         NOT NULL,
     `page_number`   INT                   DEFAULT NULL,
@@ -440,7 +449,7 @@ CREATE TABLE IF NOT EXISTS `document_chunk` (
     `metadata_json` JSON                  DEFAULT NULL,
     `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_chunk_doc_idx` (`document_id`, `chunk_index`),
+    UNIQUE KEY `uk_chunk_doc_ver_idx` (`document_id`, `index_version`, `chunk_index`),
     CONSTRAINT `fk_chunk_document` FOREIGN KEY (`document_id`) REFERENCES `document` (`id`) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 

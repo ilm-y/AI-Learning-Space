@@ -9,5 +9,7 @@ public record AgentIndexResponse(
         String collection,
         String embeddingModel,
         String embeddingProvider,
+        Integer embeddingDimension,
+        String embeddingFingerprint,
         List<AgentVectorRef> vectors) {
 }

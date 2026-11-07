@@ -10,10 +10,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Sequence
+from urllib.parse import urlsplit
 
 import httpx
 
-from app.embedding.base import EmbeddingProvider, validate_vectors
+from app.embedding.base import EmbeddingProvider, embedding_fingerprint, validate_vectors
 from app.documents.errors import DocumentEmbeddingError, DocumentEmbeddingUnavailable
 
 log = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class OpenAICompatibleEmbeddingProvider(EmbeddingProvider):
 
         self.model = model.strip()
         self.dimension = dimension
+        self._endpoint_identity = _endpoint_identity(base_url)
         self._url = f"{base_url.rstrip('/')}/embeddings"
         self._api_key = api_key.strip()
         self._max_retries = max_retries
@@ -57,6 +59,15 @@ class OpenAICompatibleEmbeddingProvider(EmbeddingProvider):
         self._client = httpx.AsyncClient(
             timeout=timeout_seconds,
             follow_redirects=False,
+        )
+
+    @property
+    def fingerprint(self) -> str:
+        return embedding_fingerprint(
+            provider=self.name,
+            model=self.model,
+            dimension=self.dimension,
+            endpoint_identity=self._endpoint_identity,
         )
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
@@ -153,3 +164,11 @@ class OpenAICompatibleEmbeddingProvider(EmbeddingProvider):
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+
+def _endpoint_identity(base_url: str) -> str:
+    """规范化 endpoint 身份，忽略 query、用户名/密码与末尾斜杠。"""
+    parts = urlsplit(base_url.strip())
+    if parts.scheme and parts.netloc:
+        return f"{parts.scheme.lower()}://{parts.netloc.lower()}{parts.path.rstrip('/')}"
+    return base_url.strip().rstrip("/")

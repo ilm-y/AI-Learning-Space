@@ -18,9 +18,13 @@ from app.config import Settings
 from app.documents.auth import require_internal_user
 from app.documents.errors import DocumentError, DocumentVectorStoreError
 from app.documents.parser import parse_document
-from app.documents.schemas import IndexDocumentRequest
+from app.documents.schemas import DeleteDocumentRequest, IndexDocumentRequest
 from app.embedding.base import validate_vectors
-from app.vectorstore.qdrant_store import ChunkVector, QdrantDocumentStore
+from app.vectorstore.qdrant_store import (
+    ChunkVector,
+    QdrantDocumentStore,
+    collection_name_for,
+)
 
 log = logging.getLogger(__name__)
 
@@ -107,6 +111,8 @@ async def index(
             file_name=payload.file_name,
             file_type=payload.file_type,
             chunks=chunk_vectors,
+            index_version=payload.index_version,
+            embedding_fingerprint=provider.fingerprint,
         )
         if len(mapping) != len(payload.chunks):
             raise DocumentVectorStoreError("Qdrant 返回的 point 数量与 chunk 数量不一致")
@@ -127,10 +133,69 @@ async def index(
                 "collection": collection,
                 "embeddingModel": provider.model,
                 "embeddingProvider": provider.name,
+                "embeddingDimension": provider.dimension,
+                "embeddingFingerprint": provider.fingerprint,
                 "vectors": [
                     {"chunkId": chunk.chunk_id, "pointId": mapping[chunk.chunk_id]}
                     for chunk in payload.chunks
                 ],
+            },
+        }
+    )
+
+
+@router.post("/delete")
+async def delete(
+    payload: DeleteDocumentRequest,
+    request: Request,
+    internal_user_id: int = Depends(require_internal_user),
+) -> JSONResponse:
+    """删除文档向量。
+
+    * `keepIndexVersion` 为空：删除该文档全部版本（文档删除）；
+    * 非空：保留该活跃版本，清理其余版本（切换后的延迟清理）。
+
+    操作幂等：collection 不存在、points 已删除都返回成功，后端可以安全重试。
+    """
+    settings: Settings = request.app.state.settings
+    provider = request.app.state.embedding_provider
+    store: QdrantDocumentStore = request.app.state.qdrant_store
+
+    collection = payload.collection or collection_name_for(
+        settings.qdrant_collection_prefix,
+        provider.model,
+        provider.dimension,
+    )
+
+    try:
+        if payload.keep_index_version is None:
+            await store.delete_document(
+                collection_name=collection,
+                document_id=payload.document_id,
+            )
+        else:
+            await store.delete_versions_except(
+                collection_name=collection,
+                document_id=payload.document_id,
+                keep_index_version=payload.keep_index_version,
+            )
+    except DocumentError as exc:
+        return _error(exc.status_code, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        log.exception(
+            "文档向量删除未预期失败: documentId=%s, collection=%s",
+            payload.document_id,
+            collection,
+        )
+        return _error(500, f"Agent 内部错误：{type(exc).__name__}")
+
+    return JSONResponse(
+        content={
+            "code": 0,
+            "data": {
+                "documentId": payload.document_id,
+                "collection": collection,
+                "keepIndexVersion": payload.keep_index_version,
             },
         }
     )

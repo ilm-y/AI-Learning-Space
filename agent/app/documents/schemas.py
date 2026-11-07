@@ -37,6 +37,8 @@ class IndexDocumentRequest(BaseModel):
     document_name: str = Field(alias="documentName", min_length=1, max_length=255)
     file_name: str = Field(alias="fileName", min_length=1, max_length=255)
     file_type: str = Field(alias="fileType")
+    # 构建令牌；0 表示迁移前/旧客户端，沿用 legacy point ID 公式。
+    index_version: int = Field(alias="indexVersion", default=0, ge=0)
     chunks: list[IndexChunk] = Field(min_length=1, max_length=10_000)
 
     @field_validator("file_type")
@@ -48,7 +50,7 @@ class IndexDocumentRequest(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def unique_chunks(self) -> "IndexDocumentRequest":
+    def unique_chunks_ok(self) -> "IndexDocumentRequest":
         chunk_ids = [chunk.chunk_id for chunk in self.chunks]
         indexes = [chunk.chunk_index for chunk in self.chunks]
         if len(set(chunk_ids)) != len(chunk_ids):
@@ -58,3 +60,31 @@ class IndexDocumentRequest(BaseModel):
         if sorted(indexes) != list(range(len(indexes))):
             raise ValueError("chunkIndex 必须从 0 连续递增")
         return self
+
+
+class DeleteDocumentRequest(BaseModel):
+    """删除某文档的向量。
+
+    - `keepIndexVersion is None`：删除全部版本（文档删除）。
+    - `keepIndexVersion` 非空：保留该活跃版本，清理其余版本（切换后的延迟清理）。
+    - `collection` 为空时按当前 Embedding 配置计算，兼容迁移前未记录 collection 的文档。
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    document_id: int = Field(alias="documentId", gt=0)
+    collection: str | None = Field(default=None, max_length=255)
+    embedding_model: str | None = Field(alias="embeddingModel", default=None)
+    embedding_provider: str | None = Field(alias="embeddingProvider", default=None)
+    embedding_dimension: int | None = Field(alias="embeddingDimension", default=None, gt=0)
+    embedding_fingerprint: str | None = Field(alias="embeddingFingerprint", default=None)
+    keep_index_version: int | None = Field(alias="keepIndexVersion", default=None, ge=0)
+
+    @field_validator("collection", "embedding_model", "embedding_provider",
+                     "embedding_fingerprint")
+    @classmethod
+    def blank_as_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None

@@ -2,23 +2,53 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
 from app.documents.errors import DocumentEmbeddingError
 
+FINGERPRINT_PREFIX = "v1"
+
+
+def embedding_fingerprint(
+    *,
+    provider: str,
+    model: str,
+    dimension: int,
+    endpoint_identity: str = "",
+) -> str:
+    """Embedding 配置指纹：provider + model + dimension + endpoint 身份。
+
+    只包含「换一个会导致向量空间不兼容」的字段，绝不包含 API key。
+    endpoint 对 Hash 为空；对 OpenAI 兼容服务使用规范化后的
+    scheme + host + path（不含 query / 凭据），同一个网关部署得到同一指纹。
+    """
+    raw = f"{provider.strip()}|{model.strip()}|{int(dimension)}|{endpoint_identity.strip()}"
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f"{FINGERPRINT_PREFIX}:{digest}"
+
 
 class EmbeddingProvider(ABC):
     """可替换的文本向量化实现。
 
-    实现不得在失败时静默换成另一种算法：调用方依赖 `name` / `model` 区分
-    Hash 与真实语义模型，混用会污染 Qdrant collection。
+    实现不得在失败时静默换成另一种算法：调用方依赖 `name` / `model` / `fingerprint`
+    区分 Hash 与真实语义模型，混用会污染 Qdrant collection。
     """
 
     name: str
     model: str
     dimension: int
+
+    @property
+    def fingerprint(self) -> str:
+        """当前配置的稳定指纹；不同向量空间必须不同。"""
+        return embedding_fingerprint(
+            provider=self.name,
+            model=self.model,
+            dimension=self.dimension,
+        )
 
     @abstractmethod
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:

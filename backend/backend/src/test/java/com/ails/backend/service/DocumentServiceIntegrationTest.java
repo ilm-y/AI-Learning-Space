@@ -5,6 +5,7 @@ import com.ails.backend.config.DocumentStorageProperties;
 import com.ails.backend.config.MyBatisMetaObjectHandler;
 import com.ails.backend.config.MybatisPlusConfig;
 import com.ails.backend.dto.document.DocumentUploadResponse;
+import com.ails.backend.dto.document.ReadyDocument;
 import com.ails.backend.entity.Document;
 import com.ails.backend.enums.DocumentStatus;
 import com.ails.backend.mapper.DocumentMapper;
@@ -87,6 +88,10 @@ class DocumentServiceIntegrationTest {
      */
     @MockBean
     private DocumentIndexService indexService;
+
+    /** 上传/去重测试不触发真实删除链路；删除语义由专门测试覆盖。 */
+    @MockBean
+    private DocumentDeletionService deletionService;
 
     private Long userId1;
     private Long userId2;
@@ -235,18 +240,23 @@ class DocumentServiceIntegrationTest {
                 insertDocument(spaceId2, userId1, "READY", 1, true, "text-embedding-v4", false);
         insertChunk(otherSpace, 0, "point-other-space");
 
-        assertThat(documentService.listReadyDocumentIds(userId1, spaceId1, "text-embedding-v4"))
+        assertThat(documentService.listReadyDocuments(
+                userId1, spaceId1, "text-embedding-v4", null, null, null))
+                .extracting(ReadyDocument::getId)
                 .containsExactly(ready);
 
         // 模型不匹配（旧 Hash 索引）时一个都不返回，迫使重新索引。
-        assertThat(documentService.listReadyDocumentIds(userId1, spaceId1, "hash-v1")).isEmpty();
+        assertThat(documentService.listReadyDocuments(
+                userId1, spaceId1, "hash-v1", null, null, null)).isEmpty();
 
         // 不传模型是管理/排查视图，仍只返回该 Space 内权限与状态都合法的文档。
-        assertThat(documentService.listReadyDocumentIds(userId1, spaceId1, null))
+        assertThat(documentService.listReadyDocuments(
+                userId1, spaceId1, null, null, null, null))
+                .extracting(ReadyDocument::getId)
                 .containsExactly(ready);
 
-        assertThatThrownBy(() ->
-                documentService.listReadyDocumentIds(userId2, spaceId1, "text-embedding-v4"))
+        assertThatThrownBy(() -> documentService.listReadyDocuments(
+                userId2, spaceId1, "text-embedding-v4", null, null, null))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(404));
     }
@@ -373,8 +383,9 @@ class DocumentServiceIntegrationTest {
 
     private void insertChunk(long documentId, int chunkIndex, String vectorRef) {
         jdbc.update("""
-                        INSERT INTO document_chunk (document_id, chunk_index, content, vector_ref)
-                        VALUES (?, ?, ?, ?)
+                        INSERT INTO document_chunk
+                            (document_id, index_version, chunk_index, content, vector_ref)
+                        VALUES (?, 0, ?, ?, ?)
                         """,
                 documentId, chunkIndex, "chunk-" + chunkIndex, vectorRef);
     }

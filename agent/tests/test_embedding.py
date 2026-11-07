@@ -15,6 +15,7 @@ from app.embedding import (
     build_embedding_provider,
     validate_vectors,
 )
+from app.embedding.base import embedding_fingerprint
 
 
 async def test_hash_provider_is_deterministic_and_dimensioned() -> None:
@@ -49,6 +50,38 @@ def test_factory_rejects_unknown_provider() -> None:
     settings = Settings(_env_file=None, embedding_provider="mystery")
     with pytest.raises(ValueError, match="未知的 Embedding provider"):
         build_embedding_provider(settings)
+
+
+def test_embedding_fingerprint_changes_with_incompatible_configuration() -> None:
+    base = HashEmbeddingProvider(dimension=32).fingerprint
+
+    assert base.startswith("v1:")
+    assert base == HashEmbeddingProvider(dimension=32).fingerprint
+    # 维度、模型或 provider 变化都会改变向量空间，指纹必须不同。
+    assert base != HashEmbeddingProvider(dimension=64).fingerprint
+    assert base != embedding_fingerprint(
+        provider="hash", model="hash-v2", dimension=32
+    )
+    assert base != embedding_fingerprint(
+        provider="openai-compatible", model="hash-v1", dimension=32
+    )
+
+
+def test_openai_fingerprint_ignores_credentials_but_not_gateway() -> None:
+    def provider(base_url: str, api_key: str = "secret") -> OpenAICompatibleEmbeddingProvider:
+        return OpenAICompatibleEmbeddingProvider(
+            base_url=base_url,
+            api_key=api_key,
+            model="text-embedding-v4",
+            dimension=1024,
+            timeout_seconds=5,
+            max_retries=0,
+        )
+
+    same = provider("https://dashscope.example.com/v1/", api_key="a").fingerprint
+    assert same == provider("https://DASHSCOPE.example.com/v1", api_key="b").fingerprint
+    # 不同网关即使模型名与维度相同，也不能共用向量空间。
+    assert same != provider("https://other.example.com/v1").fingerprint
 
 
 def test_validate_vectors_rejects_count_dimension_and_non_finite() -> None:

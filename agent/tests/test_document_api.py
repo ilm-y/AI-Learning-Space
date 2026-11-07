@@ -28,6 +28,8 @@ class FakeStore:
         self.fail = fail
         self.ensured: tuple[str, int] | None = None
         self.indexed: dict | None = None
+        self.deleted: list[dict] = []
+        self.deleted_versions_except: list[dict] = []
 
     async def ensure_collection(self, *, model: str, dimension: int) -> str:
         self.ensured = (model, dimension)
@@ -38,10 +40,29 @@ class FakeStore:
             raise DocumentVectorStoreError("qdrant unavailable")
         self.indexed = kwargs
         document_id = kwargs["document_id"]
+        index_version = kwargs.get("index_version", 0)
         return {
-            chunk.chunk_id: point_id_for(document_id, chunk.chunk_index)
+            chunk.chunk_id: point_id_for(
+                document_id, chunk.chunk_index, index_version
+            )
             for chunk in kwargs["chunks"]
         }
+
+    async def delete_document(self, *, collection_name: str, document_id: int) -> None:
+        self.deleted.append(
+            {"collection": collection_name, "documentId": document_id}
+        )
+
+    async def delete_versions_except(
+        self, *, collection_name: str, document_id: int, keep_index_version: int
+    ) -> None:
+        self.deleted_versions_except.append(
+            {
+                "collection": collection_name,
+                "documentId": document_id,
+                "keepIndexVersion": keep_index_version,
+            }
+        )
 
 
 class FailingEmbedding(HashEmbeddingProvider):
@@ -173,13 +194,98 @@ def test_index_embeds_and_returns_point_mapping() -> None:
     assert data["collection"] == "test_hash-v1_8"
     assert data["embeddingModel"] == "hash-v1"
     assert data["embeddingProvider"] == "hash"
+    assert data["embeddingDimension"] == 8
+    assert data["embeddingFingerprint"].startswith("v1:")
     assert [item["chunkId"] for item in data["vectors"]] == [11, 12]
     assert data["vectors"][0]["pointId"] == point_id_for(5, 0)
     assert store.ensured == ("hash-v1", 8)
     assert store.indexed["document_id"] == 5
     assert store.indexed["user_id"] == 1
     assert store.indexed["space_id"] == 9
+    assert store.indexed["index_version"] == 0
+    assert store.indexed["embedding_fingerprint"] == data["embeddingFingerprint"]
     assert [chunk.chunk_id for chunk in store.indexed["chunks"]] == [11, 12]
+
+
+def test_index_versioned_build_uses_distinct_point_ids() -> None:
+    store = FakeStore()
+    client = make_client(store=store)
+
+    response = client.post(
+        "/agent/documents/index",
+        json=_index_payload(indexVersion=4),
+        headers=HEADERS,
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert store.indexed["index_version"] == 4
+    assert data["vectors"][0]["pointId"] == point_id_for(5, 0, 4)
+    assert data["vectors"][0]["pointId"] != point_id_for(5, 0)
+
+
+def test_index_rejects_negative_index_version() -> None:
+    client = make_client()
+    response = client.post(
+        "/agent/documents/index",
+        json=_index_payload(indexVersion=-1),
+        headers=HEADERS,
+    )
+    assert response.status_code == 422
+
+
+def test_delete_removes_all_versions_when_keep_is_absent() -> None:
+    store = FakeStore()
+    client = make_client(store=store)
+
+    response = client.post(
+        "/agent/documents/delete",
+        json={"documentId": 5, "collection": "test_hash-v1_8"},
+        headers=HEADERS,
+    )
+
+    assert response.status_code == 200
+    assert store.deleted == [
+        {"collection": "test_hash-v1_8", "documentId": 5}
+    ]
+    assert store.deleted_versions_except == []
+
+
+def test_delete_keeps_active_version_when_requested() -> None:
+    store = FakeStore()
+    client = make_client(store=store)
+
+    response = client.post(
+        "/agent/documents/delete",
+        json={
+            "documentId": 5,
+            "collection": "test_hash-v1_8",
+            "keepIndexVersion": 3,
+        },
+        headers=HEADERS,
+    )
+
+    assert response.status_code == 200
+    assert store.deleted_versions_except == [
+        {
+            "collection": "test_hash-v1_8",
+            "documentId": 5,
+            "keepIndexVersion": 3,
+        }
+    ]
+    assert store.deleted == []
+
+
+def test_delete_requires_internal_auth_and_valid_payload() -> None:
+    client = make_client()
+    assert client.post("/agent/documents/delete", json={"documentId": 5}).status_code == 401
+
+    invalid = client.post(
+        "/agent/documents/delete",
+        json={"documentId": 5, "keepIndexVersion": -1},
+        headers=HEADERS,
+    )
+    assert invalid.status_code == 422
 
 
 def test_index_requires_auth_and_matching_user() -> None:

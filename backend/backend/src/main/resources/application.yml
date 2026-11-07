@@ -98,6 +98,20 @@ ails:
       recovery-interval-ms: ${AILS_DOCUMENT_RECOVERY_INTERVAL_MS:300000}
       recovery-initial-delay-ms: ${AILS_DOCUMENT_RECOVERY_INITIAL_DELAY_MS:60000}
       recovery-batch-size: ${AILS_DOCUMENT_RECOVERY_BATCH_SIZE:100}
+      # 上传后进程崩溃、永远没有提交索引的 UPLOADING 行：超时后重新提交，超过次数置 FAILED。
+      upload-stale-timeout-ms: ${AILS_DOCUMENT_UPLOAD_STALE_TIMEOUT_MS:120000}
+      max-index-attempts: ${AILS_DOCUMENT_MAX_INDEX_ATTEMPTS:3}
+      # 同一文档两次构建之间的最小间隔，防止重复提交同时抢占。
+      reindex-cooldown-ms: ${AILS_DOCUMENT_REINDEX_COOLDOWN_MS:30000}
+      # 删除清理：状态先 DELETING 退出检索，失败保留 DELETING 并定时重试。
+      delete-retry-interval-ms: ${AILS_DOCUMENT_DELETE_RETRY_INTERVAL_MS:60000}
+      delete-retry-initial-delay-ms: ${AILS_DOCUMENT_DELETE_RETRY_INITIAL_DELAY_MS:30000}
+      delete-batch-size: ${AILS_DOCUMENT_DELETE_BATCH_SIZE:50}
+      delete-max-attempts: ${AILS_DOCUMENT_DELETE_MAX_ATTEMPTS:20}
+      # 非活跃版本（切换后的旧索引）延迟清理；失败不影响检索。
+      cleanup-interval-ms: ${AILS_DOCUMENT_CLEANUP_INTERVAL_MS:300000}
+      cleanup-initial-delay-ms: ${AILS_DOCUMENT_CLEANUP_INITIAL_DELAY_MS:120000}
+      cleanup-batch-size: ${AILS_DOCUMENT_CLEANUP_BATCH_SIZE:50}
 
   agent:
     # AgentGateway 的实现选择，决定「后端把问题发给谁」：

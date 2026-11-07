@@ -31,7 +31,12 @@ public record DocumentResponse(
         Integer indexVersion,
         LocalDateTime indexedAt,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        String embeddingProvider,
+        Integer embeddingDimension,
+        String embeddingFingerprint,
+        LocalDateTime indexStartedAt,
+        String deleteError
 ) {
 
     public static DocumentResponse from(Document document) {
@@ -55,6 +60,11 @@ public record DocumentResponse(
                 document.getIndexVersion(),
                 document.getIndexedAt(),
                 document.getCreatedAt(),
-                document.getUpdatedAt());
+                document.getUpdatedAt(),
+                document.getEmbeddingProvider(),
+                document.getEmbeddingDimension(),
+                document.getEmbeddingFingerprint(),
+                document.getIndexStartedAt(),
+                document.getDeleteError());
     }
 }

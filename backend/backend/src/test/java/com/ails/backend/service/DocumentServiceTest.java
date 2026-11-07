@@ -4,6 +4,7 @@ import com.ails.backend.common.BusinessException;
 import com.ails.backend.config.DocumentStorageProperties;
 import com.ails.backend.dto.document.DocumentResponse;
 import com.ails.backend.dto.document.DocumentUploadResponse;
+import com.ails.backend.dto.document.ReadyDocument;
 import com.ails.backend.entity.Document;
 import com.ails.backend.entity.LearningSpace;
 import com.ails.backend.enums.DocumentStatus;
@@ -53,6 +54,9 @@ class DocumentServiceTest {
     @Mock
     private DocumentIndexService indexService;
 
+    @Mock
+    private DocumentDeletionService deletionService;
+
     @TempDir
     Path root;
 
@@ -64,7 +68,8 @@ class DocumentServiceTest {
     void setUp() {
         storageService = new DocumentStorageService(
                 new DocumentStorageProperties(root.toString(), 1024 * 1024));
-        service = new DocumentService(documentMapper, spaceService, storageService, indexService);
+        service = new DocumentService(
+                documentMapper, spaceService, storageService, indexService, deletionService);
 
         space = new LearningSpace();
         space.setId(10L);
@@ -230,26 +235,34 @@ class DocumentServiceTest {
     }
 
     @Test
-    void readyIdsChecksOwnershipThenDelegatesWithTrimmedModel() {
+    void readyIdsChecksOwnershipThenDelegatesWithTrimmedIdentity() {
         when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
-        when(documentMapper.selectReadyIndexedIds(1L, 10L, "text-embedding-v4"))
-                .thenReturn(List.of(7L, 8L));
+        ReadyDocument ready = new ReadyDocument();
+        ready.setId(7L);
+        ready.setIndexVersion(3);
+        when(documentMapper.selectReadyDocuments(
+                1L, 10L, "text-embedding-v4", "hash", 256, "v1:abc"))
+                .thenReturn(List.of(ready));
 
-        List<Long> result = service.listReadyDocumentIds(1L, 10L, "  text-embedding-v4  ");
+        List<ReadyDocument> result = service.listReadyDocuments(
+                1L, 10L, "  text-embedding-v4  ", " hash ", 256, " v1:abc ");
 
-        assertThat(result).containsExactly(7L, 8L);
+        assertThat(result).containsExactly(ready);
+        assertThat(result.get(0).getIndexVersion()).isEqualTo(3);
         verify(spaceService).ownedSpace(1L, 10L);
-        verify(documentMapper).selectReadyIndexedIds(1L, 10L, "text-embedding-v4");
+        verify(documentMapper).selectReadyDocuments(
+                1L, 10L, "text-embedding-v4", "hash", 256, "v1:abc");
     }
 
     @Test
     void readyIdsWithoutModelDoesNotFilterByModel() {
         when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
-        when(documentMapper.selectReadyIndexedIds(1L, 10L, null)).thenReturn(List.of(7L));
+        when(documentMapper.selectReadyDocuments(1L, 10L, null, null, null, null))
+                .thenReturn(List.of(new ReadyDocument()));
 
-        assertThat(service.listReadyDocumentIds(1L, 10L, "  ")).containsExactly(7L);
+        assertThat(service.listReadyDocuments(1L, 10L, "  ", null, null, null)).hasSize(1);
 
-        verify(documentMapper).selectReadyIndexedIds(1L, 10L, null);
+        verify(documentMapper).selectReadyDocuments(1L, 10L, null, null, null, null);
     }
 
     @Test
@@ -257,7 +270,31 @@ class DocumentServiceTest {
         when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
 
         assertThatThrownBy(() ->
-                service.listReadyDocumentIds(1L, 10L, "m".repeat(129)))
+                service.listReadyDocuments(1L, 10L, "m".repeat(129), null, null, null))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400));
+
+        verifyNoInteractions(documentMapper);
+    }
+
+    @Test
+    void readyIdsRejectsNonPositiveDimension() {
+        when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
+
+        assertThatThrownBy(() ->
+                service.listReadyDocuments(1L, 10L, "hash-v1", null, 0, null))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400));
+
+        verifyNoInteractions(documentMapper);
+    }
+
+    @Test
+    void readyIdsRejectsFingerprintWithoutModel() {
+        when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
+
+        assertThatThrownBy(() ->
+                service.listReadyDocuments(1L, 10L, null, null, null, "v1:abc"))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(400));
 
@@ -269,7 +306,8 @@ class DocumentServiceTest {
         when(spaceService.ownedSpace(2L, 10L))
                 .thenThrow(BusinessException.notFound("学习空间不存在"));
 
-        assertThatThrownBy(() -> service.listReadyDocumentIds(2L, 10L, "hash-v1"))
+        assertThatThrownBy(() ->
+                service.listReadyDocuments(2L, 10L, "hash-v1", null, null, null))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(404));
 

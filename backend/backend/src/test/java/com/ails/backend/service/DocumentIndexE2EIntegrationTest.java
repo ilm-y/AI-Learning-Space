@@ -8,6 +8,7 @@ import com.ails.backend.entity.Document;
 import com.ails.backend.entity.DocumentChunk;
 import com.ails.backend.enums.DocumentStatus;
 import com.ails.backend.mapper.DocumentMapper;
+import com.ails.backend.security.InternalIdentitySigner;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterAll;
@@ -114,6 +115,10 @@ class DocumentIndexE2EIntegrationTest {
         registry.add("ails.document.storage.max-size-bytes", () -> 1024 * 1024);
         registry.add("ails.agent.base-url", () -> AGENT_URL);
         registry.add("ails.internal.token", () -> INTERNAL_TOKEN);
+        // AgentDocumentClient 对每次调用都签发 X-Internal-Identity；未配置密钥会 fail closed。
+        // 测试进程与 Agent 必须使用同一把密钥。
+        registry.add("ails.internal.identity-secret",
+                () -> requiredEnv("AILS_E2E_IDENTITY_SECRET"));
     }
 
     @BeforeEach
@@ -304,6 +309,7 @@ class DocumentIndexE2EIntegrationTest {
             DocumentChunkService.class,
             DocumentStorageService.class,
             AgentDocumentClient.class,
+            InternalIdentitySigner.class,
             DocumentIndexConfig.class,
             MybatisPlusConfig.class,
             MyBatisMetaObjectHandler.class

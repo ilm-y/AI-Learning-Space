@@ -21,6 +21,12 @@ public class DocumentChunk {
 
     private Long documentId;
 
+    /**
+     * 所属索引构建令牌。只有与 {@code document.index_version} 相等的 chunk
+     * 才是当前活跃版本；其余版本在切换成功后被延迟清理。
+     */
+    private Integer indexVersion;
+
     private Integer chunkIndex;
 
     private String content;

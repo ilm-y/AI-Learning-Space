@@ -3,11 +3,13 @@ package com.ails.backend.controller;
 import com.ails.backend.common.ApiResponse;
 import com.ails.backend.dto.document.DocumentResponse;
 import com.ails.backend.dto.document.DocumentUploadResponse;
+import com.ails.backend.dto.document.ReadyDocument;
 import com.ails.backend.service.DocumentService;
 import com.ails.backend.utils.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -54,20 +56,47 @@ public class DocumentController {
 
     /**
      * Agent 知识检索使用的文档白名单。只返回当前用户、当前 Space 内
-     * 真正 READY 且索引完整的文档；可选 {@code embeddingModel} 用于排除
-     * 旧模型索引的文档，避免拿当前模型的查询向量去检索旧 collection。
+     * 真正 READY 且索引完整的文档，并带上<b>活跃索引版本</b>。
+     *
+     * <p>Embedding 身份参数由 Agent 传入当前真实生效的配置；provider/model/
+     * dimension/fingerprint 不兼容的文档会被排除，绝不拿新模型的查询向量去
+     * 检索旧模型写入的 collection/points。</p>
      */
     @GetMapping("/api/spaces/{spaceId}/documents/ready-ids")
-    public ApiResponse<List<Long>> readyIds(
+    public ApiResponse<List<ReadyDocument>> readyIds(
             @PathVariable Long spaceId,
-            @RequestParam(value = "embeddingModel", required = false) String embeddingModel) {
-        return ApiResponse.ok(documentService.listReadyDocumentIds(
-                SecurityUtil.currentUserId(), spaceId, embeddingModel));
+            @RequestParam(value = "embeddingModel", required = false) String embeddingModel,
+            @RequestParam(value = "embeddingProvider", required = false) String embeddingProvider,
+            @RequestParam(value = "embeddingDimension", required = false) Integer embeddingDimension,
+            @RequestParam(value = "embeddingFingerprint", required = false) String embeddingFingerprint) {
+        return ApiResponse.ok(documentService.listReadyDocuments(
+                SecurityUtil.currentUserId(), spaceId,
+                embeddingModel, embeddingProvider, embeddingDimension, embeddingFingerprint));
     }
 
     @GetMapping("/api/documents/{id}")
     public ApiResponse<DocumentResponse> get(@PathVariable Long id) {
         return ApiResponse.ok(documentService.get(SecurityUtil.currentUserId(), id));
+    }
+
+    /**
+     * 重建索引。READY 文档在构建期间保持 READY：新版本完整写入并校验成功后才切换，
+     * 失败则继续使用旧版本。
+     */
+    @PostMapping("/api/documents/{id}/reindex")
+    public ApiResponse<DocumentResponse> reindex(@PathVariable Long id) {
+        return ApiResponse.ok("已提交重建",
+                documentService.reindex(SecurityUtil.currentUserId(), id));
+    }
+
+    /**
+     * 删除文档。状态先切 DELETING（立即退出检索白名单），向量与文件异步清理；
+     * 重复删除幂等成功。
+     */
+    @DeleteMapping("/api/documents/{id}")
+    public ApiResponse<Void> delete(@PathVariable Long id) {
+        documentService.delete(SecurityUtil.currentUserId(), id);
+        return ApiResponse.ok("已提交删除", null);
     }
 
     /**

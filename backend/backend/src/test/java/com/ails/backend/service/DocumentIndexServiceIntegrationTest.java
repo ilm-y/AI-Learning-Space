@@ -248,9 +248,8 @@ class DocumentIndexServiceIntegrationTest {
         assertThat(failed.getChunkCount()).isZero();
         assertThat(failed.getIndexError()).contains("HTTP 502");
 
-        List<DocumentChunk> chunks = chunkService.listByDocument(document.getId());
-        assertThat(chunks).hasSize(2);
-        assertThat(chunks).allSatisfy(chunk -> assertThat(chunk.getVectorRef()).isNull());
+        // 失败构建的 chunk 已被回滚；旧版本（这里是首次索引，没有旧版本）不受影响。
+        assertThat(chunkService.listByDocument(document.getId())).isEmpty();
     }
 
     @Test
@@ -262,8 +261,7 @@ class DocumentIndexServiceIntegrationTest {
         Document failed = awaitStatus(document.getId(), DocumentStatus.FAILED);
 
         assertThat(failed.getIndexError()).contains("向量引用数量");
-        assertThat(chunkService.listByDocument(document.getId()))
-                .allSatisfy(chunk -> assertThat(chunk.getVectorRef()).isNull());
+        assertThat(chunkService.listByDocument(document.getId())).isEmpty();
     }
 
     @Test
@@ -299,9 +297,14 @@ class DocumentIndexServiceIntegrationTest {
     @Test
     void indexErrorIsTruncatedTo1024Chars() throws Exception {
         Document document = insertDocument("hello content", DocumentStatus.UPLOADING);
-        assertThat(indexService.markProcessing(document.getId())).isTrue();
+        jdbc.update("""
+                        UPDATE document
+                        SET status = 'PROCESSING', index_attempts = 1, index_started_at = ?
+                        WHERE id = ?
+                        """,
+                Timestamp.valueOf(LocalDateTime.now()), document.getId());
 
-        indexService.fail(document.getId(), "x".repeat(5000));
+        indexService.fail(document.getId(), 1, "x".repeat(5000));
 
         Document failed = documentMapper.selectById(document.getId());
         assertThat(failed.getStatus()).isEqualTo(DocumentStatus.FAILED);
@@ -337,11 +340,13 @@ class DocumentIndexServiceIntegrationTest {
                 .contains("PROCESSING")
                 .contains("中断")
                 .contains("可重新提交索引");
-        // 回收不伪造索引次数，也不产生 chunk。
-        assertThat(failed.getIndexAttempts()).isZero();
+        // 回收不伪造 chunk；但会把 index_attempts 自增一次，作为 fencing token
+        // 让仍在运行的旧 worker 的 complete / fail 失效。
+        assertThat(failed.getIndexAttempts()).isEqualTo(1);
         assertThat(failed.getChunkCount()).isZero();
         assertThat(chunkService.listByDocument(document.getId())).isEmpty();
-        assertThat(documentMapper.selectReadyIndexedIds(userId, spaceId, "hash-test"))
+        assertThat(documentMapper.selectReadyDocuments(userId, spaceId, "hash-test", null, null, null))
+                .extracting(com.ails.backend.dto.document.ReadyDocument::getId)
                 .doesNotContain(document.getId());
     }
 
@@ -356,7 +361,8 @@ class DocumentIndexServiceIntegrationTest {
         Document failed = documentMapper.selectById(document.getId());
         assertThat(failed.getStatus()).isEqualTo(DocumentStatus.FAILED);
         assertThat(failed.getIndexError()).contains("中断").contains("可重新提交索引");
-        assertThat(documentMapper.selectReadyIndexedIds(userId, spaceId, "hash-test"))
+        assertThat(documentMapper.selectReadyDocuments(userId, spaceId, "hash-test", null, null, null))
+                .extracting(com.ails.backend.dto.document.ReadyDocument::getId)
                 .doesNotContain(document.getId());
     }
 
@@ -375,7 +381,8 @@ class DocumentIndexServiceIntegrationTest {
         Document afterSecondScan = documentMapper.selectById(document.getId());
         assertThat(afterSecondScan.getStatus()).isEqualTo(DocumentStatus.FAILED);
         assertThat(afterSecondScan.getIndexError()).isEqualTo(firstError);
-        assertThat(afterSecondScan.getIndexAttempts()).isZero();
+        // 第二次扫描没有推进状态；index_attempts 只在第一次回收时自增一次（fencing）。
+        assertThat(afterSecondScan.getIndexAttempts()).isEqualTo(1);
     }
 
     @Test
@@ -401,8 +408,10 @@ class DocumentIndexServiceIntegrationTest {
         assertThat(recoveryService.recoverStale(LocalDateTime.now())).isEqualTo(1);
 
         // 模拟原任务晚到：状态已是 FAILED，complete 的条件更新必须失败。
-        assertThatThrownBy(() ->
-                indexService.complete(document.getId(), 1, "late-parser", "hash-test"))
+        assertThatThrownBy(() -> indexService.complete(
+                document.getId(), 1, 0, "late-parser",
+                new DocumentIndexService.ValidatedIndex(
+                        java.util.Map.of(), "collection", "hash-test", "hash", 256, "v1:f")))
                 .isInstanceOf(DocumentIndexException.class);
 
         Document afterLateComplete = documentMapper.selectById(document.getId());
@@ -527,6 +536,7 @@ class DocumentIndexServiceIntegrationTest {
             DocumentService.class,
             DocumentIndexService.class,
             DocumentIndexRecoveryService.class,
+            DocumentDeletionService.class,
             DocumentChunkService.class,
             DocumentStorageService.class,
             AgentDocumentClient.class,
@@ -552,13 +562,17 @@ class DocumentIndexServiceIntegrationTest {
         volatile String parseError = "parse failed";
         volatile int indexStatus = 200;
         volatile String indexError = "index failed";
+        volatile int deleteStatus = 200;
+        volatile String deleteError = "delete failed";
         volatile boolean oversizeSecondChunk = false;
         volatile boolean dropOneVector = false;
         volatile String requiredToken;
         volatile String lastParseBody = "";
         volatile String lastIndexBody = "";
+        volatile String lastDeleteBody = "";
         final AtomicInteger parseCalls = new AtomicInteger();
         final AtomicInteger indexCalls = new AtomicInteger();
+        final AtomicInteger deleteCalls = new AtomicInteger();
 
         private FakeAgent(HttpServer server, ExecutorService executor, String token) {
             this.server = server;
@@ -574,6 +588,7 @@ class DocumentIndexServiceIntegrationTest {
                 FakeAgent agent = new FakeAgent(server, executor, token);
                 server.createContext("/agent/documents/parse", agent::handleParse);
                 server.createContext("/agent/documents/index", agent::handleIndex);
+                server.createContext("/agent/documents/delete", agent::handleDelete);
                 server.setExecutor(executor);
                 server.start();
                 return agent;
@@ -591,13 +606,17 @@ class DocumentIndexServiceIntegrationTest {
             parseError = "parse failed";
             indexStatus = 200;
             indexError = "index failed";
+            deleteStatus = 200;
+            deleteError = "delete failed";
             oversizeSecondChunk = false;
             dropOneVector = false;
             requiredToken = token;
             lastParseBody = "";
             lastIndexBody = "";
+            lastDeleteBody = "";
             parseCalls.set(0);
             indexCalls.set(0);
+            deleteCalls.set(0);
         }
 
         void stop() {
@@ -655,6 +674,8 @@ class DocumentIndexServiceIntegrationTest {
             data.put("collection", "it-collection");
             data.put("embeddingModel", "hash-test");
             data.put("embeddingProvider", "hash");
+            data.put("embeddingDimension", 256);
+            data.put("embeddingFingerprint", "v1:it-fingerprint");
             ArrayNode vectors = data.putArray("vectors");
             int limit = dropOneVector ? chunks.size() - 1 : chunks.size();
             for (int i = 0; i < limit; i++) {
@@ -662,6 +683,26 @@ class DocumentIndexServiceIntegrationTest {
                 vector.put("chunkId", chunks.get(i).path("chunkId").asLong());
                 vector.put("pointId", "point-" + chunks.get(i).path("chunkIndex").asInt());
             }
+            write(exchange, 200, MAPPER.writeValueAsString(
+                    MAPPER.createObjectNode().put("code", 0).set("data", data)));
+        }
+
+        private void handleDelete(HttpExchange exchange) throws IOException {
+            deleteCalls.incrementAndGet();
+            lastDeleteBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            if (!authorized(exchange)) {
+                write(exchange, 401, "{\"code\":401,\"message\":\"bad token\"}");
+                return;
+            }
+            if (deleteStatus != 200) {
+                write(exchange, deleteStatus,
+                        "{\"code\":" + deleteStatus + ",\"message\":\"" + deleteError + "\"}");
+                return;
+            }
+            JsonNode request = MAPPER.readTree(lastDeleteBody);
+            ObjectNode data = MAPPER.createObjectNode();
+            data.put("documentId", request.path("documentId").asLong());
+            data.put("collection", "it-collection");
             write(exchange, 200, MAPPER.writeValueAsString(
                     MAPPER.createObjectNode().put("code", 0).set("data", data)));
         }

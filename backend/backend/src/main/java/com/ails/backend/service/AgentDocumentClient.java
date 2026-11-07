@@ -1,6 +1,7 @@
 package com.ails.backend.service;
 
 import com.ails.backend.config.DocumentIndexProperties;
+import com.ails.backend.dto.document.agent.AgentDeleteRequest;
 import com.ails.backend.dto.document.agent.AgentIndexRequest;
 import com.ails.backend.dto.document.agent.AgentIndexResponse;
 import com.ails.backend.dto.document.agent.AgentParseResponse;
@@ -47,6 +48,7 @@ public class AgentDocumentClient {
 
     private static final String PARSE_PATH = "/agent/documents/parse";
     private static final String INDEX_PATH = "/agent/documents/index";
+    private static final String DELETE_PATH = "/agent/documents/delete";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final HttpClient client;
@@ -102,6 +104,53 @@ public class AgentDocumentClient {
         } catch (Exception e) {
             throw new DocumentIndexException(502, "Agent 索引响应不符合契约", e);
         }
+    }
+
+    /**
+     * 删除文档的全部向量（文档删除流程）。Qdrant 侧按 document_id 删除所有版本，
+     * 重复调用幂等；collection 不存在也视为已删除。
+     */
+    public void deleteDocument(Document document) {
+        sendDelete(document, new AgentDeleteRequest(
+                document.getId(),
+                document.getVectorCollection(),
+                document.getEmbeddingModel(),
+                document.getEmbeddingProvider(),
+                document.getEmbeddingDimension(),
+                document.getEmbeddingFingerprint(),
+                null), "删除");
+    }
+
+    /**
+     * 清理文档中除 {@code keepIndexVersion} 外的所有版本（索引切换后的延迟清理）。
+     * 失败只影响空间回收，不影响检索：检索按活跃版本过滤。
+     */
+    public void deleteOtherVersions(Document document, int keepIndexVersion) {
+        deleteOtherVersions(document, keepIndexVersion, document.getVectorCollection());
+    }
+
+    /**
+     * @param collection 本次索引实际使用的 collection（优先取 Agent 响应中回报的值，
+     *                   因为文档实体在切换事务中尚未刷新）；为空时回退到实体字段。
+     */
+    public void deleteOtherVersions(Document document, int keepIndexVersion, String collection) {
+        String targetCollection = collection == null || collection.isBlank()
+                ? document.getVectorCollection() : collection;
+        sendDelete(document, new AgentDeleteRequest(
+                document.getId(),
+                targetCollection,
+                document.getEmbeddingModel(),
+                document.getEmbeddingProvider(),
+                document.getEmbeddingDimension(),
+                document.getEmbeddingFingerprint(),
+                keepIndexVersion), "版本清理");
+    }
+
+    private void sendDelete(Document document, AgentDeleteRequest request, String action) {
+        requireInternalToken();
+        byte[] body = JsonUtil.toJson(request).getBytes(StandardCharsets.UTF_8);
+        send(baseUrl + DELETE_PATH, body, "application/json", indexTimeout, action,
+                document.getUserId());
     }
 
     // ===================== HTTP =====================
