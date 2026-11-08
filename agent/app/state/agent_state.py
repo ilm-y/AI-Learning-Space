@@ -32,8 +32,9 @@ from app.schemas import (
 )
 from app.trace import RunTrace
 
-if TYPE_CHECKING:  # 避免与 app.context.builder 形成循环导入
+if TYPE_CHECKING:  # 避免与 app.context.builder / policy 形成循环导入
     from app.context.builder import BuiltContext
+    from app.context.policy import RetrievalPlan
 
 
 @dataclass(slots=True)
@@ -128,10 +129,15 @@ class AgentState:
     # DEGRADED 绝不能解释成「用户过去没有误区、没有变化」。
     revision_status: str = "NOT_QUERIED"
     revision_warning: str | None = None
-    # 用户这句话是否是显式个人复盘（由 _is_history_review 判定，与是否检索到概念无关）。
+    # 用户这句话是否是显式个人复盘（由 Policy 的 review_required 判定，与是否检索到概念无关）。
     # Runtime 只对这类回答做「生成后、推送前」的证据校验：普通知识问题仍即时流式，
     # 不能被缓冲。它也是 Current-only 场景的判断依据 —— 没有轨迹但要约束回答。
     history_review_requested: bool = False
+    # ---------- D4-2 检索策略 ----------
+    # 本轮「查什么、为什么查」的结构化决策（意图 / Session 注入 / 各数据源 need）。
+    # Runtime 按它执行检索；ContextBuilder 不消费它。保存在 state 上是为了让
+    # trace、preview 与后续评估复用同一份决策，而不是从调用结果反推。
+    retrieval_plan: "RetrievalPlan | None" = None
 
     # ---------- 组装与产出 ----------
     context: "BuiltContext | None" = None

@@ -51,6 +51,12 @@ from app.citations import (
 )
 from app.config import Settings
 from app.context.builder import BuiltContext, ContextBuilder
+from app.context.policy import (
+    RetrievalPlan,
+    is_history_review,
+    plan_retrieval,
+    wants_evidence,
+)
 from app.context.trajectory import (
     attach_evidences,
     build_trajectories,
@@ -98,43 +104,11 @@ from app.tutor import Tutor
 
 log = logging.getLogger(__name__)
 
-# Evidence 是「按需召回」的（架构文档第十二节）：只在用户质疑判断、要求解释依据
-# 或要复盘时才去捞。这串词是规则版的触发条件，接 LLM 后由模型判断意图。
-_EVIDENCE_TRIGGERS = (
-    "为什么",
-    "凭什么",
-    "你怎么知道",
-    "依据",
-    "证据",
-    "你确定",
-    "确定吗",
-    "搞错",
-    "说错",
-    "不对吧",
-    "复盘",
-    "回顾",
-)
-
-# 显式复盘意图：只有这些词命中时，才读取 Revision 历史并精确回查旧证据。
-# 普通知识问题（哪怕含「为什么」）不应该无条件注入完整学习轨迹。
-_REVIEW_TRIGGERS = (
-    "之前",
-    "以前",
-    "曾经",
-    "过去",
-    "后来",
-    "纠正",
-    "改过来",
-    "错在哪",
-    "哪里错",
-    "哪一步错",
-    "搞错",
-    "说错",
-    "误解",
-    "复盘",
-    "回顾",
-    "学习轨迹",
-)
+# 检索触发判断已迁到 app.context.policy（D4-2）。这里保留旧函数名作为别名，
+# 因为 `tests/test_history_guard_runtime.py` 等调用方直接从 `app.runtime` 导入；
+# 它们指向同一套规则，不存在第二份词表。
+_is_history_review = is_history_review
+_wants_evidence = wants_evidence
 
 # 受控一跳扩展只认这两类关系。PREREQUISITE 只接受 INCOMING（关联概念是前置），
 # RELATED 双向都算相关；其余类型即便后端显式返回也不扩张。
@@ -378,6 +352,16 @@ class AgentRuntime:
         # 这里再追加「没有可用资料」会与 Context 的真实状态矛盾。
         status = prepared.context.knowledge_state
         if status not in GUARD_STATUSES:
+            if status == "NOT_RETRIEVED" and not prepared.state.knowledge:
+                # 本轮的 Policy 决定不查知识（例如纯寒暄）。这条 trace 只记录
+                # 「没有发起检索」，不追加任何说明，避免把「没查」渲染成「没有资料」。
+                prepared.trace.record(
+                    TraceEventType.EVIDENCE_GUARD,
+                    status=status,
+                    queried=False,
+                    added=False,
+                    hasKnowledge=False,
+                )
             return
 
         notice = None
@@ -748,6 +732,23 @@ class AgentRuntime:
             )
 
         concept_ids = state.concept_ids
+        # D4-2：把「本轮查什么、为什么查」收敛成一份结构化计划。
+        # Runtime 只执行计划，不在下面重新做触发判断；Session 的 goal/focus
+        # 也由这里决定是否注入（SessionResolver 可能把新话题挂到旧 Session）。
+        plan = plan_retrieval(
+            user_message=query,
+            concept_ids=concept_ids,
+            session=state.session,
+            space_concepts=concepts,
+            history=state.history,
+        )
+        state.retrieval_plan = plan
+        # 复盘校验比「读取轨迹」更窄：只有个人历史问题才缓冲回答。
+        # 否则「过去十年 CPU 架构有什么变化」这类知识问题会因为一个「过去」
+        # 被当成复盘，既增加首字延迟，又可能被要求说明「没有历史记录」。
+        state.history_review_requested = plan.review_required
+        _apply_session_policy(state, plan)
+
         # Knowledge 独立于 Concept：用户问一个还没建 Concept 的新知识点时，
         # 上传的文档仍然应该参与回答。Concept 只决定 U / M / E 是否有可挂靠对象。
         knowledge_query = KnowledgeQuery(
@@ -759,15 +760,15 @@ class AgentRuntime:
             min_score=self._settings.knowledge_min_score,
         )
 
-        # 复盘校验比「读取轨迹」更窄：只有个人历史问题才缓冲回答。
-        # 否则「过去十年 CPU 架构有什么变化」这类知识问题会因为一个「过去」
-        # 被当成复盘，既增加首字延迟，又可能被要求说明「没有历史记录」。
-        state.history_review_requested = _is_history_review(query)
-
-        wants_evidence = bool(concept_ids) and _wants_evidence(query)
+        # REQUIRED / OPTIONAL 在本批都表示「发起检索」；SKIP 才表示不发起。
+        # Policy 在没有概念锚点时已经把 U / M / E / Revision 统一置为 SKIP。
+        retrieve_knowledge = plan.knowledge.triggered
+        retrieve_understandings = plan.understanding.triggered and bool(concept_ids)
+        retrieve_memories = plan.memory.triggered and bool(plan.memory_concept_ids)
+        wants_evidence = plan.evidence.triggered and bool(concept_ids)
         # 轨迹只注入显式复盘问题；「之前学过链表，现在学树」这类普通问题
         # 即使带时间词，也不应该被塞进历史轨迹。
-        retrieve_trajectory = bool(concept_ids) and state.history_review_requested
+        retrieve_trajectory = plan.revision.triggered and bool(concept_ids)
         # 复盘时用 Revision 关联精确回查，而不是再塞一份「最近 3 条」，
         # 否则同一批证据会在上下文里出现两次。
         fetch_recent_evidence = wants_evidence and not retrieve_trajectory
@@ -781,15 +782,22 @@ class AgentRuntime:
             task_names.append(name)
             tasks.append(coro)
 
-        _add("knowledge", self._safe_knowledge(retriever, knowledge_query))
-        if concept_ids:
+        if retrieve_knowledge:
+            _add("knowledge", self._safe_knowledge(retriever, knowledge_query))
+        if retrieve_understandings:
             _add(
                 "understandings",
                 retriever.get_understandings(state.user_id, state.space_id, concept_ids),
             )
+        if retrieve_memories:
             _add(
                 "memories",
-                retriever.get_memories(state.user_id, state.space_id, concept_ids, query),
+                retriever.get_memories(
+                    state.user_id,
+                    state.space_id,
+                    list(plan.memory_concept_ids),
+                    query,
+                ),
             )
         if fetch_recent_evidence:
             # 原始概念的 Evidence 保持原有口径（evidence_top_k），不因扩展而挤占。
@@ -807,19 +815,23 @@ class AgentRuntime:
         results = await asyncio.gather(*tasks)
         retrieved = dict(zip(task_names, results))
 
-        knowledge_result: KnowledgeResult = retrieved["knowledge"]
-        state.knowledge = knowledge_result.chunks
-        state.knowledge_status = knowledge_result.status.value
-        state.knowledge_warning = knowledge_result.warning
+        # 没有发起的检索保持 NOT_RETRIEVED / NOT_QUERIED，绝不能渲染成「查过但没有」。
+        knowledge_result: KnowledgeResult | None = None
+        if "knowledge" in retrieved:
+            knowledge_result = retrieved["knowledge"]
+            state.knowledge = knowledge_result.chunks
+            state.knowledge_status = knowledge_result.status.value
+            state.knowledge_warning = knowledge_result.warning
 
-        if concept_ids:
+        if "understandings" in retrieved:
             understanding_result = normalize_understanding_result(
                 retrieved["understandings"]
             )
-            memory_result = normalize_memory_result(retrieved["memories"])
             state.understandings = understanding_result.items
             state.understanding_status = understanding_result.status.value
             state.understanding_warning = understanding_result.warning
+        if "memories" in retrieved:
+            memory_result = normalize_memory_result(retrieved["memories"])
             state.memories = memory_result.items
             state.memory_status = memory_result.status.value
             state.memory_warning = memory_result.warning
@@ -898,6 +910,13 @@ class AgentRuntime:
             TraceEventType.RETRIEVE,
             source=retriever.name,
             conceptIds=concept_ids,
+            # D4-2：策略版本、意图与逐数据源的决策理由。它解释「为什么这轮查了 /
+            # 没查某个源」，而不是只报告结果数量。
+            retrievalPolicy=plan.as_dict(),
+            intent=plan.intent.value,
+            policyVersion=plan.policy_version,
+            sessionInjected=plan.session.injects_frame,
+            sessionPolicyReason=plan.session.reason,
             understandings=[item.concept_name for item in state.understandings],
             understandingStatus=state.understanding_status,
             understandingWarning=state.understanding_warning,
@@ -909,7 +928,9 @@ class AgentRuntime:
             revisionWarning=state.revision_warning,
             knowledge=len(state.knowledge),
             knowledgeStatus=state.knowledge_status,
-            knowledgeCandidates=knowledge_result.candidates,
+            knowledgeCandidates=(
+                knowledge_result.candidates if knowledge_result is not None else None
+            ),
             evidences=len(state.evidences),
             evidenceStatus=state.evidence_status,
             evidenceWarning=state.evidence_warning,
@@ -1193,39 +1214,28 @@ def _retriever_selection(retriever, settings: Settings) -> tuple[str, bool, str 
     return mode, False, None
 
 
-def _wants_evidence(query: str) -> bool:
-    return any(trigger in query for trigger in _EVIDENCE_TRIGGERS)
+def _apply_session_policy(state: AgentState, plan: RetrievalPlan) -> None:
+    """按 Policy 决定 Session 的哪些部分进入 Prompt。
 
+    ContextBuilder 读的是 `state.session.goal / current_focus`，这里不改 Builder，
+    而是把「不该注入」的字段在 state 上置空。`id` 保留，摘要与溯源不受影响；
+    `history` 属于 Conversation 范围，仍按原有逻辑注入，不受 Session 决策影响。
 
-def _wants_trajectory(query: str) -> bool:
-    return any(trigger in query for trigger in _REVIEW_TRIGGERS)
-
-
-# 个人历史问题的特征：要么是第一人称，要么直接问「错在哪 / 怎么纠正」。
-# 它同时决定**是否检索轨迹、是否缓冲并校验回答**；不带第一人称的
-# 「以前 CPU 架构有哪些常见误解」不应因为「误解」二字被当成个人复盘。
-_PERSONAL_HISTORY_MARKERS = ("我", "自己")
-_HISTORY_ERROR_MARKERS = (
-    "错在哪",
-    "哪里错",
-    "哪一步错",
-    "错在",
-    "错了",
-    "纠正",
-    "改过来",
-    "搞错",
-    "说错",
-    "复盘",
-    "回顾",
-    "学习轨迹",
-)
-
-
-def _is_history_review(query: str) -> bool:
-    if not _wants_trajectory(query):
-        return False
-    return any(marker in query for marker in _PERSONAL_HISTORY_MARKERS) or any(
-        marker in query for marker in _HISTORY_ERROR_MARKERS
+    典型场景（D4-2C 缺口）：SessionResolver 规则 3 把新话题挂到了旧 Session，
+    两边概念不相交。此时旧 goal/focus 会误导模型，必须挡在这一层。
+    """
+    session = state.session
+    if session is None:
+        return
+    if plan.session.inject_goal and plan.session.inject_current_focus:
+        return
+    state.session = session.model_copy(
+        update={
+            "goal": session.goal if plan.session.inject_goal else None,
+            "current_focus": (
+                session.current_focus if plan.session.inject_current_focus else None
+            ),
+        }
     )
 
 

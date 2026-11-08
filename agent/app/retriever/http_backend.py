@@ -35,6 +35,7 @@ RAG-04 阶段 B 重建清单使用；Agent 的正常检索只走 `ready-ids`，�
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -166,6 +167,32 @@ class HttpBackendRetriever:
     async def get_memories(
         self, user_id: int, space_id: int, concept_ids: list[int], query: str
     ) -> MemoryRetrievalResult:
+        """读取与本轮概念相关的长期记忆。
+
+        **多概念限制**：后端 `/api/memories/search/hybrid` 的 `conceptId` 是单个
+        `Long`，一次请求只能覆盖一个概念。D4-2 的 Policy 会在多概念问题时给出
+        完整的 `memory_concept_ids`，这里按概念逐次请求后合并，保证每个概念都有
+        候选进入结果；不足是 N 次往返、且没有跨概念的统一 RRF 排序。在不改后端
+        接口/表结构的前提下，这是能同时满足「CONCEPT 级记忆可见」与「多概念不丢」
+        的最小实现。单概念仍然是原来的一次请求，参数与状态语义完全不变。
+        """
+        ordered_ids = list(dict.fromkeys(int(item) for item in concept_ids))
+        if len(ordered_ids) <= 1:
+            return await self._search_memories(
+                space_id, ordered_ids[0] if ordered_ids else None, query
+            )
+
+        results = await asyncio.gather(
+            *(
+                self._search_memories(space_id, concept_id, query)
+                for concept_id in ordered_ids
+            )
+        )
+        return _merge_memory_results(results, ordered_ids, self._memory_top_k)
+
+    async def _search_memories(
+        self, space_id: int, concept_id: int | None, query: str
+    ) -> MemoryRetrievalResult:
         # 后端已按 status = ACTIVE 过滤，CANDIDATE 不会流进来。
         #
         # 走 /search/hybrid 而不是旧 /search：旧端点只返回 List，检索整条链路
@@ -177,17 +204,16 @@ class HttpBackendRetriever:
         # 一个子串去 LIKE，而是先按空白/标点切词、中文再补字符二元组，命中任意
         # 一个词就算候选。所以「一句话」正是它期待的输入形态。
         #
-        # conceptId 传本轮命中的第一个概念：后端的可见性规则里，CONCEPT 级记忆只有在
-        # 「spaceId 与 conceptId 同时给对」时才可见。不传的话它们会被静默排除 ——
-        # 结果依然是个正常返回的空列表，看不出任何异常。取第一个而不是全部，是因为
-        # 后端一个请求只认一个 conceptId；本轮的首要话题就是第一个命中的概念。
+        # conceptId：后端的可见性规则里，CONCEPT 级记忆只有在「spaceId 与
+        # conceptId 同时给对」时才可见。不传的话它们会被静默排除 —— 结果依然是
+        # 个正常返回的空列表，看不出任何异常。
         params: dict[str, Any] = {
             "spaceId": space_id,
             "keyword": query[:60],
             "limit": self._memory_top_k,
         }
-        if concept_ids:
-            params["conceptId"] = concept_ids[0]
+        if concept_id is not None:
+            params["conceptId"] = concept_id
         ok, data, failure = await self._get_outcome(
             "/api/memories/search/hybrid", params=params
         )
@@ -594,6 +620,55 @@ class HttpBackendRetriever:
             log.warning("后端业务错误，跳过：%s code=%s", path, envelope.code)
             return False, None, f"BUSINESS_CODE_{envelope.code}"
         return True, envelope.data, None
+
+
+def _merge_memory_results(
+    results: list[MemoryRetrievalResult],
+    concept_ids: list[int],
+    limit: int,
+) -> MemoryRetrievalResult:
+    """合并多概念的 hybrid 检索结果。
+
+    合并规则（刻意保守）：
+    - 按「每个概念的第 1 条、第 2 条……」轮转交错，避免某个概念的候选被整体挤掉；
+    - 按 memory.id 去重，保留首次出现；
+    - 任一次检索 DEGRADED → 整体 DEGRADED（部分结果仍保留，绝不压成 EMPTY）；
+    - warning / detail 去重后保留，便于区分「没结果」与「没查成」。
+    """
+    merged: list[MemoryItem] = []
+    seen: set[int] = set()
+    depth = max((len(result.items) for result in results), default=0)
+    for index in range(depth):
+        for result in results:
+            if index >= len(result.items):
+                continue
+            item = result.items[index]
+            if item.id in seen:
+                continue
+            seen.add(item.id)
+            merged.append(item)
+
+    if any(result.status is RetrievalStatus.DEGRADED for result in results):
+        status = RetrievalStatus.DEGRADED
+    elif merged:
+        status = RetrievalStatus.SUCCESS
+    else:
+        status = RetrievalStatus.EMPTY
+
+    details = [result.detail for result in results if result.detail]
+    warnings = [result.warning for result in results if result.warning]
+    warning = None
+    if warnings:
+        warning = (
+            f"记忆检索结果不完整（conceptIds={concept_ids}）："
+            + "；".join(dict.fromkeys(warnings))
+        )
+    return MemoryRetrievalResult(
+        items=merged[:limit],
+        status=status,
+        detail=",".join(dict.fromkeys(details)) or None,
+        warning=warning,
+    )
 
 
 def _parse_memory_search(
