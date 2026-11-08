@@ -22,6 +22,10 @@ from enum import Enum
 class TraceEventType(str, Enum):
     RUN_START = "RUN_START"
     CONCEPT_DETECT = "CONCEPT_DETECT"
+    # E2 结构化概念解析：**只在 Resolver 真的被调用时记录**。
+    # 策略决定不调用时，resolverStatus / resolverIntent 写在 CONCEPT_DETECT 里，
+    # 保持未调用路径的事件序列与 E1 一致。
+    CONCEPT_RESOLVE = "CONCEPT_RESOLVE"
     RETRIEVE = "RETRIEVE"
     CONTEXT_BUILT = "CONTEXT_BUILT"
     LLM_CALL = "LLM_CALL"

@@ -69,6 +69,22 @@ class AgentState:
 
     # ---------- 检索结果 ----------
     detected_concepts: list[DetectedConcept] = field(default_factory=list)
+    # ---------- E2 结构化概念解析（Resolver）----------
+    # `resolver_current_concept_ids` 已经过服务端校验，可以进入 concept_ids；
+    # `resolver_related_concept_ids` 只是 E1 关系扩展的排序提示，**不是**检索范围。
+    # NOT_CALLED / SUCCESS / DEGRADED / FAILED：DEGRADED 不能当成「用户没有历史」。
+    resolver_status: str = "NOT_CALLED"
+    resolver_intent: str = "other"
+    resolver_call_reason: str = ""
+    resolver_warning: str | None = None
+    resolver_current_concept_ids: list[int] = field(default_factory=list)
+    resolver_related_concept_ids: list[int] = field(default_factory=list)
+    resolver_needs_history_reference: bool = False
+    resolver_prompt_tokens: int = 0
+    resolver_completion_tokens: int = 0
+    resolver_token_source: str = "estimated"
+    resolver_elapsed_ms: int = 0
+    resolver_dropped: list[str] = field(default_factory=list)
     understandings: list[Understanding] = field(default_factory=list)
     memories: list[MemoryItem] = field(default_factory=list)
     knowledge: list[KnowledgeChunk] = field(default_factory=list)
@@ -146,6 +162,7 @@ class AgentState:
             "sessionId": self.session.id if self.session else None,
             "userMessage": self.user_message,
             "detectedConcepts": self.concept_names,
+            "resolverStatus": self.resolver_status,
             "retrieved": {
                 "understandings": len(self.understandings),
                 "memories": len(self.memories),

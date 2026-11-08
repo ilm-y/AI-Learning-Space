@@ -1,7 +1,8 @@
 # 已知限制与残余风险
 
-- 整理日期：2026-11-07；封版追加：2026-11-08
-- 仓库版本：审查基线 `13cec31`；封版追加基于 `6f6e940`（P0/P1/P2 修复已合入）
+- 整理日期：2026-11-07；封版追加：2026-11-08；E2 追加：2026-11-08
+- 仓库版本：审查基线 `13cec31`；封版追加基于 `6f6e940`（P0/P1/P2 修复已合入）；
+  E2 基于 `d7a8384`（E1 + E3 已合入）
 - 范围：三阶段改造（Memory 状态机、RAG 索引可靠性、Citation 引用闭环）以及
   Web 客户端 / 混合检索封版后仍然存在、但本轮**不修**的已知问题。
 - 相关报告：[`THREE_PHASE_FINAL_REVIEW.md`](THREE_PHASE_FINAL_REVIEW.md)、
@@ -594,7 +595,7 @@ Memory 向量写入采用「读取现有 payload → 比较 `memory_version` →
 | 项 | 内容 |
 | --- | --- |
 | 严重度 | 中（影响证据覆盖范围，不改变 Evidence 的归属与写入语义） |
-| 状态 | 部分缓解（E1 + E3），E2 待做；多跳 / 真实关系数据仍未覆盖 |
+| 状态 | 部分缓解（E1 + E2 + E3）；多跳 / 真实关系数据 / 真实模型评测仍未覆盖 |
 | 代码位置 | `agent/app/runtime.py`（`_retrieve` / `_select_expansion_concepts` / `_mark_cross_concept_evidences` / `_safe_evidences`）、`agent/app/retriever/base.py`（`EvidenceStatus` / `EvidenceRetrievalResult`）、`agent/app/retriever/http_backend.py`（`get_evidences` / `get_related_concepts`）、`agent/app/state/agent_state.py`、`agent/app/context/builder.py`（`evidence_status` / `related_evidence` 区块）、`backend/backend/src/main/java/com/ails/backend/service/ConceptRelationService.java`、`ConceptRelationMapper.java`、`EvidenceService.java`（`listRecentByConcepts`）、`EvidenceController.java`、`LearningEvidenceMapper.java`、`EvidenceSourceMapper.java` |
 
 ### 问题描述
@@ -636,6 +637,69 @@ E3 在本批补齐了检索状态与有界批量读取，并消除了 E1 引入�
   阻塞其余四路；只有跨概念 Evidence 查询依赖关系结果，并与原始结果按
   evidence id 合并去重。
 
+E2 在本批新增**结构化 Concept Resolver**，补规则识别的同义表达与模糊指代：
+
+- 模块：`agent/app/retriever/concept_resolver.py`；Runtime 在
+  `detect_concepts` 之后、构造 `concept_ids` 之前调用它。规则检测器本身未改写。
+- 输入：`user_id` / `space_id`（只用于日志与作用域，不写进提示词）、当前消息、
+  最近 N 轮对话（默认 4 条消息，单条截断 160 字符）、当前 Space 候选概念
+  （`conceptId + name + canonical + aliases + 简要描述`）。
+- 输出：严格 JSON
+  `{current_concepts:[{conceptId,confidence,reason}], related_concepts:[...],
+  needs_history_reference:bool, intent:"knowledge_question|prerequisite_question|
+  review_request|chitchat|other"}`。`current_concepts` 与 `related_concepts`
+  是两个独立字段，服务端不会把它们混在一起。
+- 服务端确定性校验（不信任模型）：`conceptId` 必须是本次实际呈现的**当前 Space
+  候选列表**中的 id（编造 / 跨 Space 一律丢弃并记 warning）；`confidence`
+  低于 `concept_resolver_confidence_threshold`（默认 0.6）丢弃；每字段最多
+  `concept_resolver_max_concepts_per_field`（默认 3，配置上限也是 3）；
+  `related` 与 `current` 重复项从 `related` 移除；非法 `intent` 归为 `other`；
+  当前意图不允许依赖历史时，`needs_history_reference=true` 被强制改回 `false`。
+- 合并顺序：规则结果优先，Resolver 只补充规则未命中的 `current_concepts`；
+  所有 Resolver 概念在 `matched_on` 中标为 `resolver:<reason>`，可追溯。
+- 与 E1 的安全边界：`related_concepts` **不进入** `concept_ids`，也不直接决定
+  Evidence 查询范围；它只作为 `_select_expansion_concepts` 的稳定排序提示，
+  在 `concept_relation` 真实返回的候选里把命中的 id 排到前面。不在关系结果里的
+  Resolver 提示会被忽略，方向过滤、去重、数量上限完全不变；关系表与 Resolver
+  冲突时以关系表为准（`tests/test_concept_resolver.py::
+  test_related_hint_cannot_bypass_relation_table`）。
+- 按需调用策略（每轮最多一次）：
+
+  | 规则命中 | intent | 是否调用 | 说明 |
+  | --- | --- | --- | --- |
+  | 是 | `prerequisite_question` / `review_request` | 是 | 规则命中也可能漏掉前置 / 复盘对象 |
+  | 是 | 其他 | 否 | 普通知识问题不额外花一次调用 |
+  | 否 | `knowledge_question` / `prerequisite_question` / `review_request` | 是 | 补同义表达与模糊指代 |
+  | 否 | `chitchat` / `other` | 否 | 「你好」「继续」「嗯」与非知识问题不调用 |
+
+- 预算与超时：单轮提示词预算 `concept_resolver_max_prompt_tokens=1600`
+  （超预算按「候选 → 历史 → 当前消息」顺序收缩，校验白名单与呈现列表一致）；
+  完成侧 `max_tokens=400`；硬超时
+  `concept_resolver_timeout_seconds=5.0`；候选最多 60 个。关闭
+  `concept_resolver_enabled` 即完全退化为 E1 行为。
+- 降级语义：`NOT_CALLED`（策略决定不调用）/ `SUCCESS` / `DEGRADED`
+  （超时、模型错误、非法 JSON、非对象 JSON）/ `FAILED`（Resolver 自身未预期
+  异常）。`DEGRADED` / `FAILED` 不阻塞主链路：规则结果、E1 扩展、Evidence 三态
+  全部照常；状态写入 `AgentState.resolver_status` / `resolver_warning` 与
+  `CONCEPT_RESOLVE` trace。ContextBuilder 对降级输出「本轮概念解析状态」区块，
+  并在没有认知记录时使用「本轮概念语义解析未完成，规则识别可能漏掉概念，
+  不能据此判断学习者没有相关历史」的措辞，**不会落成普通的「没有任何历史认知
+  记录」**。
+- 离线评测（`agent/tests/eval/`，9 个用例 × 3 种模式，每用例重复 3 次）：
+
+  | 模式 | Recall | Precision | 误召回率 | P95 prepare 耗时 | 平均 Resolver Token | Resolver 调用率 |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | 仅规则 | 0.385 | 1.000 | 0.000 | 9.82 ms | 0 | 0.000 |
+  | 规则 + E1 | 0.692 | 1.000 | 0.000 | 9.19 ms | 0 | 0.000 |
+  | 规则 + Resolver + E1 | 1.000 | 1.000 | 0.000 | 10.54 ms | 564.4 | 0.778 |
+
+  报告：`agent/tests/eval/reports/20261108T133221622730Z.json`。
+  **必须诚实解读**：Resolver 输出来自脚本化 LLM（按用例预置 JSON），不是真实
+  模型；Token 是 `estimate_tokens` 估算值；延迟是本地 `prepare()` 墙钟耗时，
+  不包含真实模型 / 网络延迟。该表证明的是「管线接线、确定性校验、跨 Space
+  隔离与 E1 边界正确」，**不能**当作真实模型的概念识别准确率。真实模型效果
+  尚未评测。
+
 仍未解决的问题：
 
 1. **关系数据本身可能为空**：仓库内没有 `concept_relation` 的写入路径、Service
@@ -646,14 +710,22 @@ E3 在本批补齐了检索状态与有界批量读取，并消除了 E1 引入�
    `target_concept_id`，没有方向说明。E1 采用的假设是
    `PREREQUISITE(source=A, target=B)` 表示 A 是 B 的前置，并已用后端与 Agent
    测试钉住；它不是由表结构强制保证的。
-4. **Concept Resolver（E2）未实现**：概念识别仍是规则版名称 / 别名匹配。
-   如果当前消息没有识别出正确概念，或识别错概念，后续扩展的起点就是错的；
-   E1 不能弥补这一问题。
-5. **历史证据仍不能完整回看（已部分实现）**：E3 已统一检索状态并实现
+4. **Concept Resolver（E2）已实现，但真实模型效果未验证**：规则识别仍是第一条
+   防线，Resolver 只在按需策略判定时补充。离线评测使用脚本化 LLM，只能证明
+   管线与校验正确；真实模型在跨语言、长尾别名、多概念歧义下的召回 / 误召回
+   仍需在真实模型与真实 Space 数据上评测。若 Resolver 返回空或识别错，E1 仍会
+   从错误起点扩展，E1 本身不能纠正概念识别错误。
+5. **Resolver 的 related 只是排序提示，不是关系补全**：它不能新增
+   `concept_relation` 里不存在的关系；关系表为空时，Resolver 再准确也无法触发
+   跨概念扩展。反之，关系表与 Resolver 冲突时以关系表为准。
+6. **Resolver 调用仍是同步开销**：命中调用策略时，本轮会多一次 LLM 往返
+   （硬超时 5 秒），没有跨轮缓存、批处理或流式；降级保证不阻塞，但不保证零延迟。
+   每轮最多一次调用，未做多轮迭代或自我纠错。
+7. **历史证据仍不能完整回看（已部分实现）**：E3 已统一检索状态并实现
    「SQL 内 LIMIT + 批量 Sources」的有界查询，但接口只返回最近 N 条
    （默认 3、服务端上限 50），没有分页游标；需要完整回看用户历史证据时，
    仍缺分页接口。旧单概念接口为兼容保留，未分页。
-6. **失败语义已区分，但未重试**：关系查询失败返回 `FAILED` + warning，原始概念
+8. **失败语义已区分，但未重试**：关系查询失败返回 `FAILED` + warning，原始概念
    Evidence 继续；没有重试、熔断或跨请求缓存。
 
 ### 影响范围
@@ -663,12 +735,25 @@ E3 在本批补齐了检索状态与有界批量读取，并消除了 E1 引入�
 - 没有关系数据、关系方向填反、或概念识别失败时，效果与改造前一致；
 - 跨概念证据只作为历史参考进入上下文，不能改变 Evidence 的 `conceptId` 归属，
   也不能改写当前概念的 Understanding；
+- E2 提升「用户其实在问哪个概念」的召回：同义表达（「求导」→「导数」）与
+  模糊指代（「那个东西」）在规则未命中时由 Resolver 补候选，但候选必须经过
+  当前 Space 白名单、置信度阈值与数量上限校验；
+- E2 的 `related_concepts` 只能影响 E1 真实关系候选的排序，**不能扩大** Evidence
+  检索范围；关系表仍是唯一的多概念扩展依据；
+- Resolver 降级（超时 / 5xx / 非法 JSON）时，本轮退化为规则 + E1，Evidence
+  三态语义不变；上下文会明确标记「概念解析未完成」，不会误报「没有历史」；
 - 不涉及写入链路，不改变后端 Evidence / Understanding 的持久化语义。
 
 ### 当前权衡（为什么只做这一批）
 
-- 需求限定 E0 + E1 + E3：E3 先补齐检索状态与有界批量读取，并修复 E1 引入的
-  串行往返；E2 Concept Resolver 不在本批范围；
+- E2 采用「规则优先 + Resolver 按需补充」而不是替换规则识别：规则版本零成本、
+  可预测，且已有测试；直接换成 LLM 会让每轮都多一次调用与不可预测的输出；
+- Resolver 的 `related` 只做 E1 排序提示，不直接发起 Evidence 查询：否则 LLM
+  就事实上决定了检索范围，绕过 `concept_relation` 的唯一真相；
+- 服务端校验、阈值、每字段上限、超时、Token 预算都放在 Python 侧，不依赖模型
+  自觉；这是本批安全边界的一部分；
+- 离线评测使用脚本化 LLM 而不是真实模型：它能在 CI 中稳定复现管线行为，
+  但真实模型质量需要另行评测，不能把脚本化满分当成模型能力；
 - 引入 Qdrant Evidence 向量索引、Graphiti / Mem0 / 新图数据库都会扩大存储与
   一致性边界，且会绕过现有 `concept_relation` 的唯一真相；
 - 多跳扩展需要权重、环路、时效与预算模型，当前没有真实关系数据支撑校准，
@@ -679,8 +764,9 @@ E3 在本批补齐了检索状态与有界批量读取，并消除了 E1 引入�
 
 ### 后续方向
 
-- E2：把规则版 Concept Resolver 替换 / 增强为可评估的语义识别，并补概念识别
-  失败的可观测性；
+- E2 后续：在真实模型与真实 Space 数据上评测 Resolver 的召回 / 误召回、Token
+  与延迟，按语料校准 `concept_resolver_confidence_threshold`；评估是否需要
+  跨轮缓存或批量调用；当前不替换规则识别，也不允许 Resolver 直接决定检索范围；
 - 为 `concept_relation` 建立受控写入路径（人工维护或分析链路提议 + 审核），
   明确方向语义并补数据校验；
 - 在需要完整回看历史证据时，为 Evidence 批量接口增加游标分页；
@@ -714,9 +800,22 @@ E3 在本批补齐了检索状态与有界批量读取，并消除了 E1 引入�
   Sources SQL 为一次 `evidence_id IN`；
 - `backend/.../EvidenceControllerBatchTest.java`：`GET /api/evidences` 路径、
   逗号分隔 conceptIds、可选 limit、sources 字段与跨用户 404；
-- 未覆盖：真实 `concept_relation` 数据写入 / 多跳 / 概念识别错误 / 真实 MySQL
-  上的分页与批量查询执行计划 —— 这些属于 E2、数据治理或需要独立 MySQL 的
-  集成环境。
+- `agent/tests/test_concept_resolver.py`：编造 conceptId 丢弃；跨 Space
+  conceptId 丢弃；置信度阈值过滤；`current` / `related` 字段分离；规则命中 +
+  普通问题不调用；规则未命中 + 前置问题调用并把 `current_concepts` 并入
+  `concept_ids`；超时 / LLM 错误 / 非法 JSON 降级且主链路继续；Resolver 的
+  related 提示无法绕过 `concept_relation`（999 不在关系结果中 → 不扩展、不查
+  证据）；每字段最多 3 个；不允许依赖历史时 `needs_history_reference` 被强制
+  改回 false；未知 intent 归为 other；按需调用决策表；**真实降级复现**（真实
+  `MockLLMAdapter` + 真实 Runtime：`resolver_status=DEGRADED`，原始 Evidence
+  仍为 `SUCCESS`，上下文不落成「没有历史」，`stream()` 以 `done` 结束）；
+- `agent/tests/eval/test_eval_repeatable.py`：9 个评测用例全部有断言并通过；
+  同一数据集两次运行的非延迟结果完全一致；用例覆盖前置 / 相关 / TCP / TLB /
+  同义表达 / 模糊指代 / 跨 Space / 闲聊 / 规则命中不调用；
+- 未覆盖：真实模型下的 Resolver 准确率 / Token / 延迟；真实
+  `concept_relation` 数据写入；多跳扩展；概念识别错误的自动纠错；真实 MySQL
+  上的分页与批量查询执行计划 —— 这些属于真实模型评测、数据治理或需要独立
+  MySQL 的集成环境。
 
 ---
 
@@ -735,7 +834,7 @@ E3 在本批补齐了检索状态与有界批量读取，并消除了 E1 引入�
 | DOC-01 | 中 | 不影响检索 / 权限，存在磁盘残留 | 部分（正常删除；IO 异常无覆盖） | 记录 |
 | DDL-01 | 中 | 不影响查询，升级 / 部署有风险 | 无迁移框架测试 | 记录 |
 | DIST-01 | 中 | 单实例安全，多实例可能版本回退 | 单进程充分、多实例无覆盖 | 记录 |
-| EVD-01 | 中 | 跨概念证据覆盖有限，不改变归属 | 受控一跳 + 三态/批量查询充分；多跳 / 真实关系数据无覆盖 | 部分缓解（E1 + E3），E2 / 分页待做 |
+| EVD-01 | 中 | 跨概念证据覆盖有限，不改变归属 | 受控一跳 + 三态/批量查询 + E2 契约/降级/E1 边界充分；真实模型 / 多跳 / 真实关系数据无覆盖 | 部分缓解（E1 + E2 + E3）；真实模型评测 / 分页待做 |
 
 以上均为**已知限制**，不是“已修复但未写文档”的项。后续修复时应同时补对应测试，
 不能只改代码。

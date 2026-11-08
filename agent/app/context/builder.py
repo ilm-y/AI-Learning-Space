@@ -67,6 +67,9 @@ PRIORITY_MEMORY = 50
 # 「这次是没有可用文档 / 阈值过滤 / 检索降级」，而不是把空知识区当成「资料里没有」。
 PRIORITY_KNOWLEDGE_STATUS = 45
 PRIORITY_KNOWLEDGE = 40
+# 概念解析状态比知识检索状态还高一点：它解释的是「本轮有没有理解用户指哪个概念」，
+# 是后面 U / M / E 是否可信的前提。降级说明很短，不能被预算丢掉。
+PRIORITY_CONCEPT_STATUS = 47
 # 证据检索状态高于证据本身：降级说明很短，但它决定了模型能不能把「没看见证据」
 # 说成「没有历史」。预算紧张时，证据条目可以被丢，这条解释不能被丢。
 PRIORITY_EVIDENCE_STATUS = 46
@@ -82,6 +85,7 @@ RENDER_ORDER = (
     "understanding",
     "trajectory",
     "memory",
+    "concept_status",
     "knowledge_status",
     "knowledge",
     "evidence_status",
@@ -236,6 +240,11 @@ class BuiltContext:
     evidence_warning: str | None = None
     cross_concept_evidence_status: str = "NOT_RETRIEVED"
     cross_concept_evidence_warning: str | None = None
+    # E2：概念解析状态必须随上下文一起可观测。DEGRADED 不等于「用户没有历史」，
+    # 也不能只在日志里，否则调用方看到的仍是一次「正常但没有认知记录」的组装。
+    resolver_status: str = "NOT_CALLED"
+    resolver_intent: str = "other"
+    resolver_warning: str | None = None
 
     @property
     def dropped_sections(self) -> list[str]:
@@ -261,6 +270,9 @@ class BuiltContext:
             "evidenceWarning": self.evidence_warning,
             "crossConceptEvidenceStatus": self.cross_concept_evidence_status,
             "crossConceptEvidenceWarning": self.cross_concept_evidence_warning,
+            "resolverStatus": self.resolver_status,
+            "resolverIntent": self.resolver_intent,
+            "resolverWarning": self.resolver_warning,
             "droppedSections": self.dropped_sections,
             "warnings": self.warnings,
             "sections": [section.as_dict() for section in self.sections],
@@ -368,6 +380,9 @@ class ContextBuilder:
             evidence_warning=state.evidence_warning,
             cross_concept_evidence_status=state.cross_concept_evidence_status,
             cross_concept_evidence_warning=state.cross_concept_evidence_warning,
+            resolver_status=state.resolver_status,
+            resolver_intent=state.resolver_intent,
+            resolver_warning=state.resolver_warning,
         )
 
     # ---------- 1. 收集 ----------
@@ -476,6 +491,19 @@ class ContextBuilder:
                     priority=PRIORITY_MEMORY,
                     source_ids=[f"memory:{memory.id}"],
                     dedupe_key=f"memory:{memory.id}",
+                )
+            )
+
+        concept_status_note = _render_concept_resolver_status(state)
+        if concept_status_note:
+            sections.append(
+                ContextSection(
+                    name="concept_status",
+                    title="概念解析状态",
+                    content=concept_status_note,
+                    priority=PRIORITY_CONCEPT_STATUS,
+                    source_ids=[f"resolver-status:{state.resolver_status}"],
+                    dedupe_key="concept_status",
                 )
             )
 
@@ -675,11 +703,17 @@ class ContextBuilder:
             for section in sections
         )
         if not kept_cognitive and not dropped_records:
+            degraded_notes: list[str] = []
             if _evidence_degraded(state):
-                # 证据检索坏了，不能把「没检索到」说成「没有历史」。
+                degraded_notes.append("本轮证据检索发生降级")
+            if _concept_resolver_degraded(state):
+                # Resolver 降级只说明「语义解析没完成」，规则仍可能漏掉概念；
+                # 它绝不能等价于「用户没有相关历史」。
+                degraded_notes.append("本轮概念语义解析未完成，规则识别可能漏掉概念")
+            if degraded_notes:
                 blocks.append(
                     "## 学习者背景\n"
-                    "（本次没有检索到可用的历史认知记录；但本轮证据检索发生降级，"
+                    f"（本次没有检索到可用的历史认知记录；但{'；'.join(degraded_notes)}，"
                     "不能据此判断学习者没有相关历史，按新知识谨慎教学，"
                     "不要断言用户从未学过相关内容。）"
                 )
@@ -732,6 +766,14 @@ class ContextBuilder:
             warnings.append(state.evidence_warning)
         if state.cross_concept_evidence_warning:
             warnings.append(state.cross_concept_evidence_warning)
+        # 概念解析降级必须与「策略决定不调用」区分：前者是依赖失败，
+        # 后者是正常的 E1 行为。只有降级/失败才进入 warnings。
+        if _concept_resolver_degraded(state):
+            detail = state.resolver_warning or "未提供具体原因"
+            warnings.append(
+                f"概念语义解析未完成（{state.resolver_status}），本轮仅使用规则识别结果；"
+                f"不能据此判断用户没有相关历史。底层记录：{detail}"
+            )
         pending = [section.name for section in sections if section.dropped]
         if pending:
             warnings.append(f"以下片段因超出 Token 预算被丢弃：{', '.join(pending)}")
@@ -769,6 +811,11 @@ _BLOCK_HEADINGS = {
         "与当前认知/本轮证据冲突时，说明这是较早的记录、当前状态已经不同，"
         "但不要推断用户为什么改变，也不要删除或改写长期记忆，"
         "也不要把旧记忆无条件当成本轮事实。与当前问题无关的记忆不要主动展开。",
+    ),
+    "concept_status": (
+        "本轮概念解析状态",
+        "> 这决定本轮能否确定用户指的是哪些概念。解析降级只说明语义识别未完成，"
+        "不说明用户没有相关历史；规则识别结果仍然有效，只是可能漏掉同义或模糊指代。",
     ),
     "knowledge_status": (
         "本轮知识检索状态",
@@ -1085,6 +1132,28 @@ def _evidence_degraded(state: AgentState) -> bool:
     return (
         str(state.evidence_status) == _EVIDENCE_DEGRADED
         or str(state.cross_concept_evidence_status) == _EVIDENCE_DEGRADED
+    )
+
+
+_CONCEPT_RESOLVER_DEGRADED = {"DEGRADED", "FAILED"}
+
+
+def _concept_resolver_degraded(state: AgentState) -> bool:
+    """只有 DEGRADED / FAILED 需要提示；NOT_CALLED 是正常策略，SUCCESS 无需解释。"""
+    return str(state.resolver_status) in _CONCEPT_RESOLVER_DEGRADED
+
+
+def _render_concept_resolver_status(state: AgentState) -> str:
+    if not _concept_resolver_degraded(state):
+        return ""
+    return "\n".join(
+        [
+            f"- 状态：{state.resolver_status}",
+            f"- 解析层记录：{state.resolver_warning or '未提供具体原因'}",
+            "- 说明：本轮概念语义解析未完成，规则识别结果仍已使用；"
+            "不能据此判断学习者没有相关历史或从未学过相关概念。"
+            "不要声称用户没有记录、没有学过或没有相关历史。",
+        ]
     )
 
 

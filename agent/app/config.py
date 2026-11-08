@@ -98,6 +98,27 @@ class Settings(BaseSettings):
     evidence_related_concepts_limit: int = 3
     evidence_related_evidence_limit: int = 2
 
+    # ---------- E2 结构化 Concept Resolver ----------
+    # Resolver 只在规则识别不足时按需调用；它提出的 conceptId 必须由服务端
+    # 按「当前 Space 候选集 + 阈值 + 每字段上限」做确定性校验后才能进入检索。
+    # 关闭后整条链路退化为 E1 行为，便于做 A/B 对照。
+    concept_resolver_enabled: bool = True
+    # 低于该置信度的候选直接丢弃，不进入 concept_ids。
+    concept_resolver_confidence_threshold: float = 0.6
+    # 契约要求每个字段最多采纳 3 个；配置不允许超过 3。
+    concept_resolver_max_concepts_per_field: int = 3
+    # 单轮 Resolver 调用的硬超时；超时按 DEGRADED 处理，不阻塞主链路。
+    concept_resolver_timeout_seconds: float = 5.0
+    # 单轮完成侧 Token 预算（传给 LLM 的 max_tokens）。
+    concept_resolver_max_tokens: int = 400
+    # 单轮提示词总预算（system + user，按 estimate_tokens 粗估）。
+    concept_resolver_max_prompt_tokens: int = 1600
+    # 候选概念最多呈现给模型多少个，超出按输入顺序截断（同时约束校验白名单）。
+    concept_resolver_max_candidate_concepts: int = 60
+    # 最近 N 轮对话摘要；0 表示不传历史。每条消息截断到固定字符数，避免全量历史。
+    concept_resolver_history_turns: int = 4
+    concept_resolver_history_chars_per_message: int = 160
+
     # ---------- 上下文预算 ----------
     recent_history_limit: int = 12
     max_context_tokens: int = 3000
@@ -194,6 +215,22 @@ class Settings(BaseSettings):
             raise ValueError("evidence_related_concepts_limit 不能为负数")
         if self.evidence_related_evidence_limit < 0:
             raise ValueError("evidence_related_evidence_limit 不能为负数")
+        if not 0.0 <= self.concept_resolver_confidence_threshold <= 1.0:
+            raise ValueError("concept_resolver_confidence_threshold 必须在 [0, 1] 之间")
+        if not 1 <= self.concept_resolver_max_concepts_per_field <= 3:
+            raise ValueError("concept_resolver_max_concepts_per_field 必须在 [1, 3] 之间")
+        if self.concept_resolver_timeout_seconds <= 0:
+            raise ValueError("concept_resolver_timeout_seconds 必须为正数")
+        if self.concept_resolver_max_tokens <= 0:
+            raise ValueError("concept_resolver_max_tokens 必须为正数")
+        if self.concept_resolver_max_prompt_tokens <= 0:
+            raise ValueError("concept_resolver_max_prompt_tokens 必须为正数")
+        if self.concept_resolver_max_candidate_concepts <= 0:
+            raise ValueError("concept_resolver_max_candidate_concepts 必须为正数")
+        if self.concept_resolver_history_turns < 0:
+            raise ValueError("concept_resolver_history_turns 不能为负数")
+        if self.concept_resolver_history_chars_per_message <= 0:
+            raise ValueError("concept_resolver_history_chars_per_message 必须为正数")
         if self.internal_identity_ttl_seconds <= 0:
             raise ValueError("internal_identity_ttl_seconds 必须为正数")
         if self.internal_identity_max_ttl_seconds < self.internal_identity_ttl_seconds:
@@ -237,6 +274,22 @@ class Settings(BaseSettings):
             "evidence_top_k": self.evidence_top_k,
             "evidence_related_concepts_limit": self.evidence_related_concepts_limit,
             "evidence_related_evidence_limit": self.evidence_related_evidence_limit,
+            "concept_resolver_enabled": self.concept_resolver_enabled,
+            "concept_resolver_confidence_threshold": (
+                self.concept_resolver_confidence_threshold
+            ),
+            "concept_resolver_max_concepts_per_field": (
+                self.concept_resolver_max_concepts_per_field
+            ),
+            "concept_resolver_timeout_seconds": self.concept_resolver_timeout_seconds,
+            "concept_resolver_max_tokens": self.concept_resolver_max_tokens,
+            "concept_resolver_max_prompt_tokens": (
+                self.concept_resolver_max_prompt_tokens
+            ),
+            "concept_resolver_max_candidate_concepts": (
+                self.concept_resolver_max_candidate_concepts
+            ),
+            "concept_resolver_history_turns": self.concept_resolver_history_turns,
             "embedding_provider": self.embedding_provider,
             "embedding_model": "hash-v1"
             if self.embedding_provider == "hash"

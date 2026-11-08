@@ -63,7 +63,14 @@ from app.history_guard import (
     retry_instruction,
 )
 from app.llm.base import LLMAdapter, LLMError, StreamCompletion
-from app.retriever import build_retriever, detect_concepts
+from app.retriever import (
+    ConceptResolver,
+    ResolverDecision,
+    ResolverStatus,
+    build_retriever,
+    decide_resolver_call,
+    detect_concepts,
+)
 from app.retriever.base import (
     EvidenceRetrievalResult,
     KnowledgeQuery,
@@ -78,6 +85,7 @@ from app.schemas import (
     AnalyzeRequest,
     AnalyzeResult,
     ChatRequest,
+    Concept,
     EvidenceItem,
     RelatedConcept,
 )
@@ -202,10 +210,24 @@ class AgentRuntime:
         llm: LLMAdapter,
         builder: ContextBuilder | None = None,
         knowledge_search: KnowledgeSearchService | None = None,
+        concept_resolver: ConceptResolver | None = None,
     ) -> None:
         self._settings = settings
         self._llm = llm
         self._knowledge_search = knowledge_search
+        # Resolver 与 Tutor 共用同一个 LLM 适配器；注入点只给测试 / 评测用，
+        # 生产路径不应绕过配置里的阈值、超时与 Token 预算。
+        self._resolver = concept_resolver or ConceptResolver(
+            llm,
+            confidence_threshold=settings.concept_resolver_confidence_threshold,
+            max_per_field=settings.concept_resolver_max_concepts_per_field,
+            timeout_seconds=settings.concept_resolver_timeout_seconds,
+            max_tokens=settings.concept_resolver_max_tokens,
+            max_prompt_tokens=settings.concept_resolver_max_prompt_tokens,
+            max_candidates=settings.concept_resolver_max_candidate_concepts,
+            history_turns=settings.concept_resolver_history_turns,
+            history_chars_per_message=settings.concept_resolver_history_chars_per_message,
+        )
         self._builder = builder or ContextBuilder(
             max_context_tokens=settings.max_context_tokens,
             recent_history_limit=settings.recent_history_limit,
@@ -661,16 +683,66 @@ class AgentRuntime:
         trace_detail: dict[str, object] = {"concepts_available": len(concepts)}
 
         detected = detect_concepts(query, state.history, concepts)
-        state.detected_concepts = [
+        rule_detected = [
             DetectedConcept(concept=concept, score=score, matched_on=matched_on)
             for concept, score, matched_on in detected
         ]
+        # 规则结果先就位：Resolver 只补充，不覆盖，也不改变规则命中的优先级。
+        state.detected_concepts = list(rule_detected)
+
+        # E2：按需调用。策略是确定性的，Resolver 不参与「要不要调用自己」。
+        call_decision = decide_resolver_call(
+            query,
+            rule_hit_count=len(rule_detected),
+            candidate_count=len(concepts),
+            enabled=self._settings.concept_resolver_enabled,
+        )
+        state.resolver_intent = call_decision.intent
+        state.resolver_call_reason = call_decision.reason
+
+        resolver_decision: ResolverDecision | None = None
+        if call_decision.call:
+            # 一轮最多一次；超时 / 5xx / 非法 JSON 由 Resolver 内部降级，
+            # 这里不重试、不抛出，主链路继续使用规则结果。
+            resolver_decision = await self._resolver.resolve(
+                run_id=state.run_id,
+                user_id=state.user_id,
+                space_id=state.space_id,
+                user_message=query,
+                history=state.history,
+                candidates=concepts,
+                allow_history_reference=call_decision.allow_history_reference,
+            )
+            _apply_resolver_decision(state, resolver_decision, concepts)
+
         state.trace.record(
             TraceEventType.CONCEPT_DETECT,
             detected=[item.concept.label for item in state.detected_concepts],
             matchedOn=[item.matched_on for item in state.detected_concepts],
+            ruleDetected=[item.concept.label for item in rule_detected],
+            resolverStatus=state.resolver_status,
+            resolverIntent=state.resolver_intent,
+            resolverCallReason=state.resolver_call_reason,
             **trace_detail,
         )
+        if resolver_decision is not None:
+            state.trace.record(
+                TraceEventType.CONCEPT_RESOLVE,
+                status=resolver_decision.status.value,
+                intent=call_decision.intent,
+                modelIntent=resolver_decision.intent,
+                callReason=call_decision.reason,
+                presentedConceptIds=resolver_decision.presented_concept_ids,
+                currentConceptIds=state.resolver_current_concept_ids,
+                relatedConceptIds=state.resolver_related_concept_ids,
+                needsHistoryReference=state.resolver_needs_history_reference,
+                dropped=resolver_decision.dropped,
+                warning=state.resolver_warning,
+                promptTokens=resolver_decision.prompt_tokens,
+                completionTokens=resolver_decision.completion_tokens,
+                tokenSource=resolver_decision.token_source,
+                elapsedMs=resolver_decision.elapsed_ms,
+            )
 
         concept_ids = state.concept_ids
         # Knowledge 独立于 Concept：用户问一个还没建 Concept 的新知识点时，
@@ -760,6 +832,9 @@ class AgentRuntime:
                 concept_ids,
                 state.related_concepts,
                 self._settings.evidence_related_concepts_limit,
+                # Resolver 的 related 只影响「先看哪些真实关系候选」，不能新增范围：
+                # 不在 concept_relation 结果里的 id 永远不会被选中。
+                hint_ids=set(state.resolver_related_concept_ids),
             )
             # 最多一跳、最多 N 个概念、独立的小预算（evidence_related_evidence_limit）。
             if state.expanded_concepts and self._settings.evidence_related_evidence_limit > 0:
@@ -821,6 +896,14 @@ class AgentRuntime:
             relatedConceptCandidates=[item.concept_id for item in state.related_concepts],
             expandedConceptIds=[item.concept_id for item in state.expanded_concepts],
             relatedConceptWarning=state.related_concepts_warning,
+            resolverStatus=state.resolver_status,
+            resolverRelatedHintIds=state.resolver_related_concept_ids,
+            # 提示里有哪些 id 在真实关系结果中不存在：它们不会进入扩展，
+            # 这条字段是「Resolver 不能绕过 concept_relation」的可观测证据。
+            resolverHintsNotInRelation=sorted(
+                set(state.resolver_related_concept_ids)
+                - {item.concept_id for item in state.related_concepts}
+            ),
             historyReviewRequested=state.history_review_requested,
             trajectoryConcepts=[item.concept_name for item in state.trajectories],
             trajectoryRevisions=sum(len(item.revisions) for item in state.trajectories),
@@ -932,10 +1015,65 @@ class AgentRuntime:
         await self._llm.aclose()
 
 
+def _apply_resolver_decision(
+    state: AgentState,
+    decision: ResolverDecision,
+    candidates: list[Concept],
+) -> None:
+    """把 Resolver 决策写进 state，并只合并通过服务端校验的 current 概念。
+
+    - 规则已命中的 concept 不重复追加（规则优先）；
+    - 候选表按 id 再核对一次：即便 Resolver 内部校验失效，这里也不会把
+      跨 Space / 编造的 concept 塞进 `concept_ids`；
+    - related 只记入 state，供 E1 排序提示，不进入检索范围。
+    """
+    state.resolver_status = decision.status.value
+    state.resolver_warning = decision.warning
+    state.resolver_current_concept_ids = [
+        item.concept_id for item in decision.current_concepts
+    ]
+    state.resolver_related_concept_ids = [
+        item.concept_id for item in decision.related_concepts
+    ]
+    state.resolver_needs_history_reference = decision.needs_history_reference
+    state.resolver_prompt_tokens = decision.prompt_tokens
+    state.resolver_completion_tokens = decision.completion_tokens
+    state.resolver_token_source = decision.token_source
+    state.resolver_elapsed_ms = decision.elapsed_ms
+    state.resolver_dropped = list(decision.dropped)
+
+    # 只有 SUCCESS 才可能带来可用的 current 概念；DEGRADED / FAILED 一律只保留规则结果。
+    if decision.status is not ResolverStatus.SUCCESS:
+        return
+    by_id = {concept.id: concept for concept in candidates}
+    known = {item.concept.id for item in state.detected_concepts}
+    for resolved in decision.current_concepts:
+        if resolved.concept_id in known:
+            continue
+        concept = by_id.get(resolved.concept_id)
+        if concept is None:
+            # 防御性兜底：正常路径下 Resolver 已按候选白名单过滤过。
+            state.resolver_dropped.append(
+                f"current_concepts 丢弃 conceptId={resolved.concept_id}：不在当前 Space 候选列表"
+            )
+            continue
+        reason = resolved.reason.strip() or "语义匹配"
+        state.detected_concepts.append(
+            DetectedConcept(
+                concept=concept,
+                score=resolved.confidence,
+                matched_on=f"resolver:{reason}",
+            )
+        )
+        known.add(resolved.concept_id)
+
+
 def _select_expansion_concepts(
     concept_ids: list[int],
     related: list[RelatedConcept],
     limit: int,
+    *,
+    hint_ids: set[int] | None = None,
 ) -> list[RelatedConcept]:
     """从后端返回的候选里挑出真正要查 Evidence 的关联概念。
 
@@ -946,11 +1084,16 @@ def _select_expansion_concepts(
     - RELATED 双向都算；
     - 按 concept_id 去重，保留首次出现（后端已按 weight 降序返回）；
     - 最多 `limit` 个。
+
+    `hint_ids` 来自 E2 Resolver 的 `related_concepts`，**只做稳定排序提示**：
+    命中的真实关系候选排到前面，用来帮助选择扩展起点。它不能新增候选、
+    不能改变方向过滤、不能突破 `limit`；不在 `related` 里的 id 会被忽略。
+    与 `concept_relation` 冲突时，以关系表为准。
     """
     if limit <= 0:
         return []
     original = set(concept_ids)
-    selected: list[RelatedConcept] = []
+    candidates: list[RelatedConcept] = []
     seen: set[int] = set()
     for item in related:
         if item.concept_id in original or item.concept_id in seen:
@@ -963,10 +1106,11 @@ def _select_expansion_concepts(
             # 当前概念的 OUTGOING 前置 = 当前概念是别人的前置，不是「它的前置」。
             continue
         seen.add(item.concept_id)
-        selected.append(item)
-        if len(selected) >= limit:
-            break
-    return selected
+        candidates.append(item)
+    if hint_ids:
+        # list.sort 是稳定排序：同等条件下仍保持后端返回的 weight 顺序。
+        candidates.sort(key=lambda item: 0 if item.concept_id in hint_ids else 1)
+    return candidates[:limit]
 
 
 def _mark_cross_concept_evidences(

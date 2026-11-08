@@ -1,0 +1,27 @@
+# Resolver 真实降级复现（2026-11-08T13:33:03.136034+00:00）
+# 适配器：MockLLMAdapter（complete 返回散文，不是 JSON）
+
+## 事实
+- question: 连续性的基础是什么？凭什么
+- resolverStatus: DEGRADED
+- resolverWarning: 概念解析返回非法 JSON，已降级为规则识别。
+- resolverTokenSource: estimated
+- resolverPromptTokens: 494
+- resolverCompletionTokens: 209
+- evidenceStatus: SUCCESS
+- evidenceIds: [1031, 1011]
+- crossConceptEvidenceStatus: SUCCESS
+- contextResolverStatus: DEGRADED
+- contextHasConceptStatus: True
+- contextHasDegradationCaution: True
+- contextClaimsNoHistory: False
+- contextWarnings: ['没有检索到任何 Understanding：这次回答无法接着用户已有认知讲。', '概念语义解析未完成（DEGRADED），本轮仅使用规则识别结果；不能据此判断用户没有相关历史。底层记录：概念解析返回非法 JSON，已降级为规则识别。', '完整 prompt 约 3137 tokens，其中固定系统提示约 2389 tokens；max_context_tokens=3000 约束的是动态上下文（当前 748 tokens），不是完整 prompt。']
+- streamEvents: ['meta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'done']
+- streamLastEvent: done
+
+## 断言结果：PASS
+
+## 实际日志
+2026-11-08 21:33:03,106 WARNING app.retriever.concept_resolver: 概念解析返回非法 JSON，降级为规则识别：run=9001 space=1 error=响应中没有 JSON 对象 raw='（Mock LLM 输出）我收到的问题是：\n> 当前 Space 的候选概念（只能从这里选）：\n- id=101 | name=极限\n- id=102 | name=导数\n- id=103 | name=连续性\n- id=104 | name=微分\n\n最近对话（每轮已截断，仅作指代消解参考）：\n- （无历史对话）\n\n当前用户消息：\n连续性的基础是什么？凭什么\n\n请按系统提示的 JSON 结构输出，'
+2026-11-08 21:33:03,125 WARNING app.retriever.concept_resolver: 概念解析返回非法 JSON，降级为规则识别：run=9001 space=1 error=响应中没有 JSON 对象 raw='（Mock LLM 输出）我收到的问题是：\n> 当前 Space 的候选概念（只能从这里选）：\n- id=10 | name=TLB（快表） | canonical=TLB | aliases=快表/转换检测缓冲区/translation lookaside buffer | desc=Translation Lookaside Buffer，MMU 内部的页表项缓存\n- id=11 | name'
+2026-11-08 21:33:03,133 INFO app.runtime: run 9001 结束：{'runId': 9001, 'traceId': None, 'startedAt': '2026-11-08T13:33:03.117223+00:00', 'elapsedMs': 16, 'events': [{'type': 'RUN_START', 'elapsedMs': 0, 'userId': 1, 'conversationId': 1, 'spaceId': 1, 'sessionId': None, 'messageChars': 13}, {'type': 'CONCEPT_DETECT', 'elapsedMs': 0, 'detected': [], 'matchedOn': [], 'ruleDetected': [], 'resolverStatus': 'DEGRADED', 'resolverIntent': 'prerequisite_question', 'resolverCallReason': 'rule_miss_knowledge_question', 'concepts_available': 5}, {'type': 'CONCEPT_RESOLVE', 'elapsedMs': 0, 'status': 'DEGRADED', 'intent': 'prerequisite_question', 'modelIntent': 'other', 'callReason': 'rule_miss_knowledge_question', 'presentedConceptIds': [10, 11, 12, 13, 14], 'currentConceptIds': [], 'relatedConceptIds': [], 'needsHistoryReference': False, 'dropped': [], 'warning': '概念解析返回非法 JSON，已降级为规则识别。', 'promptTokens': 674, 'completionTokens': 389, 'tokenSource': 'estimated'}, {'type': 'RETRIEVE', 'elapsedMs': 0, 'source': 'fixture:demo_space.json', 'conceptIds': [], 'understandings': [], 'memories': 0, 'knowledge': 0, 'knowledgeStatus': 'NO_MATCH', 'knowledgeCandidates': 0, 'evidences': 0, 'evidenceStatus': 'NOT_RETRIEVED', 'evidenceWarning': None, 'crossConceptEvidences': 0, 'crossConceptEvidenceStatus': 'NOT_RETRIEVED', 'crossConceptEvidenceWarning': None, 'evidenceRequested': False, 'relatedConceptStatus': 'NOT_RETRIEVED', 'relatedConceptCandidates': [], 'expandedConceptIds': [], 'relatedConceptWarning': None, 'resolverStatus': 'DEGRADED', 'resolverRelatedHintIds': [], 'resolverHintsNotInRelation': [], 'historyReviewRequested': False, 'trajectoryConcepts': [], 'trajectoryRevisions': 0, 'trajectoryEvidenceIds': []}, {'type': 'CONTEXT_BUILT', 'elapsedMs': 0, 'estimatedTokens': 2889, 'droppedSections': [], 'knowledgeStatus': 'NO_MATCH', 'knowledgeState': 'NO_MATCH', 'knowledgeInjected': [], 'knowledgeDropped': [], 'warnings': ['没有检索到任何 Understanding：这次回答无法接着用户已有认知讲。', '概念语义解析未完成（DEGRADED），本轮仅使用规则识别结果；不能据此判断用户没有相关历史。底层记录：概念解析返回非法 JSON，已降级为规则识别。']}, {'type': 'EVIDENCE_GUARD', 'elapsedMs': 16, 'status': 'NO_MATCH', 'added': False, 'hasKnowledge': False}, {'type': 'CITATION_CHECK', 'elapsedMs': 16, 'total': 0, 'valid': 0, 'invalid': 0, 'illegalRate': None, 'invalidLabels': [], 'malformedLabels': [], 'duplicateLabels': [], 'citedDocuments': [], 'providedLabels': [], 'droppedKnowledge': 0}, {'type': 'RUN_END', 'elapsedMs': 16, 'status': 'COMPLETED', 'finishReason': None, 'truncated': False, 'responseChars': 460}]}

@@ -1,0 +1,853 @@
+{
+  "meta": {
+    "experiment": "E2 Concept Resolver 三模式离线对照",
+    "generatedAt": "2026-11-08T13:32:19.800759+00:00",
+    "runId": "fa723132c88c4a55916ad54db3ee9aa5",
+    "repeats": 3,
+    "dataset": "agent/tests/eval/runner.py::CASES (9 cases)",
+    "llm": "ScriptedEvalLLM（预置 JSON，不是真实模型）",
+    "tokenAccounting": "estimate_tokens 估算值（token_source=estimated）",
+    "latencyCaveat": "p95/avg 是 prepare() 墙钟耗时；脚本化 LLM 不产生真实模型/网络延迟，因此不同模式之间的延迟差只反映管线路径（Resolver 调用 + E1 查询）。",
+    "goldDefinition": "gold = 用户实际指向的当前概念 ∪ 应被 E1 带出的相关概念；Recall/Precision 在 final = current ∪ expanded 上按概念 id 计算。"
+  },
+  "modes": {
+    "rules_only": {
+      "mode": "rules_only",
+      "label": "仅规则识别（无 E1、无 Resolver）",
+      "passed": true,
+      "metrics": {
+        "caseRuns": 27,
+        "truePositives": 15,
+        "falsePositives": 0,
+        "falseNegatives": 24,
+        "recall": 0.3846,
+        "precision": 1.0,
+        "misrecallRate": 0.0,
+        "p95PrepareLatencyMs": 9.824,
+        "avgPrepareLatencyMs": 7.652,
+        "resolverCalls": 0,
+        "resolverCallRate": 0.0,
+        "avgResolverTokens": 0,
+        "totalResolverTokens": 0,
+        "avgResolverLatencyMs": 0.0,
+        "tokenSources": []
+      },
+      "cases": [
+        {
+          "caseId": "prereq-derivative-limit",
+          "question": "导数的前置是什么？依据是什么",
+          "spaceId": 1,
+          "gold": [
+            101,
+            102
+          ],
+          "observed": {
+            "current": [
+              102
+            ],
+            "expanded": [],
+            "final": [
+              102
+            ],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 9.851,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "related-continuity-limit",
+          "question": "连续性的基础是什么？凭什么",
+          "spaceId": 1,
+          "gold": [
+            101,
+            103
+          ],
+          "observed": {
+            "current": [
+              103
+            ],
+            "expanded": [],
+            "final": [
+              103
+            ],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 7.474,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "tcp-congestion",
+          "question": "拥塞控制的前置是什么？为什么",
+          "spaceId": 3,
+          "gold": [
+            301,
+            302
+          ],
+          "observed": {
+            "current": [
+              302
+            ],
+            "expanded": [],
+            "final": [
+              302
+            ],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 8.865,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "pagetable-tlb",
+          "question": "页表的基础是什么？凭什么",
+          "spaceId": 2,
+          "gold": [
+            201,
+            202
+          ],
+          "observed": {
+            "current": [
+              201
+            ],
+            "expanded": [],
+            "final": [
+              201
+            ],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 9.477,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "synonym-derivative-basics",
+          "question": "求导前面的基础是什么？为什么",
+          "spaceId": 1,
+          "gold": [
+            101,
+            102
+          ],
+          "observed": {
+            "current": [],
+            "expanded": [],
+            "final": [],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 6.928,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "fuzzy-anaphora",
+          "question": "那个东西到底是什么？",
+          "spaceId": 1,
+          "gold": [
+            101
+          ],
+          "observed": {
+            "current": [],
+            "expanded": [],
+            "final": [],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 7.956,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "cross-space-isolation",
+          "question": "趋近的基础是什么？为什么",
+          "spaceId": 1,
+          "gold": [
+            101
+          ],
+          "observed": {
+            "current": [],
+            "expanded": [],
+            "final": [],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 7.578,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "chitchat-short-message",
+          "question": "你好",
+          "spaceId": 1,
+          "gold": [],
+          "observed": {
+            "current": [],
+            "expanded": [],
+            "final": [],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 7.437,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "rule-hit-no-resolver",
+          "question": "导数的定义是什么",
+          "spaceId": 1,
+          "gold": [
+            102
+          ],
+          "observed": {
+            "current": [
+              102
+            ],
+            "expanded": [],
+            "final": [
+              102
+            ],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 8.082,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        }
+      ]
+    },
+    "rules_plus_e1": {
+      "mode": "rules_plus_e1",
+      "label": "规则识别 + E1 关系扩展",
+      "passed": true,
+      "metrics": {
+        "caseRuns": 27,
+        "truePositives": 27,
+        "falsePositives": 0,
+        "falseNegatives": 12,
+        "recall": 0.6923,
+        "precision": 1.0,
+        "misrecallRate": 0.0,
+        "p95PrepareLatencyMs": 9.191,
+        "avgPrepareLatencyMs": 6.794,
+        "resolverCalls": 0,
+        "resolverCallRate": 0.0,
+        "avgResolverTokens": 0,
+        "totalResolverTokens": 0,
+        "avgResolverLatencyMs": 0.0,
+        "tokenSources": []
+      },
+      "cases": [
+        {
+          "caseId": "prereq-derivative-limit",
+          "question": "导数的前置是什么？依据是什么",
+          "spaceId": 1,
+          "gold": [
+            101,
+            102
+          ],
+          "observed": {
+            "current": [
+              102
+            ],
+            "expanded": [
+              101
+            ],
+            "final": [
+              101,
+              102
+            ],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 7.943,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "related-continuity-limit",
+          "question": "连续性的基础是什么？凭什么",
+          "spaceId": 1,
+          "gold": [
+            101,
+            103
+          ],
+          "observed": {
+            "current": [
+              103
+            ],
+            "expanded": [
+              101
+            ],
+            "final": [
+              101,
+              103
+            ],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 7.906,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "tcp-congestion",
+          "question": "拥塞控制的前置是什么？为什么",
+          "spaceId": 3,
+          "gold": [
+            301,
+            302
+          ],
+          "observed": {
+            "current": [
+              302
+            ],
+            "expanded": [
+              301
+            ],
+            "final": [
+              301,
+              302
+            ],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 7.856,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "pagetable-tlb",
+          "question": "页表的基础是什么？凭什么",
+          "spaceId": 2,
+          "gold": [
+            201,
+            202
+          ],
+          "observed": {
+            "current": [
+              201
+            ],
+            "expanded": [
+              202
+            ],
+            "final": [
+              201,
+              202
+            ],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 9.191,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "synonym-derivative-basics",
+          "question": "求导前面的基础是什么？为什么",
+          "spaceId": 1,
+          "gold": [
+            101,
+            102
+          ],
+          "observed": {
+            "current": [],
+            "expanded": [],
+            "final": [],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 8.035,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "fuzzy-anaphora",
+          "question": "那个东西到底是什么？",
+          "spaceId": 1,
+          "gold": [
+            101
+          ],
+          "observed": {
+            "current": [],
+            "expanded": [],
+            "final": [],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 7.609,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "cross-space-isolation",
+          "question": "趋近的基础是什么？为什么",
+          "spaceId": 1,
+          "gold": [
+            101
+          ],
+          "observed": {
+            "current": [],
+            "expanded": [],
+            "final": [],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 6.683,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "chitchat-short-message",
+          "question": "你好",
+          "spaceId": 1,
+          "gold": [],
+          "observed": {
+            "current": [],
+            "expanded": [],
+            "final": [],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 6.06,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "rule-hit-no-resolver",
+          "question": "导数的定义是什么",
+          "spaceId": 1,
+          "gold": [
+            102
+          ],
+          "observed": {
+            "current": [
+              102
+            ],
+            "expanded": [],
+            "final": [
+              102
+            ],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 6.429,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        }
+      ]
+    },
+    "rules_plus_resolver_plus_e1": {
+      "mode": "rules_plus_resolver_plus_e1",
+      "label": "规则识别 + Resolver + E1 关系扩展",
+      "passed": true,
+      "metrics": {
+        "caseRuns": 27,
+        "truePositives": 39,
+        "falsePositives": 0,
+        "falseNegatives": 0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "misrecallRate": 0.0,
+        "p95PrepareLatencyMs": 10.543,
+        "avgPrepareLatencyMs": 8.075,
+        "resolverCalls": 21,
+        "resolverCallRate": 0.7778,
+        "avgResolverTokens": 564.43,
+        "totalResolverTokens": 11853,
+        "avgResolverLatencyMs": 2.238,
+        "tokenSources": [
+          "estimated"
+        ]
+      },
+      "cases": [
+        {
+          "caseId": "prereq-derivative-limit",
+          "question": "导数的前置是什么？依据是什么",
+          "spaceId": 1,
+          "gold": [
+            101,
+            102
+          ],
+          "observed": {
+            "current": [
+              102
+            ],
+            "expanded": [
+              101
+            ],
+            "final": [
+              101,
+              102
+            ],
+            "resolverStatus": "SUCCESS",
+            "resolverCalled": true,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 495,
+            "resolverCompletionTokens": 69,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 7.819,
+            "llmCalls": 1
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "related-continuity-limit",
+          "question": "连续性的基础是什么？凭什么",
+          "spaceId": 1,
+          "gold": [
+            101,
+            103
+          ],
+          "observed": {
+            "current": [
+              103
+            ],
+            "expanded": [
+              101
+            ],
+            "final": [
+              101,
+              103
+            ],
+            "resolverStatus": "SUCCESS",
+            "resolverCalled": true,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 494,
+            "resolverCompletionTokens": 69,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 9.594,
+            "llmCalls": 1
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "tcp-congestion",
+          "question": "拥塞控制的前置是什么？为什么",
+          "spaceId": 3,
+          "gold": [
+            301,
+            302
+          ],
+          "observed": {
+            "current": [
+              302
+            ],
+            "expanded": [
+              301
+            ],
+            "final": [
+              301,
+              302
+            ],
+            "resolverStatus": "SUCCESS",
+            "resolverCalled": true,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 491,
+            "resolverCompletionTokens": 70,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 15,
+            "prepareElapsedMs": 9.2,
+            "llmCalls": 1
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "pagetable-tlb",
+          "question": "页表的基础是什么？凭什么",
+          "spaceId": 2,
+          "gold": [
+            201,
+            202
+          ],
+          "observed": {
+            "current": [
+              201
+            ],
+            "expanded": [
+              202
+            ],
+            "final": [
+              201,
+              202
+            ],
+            "resolverStatus": "SUCCESS",
+            "resolverCalled": true,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 506,
+            "resolverCompletionTokens": 69,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 8.339,
+            "llmCalls": 1
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "synonym-derivative-basics",
+          "question": "求导前面的基础是什么？为什么",
+          "spaceId": 1,
+          "gold": [
+            101,
+            102
+          ],
+          "observed": {
+            "current": [
+              102
+            ],
+            "expanded": [
+              101
+            ],
+            "final": [
+              101,
+              102
+            ],
+            "resolverStatus": "SUCCESS",
+            "resolverCalled": true,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 495,
+            "resolverCompletionTokens": 69,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 16,
+            "prepareElapsedMs": 8.314,
+            "llmCalls": 1
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "fuzzy-anaphora",
+          "question": "那个东西到底是什么？",
+          "spaceId": 1,
+          "gold": [
+            101
+          ],
+          "observed": {
+            "current": [
+              101
+            ],
+            "expanded": [],
+            "final": [
+              101
+            ],
+            "resolverStatus": "SUCCESS",
+            "resolverCalled": true,
+            "needsHistoryReference": true,
+            "resolverPromptTokens": 513,
+            "resolverCompletionTokens": 48,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 6.343,
+            "llmCalls": 1
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "cross-space-isolation",
+          "question": "趋近的基础是什么？为什么",
+          "spaceId": 1,
+          "gold": [
+            101
+          ],
+          "observed": {
+            "current": [
+              101
+            ],
+            "expanded": [],
+            "final": [
+              101
+            ],
+            "resolverStatus": "SUCCESS",
+            "resolverCalled": true,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 493,
+            "resolverCompletionTokens": 70,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 6.667,
+            "llmCalls": 1
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "chitchat-short-message",
+          "question": "你好",
+          "spaceId": 1,
+          "gold": [],
+          "observed": {
+            "current": [],
+            "expanded": [],
+            "final": [],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 4.811,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        },
+        {
+          "caseId": "rule-hit-no-resolver",
+          "question": "导数的定义是什么",
+          "spaceId": 1,
+          "gold": [
+            102
+          ],
+          "observed": {
+            "current": [
+              102
+            ],
+            "expanded": [],
+            "final": [
+              102
+            ],
+            "resolverStatus": "NOT_CALLED",
+            "resolverCalled": false,
+            "needsHistoryReference": false,
+            "resolverPromptTokens": 0,
+            "resolverCompletionTokens": 0,
+            "resolverTokenSource": "estimated",
+            "resolverElapsedMs": 0,
+            "prepareElapsedMs": 4.739,
+            "llmCalls": 0
+          },
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  "summary": {
+    "allPassed": true,
+    "modeOrder": [
+      "rules_only",
+      "rules_plus_e1",
+      "rules_plus_resolver_plus_e1"
+    ]
+  }
+}
