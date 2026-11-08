@@ -67,6 +67,9 @@ PRIORITY_MEMORY = 50
 # 「这次是没有可用文档 / 阈值过滤 / 检索降级」，而不是把空知识区当成「资料里没有」。
 PRIORITY_KNOWLEDGE_STATUS = 45
 PRIORITY_KNOWLEDGE = 40
+# 证据检索状态高于证据本身：降级说明很短，但它决定了模型能不能把「没看见证据」
+# 说成「没有历史」。预算紧张时，证据条目可以被丢，这条解释不能被丢。
+PRIORITY_EVIDENCE_STATUS = 46
 PRIORITY_EVIDENCE = 20
 # 跨概念扩展证据优先级更低：它是「相关概念的历史参考」，永远不能挤掉
 # 当前概念自己的判定依据。
@@ -81,6 +84,7 @@ RENDER_ORDER = (
     "memory",
     "knowledge_status",
     "knowledge",
+    "evidence_status",
     "evidence",
     "related_evidence",
 )
@@ -226,6 +230,12 @@ class BuiltContext:
     knowledge_state: str = "NOT_RETRIEVED"
     knowledge_injected_chunk_ids: list[int] = field(default_factory=list)
     knowledge_dropped_chunk_ids: list[int] = field(default_factory=list)
+    # 证据检索状态必须随上下文一起可观测：DEGRADED 不能只在日志里，
+    # 否则调用方看到的仍是一次「正常但没有证据」的上下文。
+    evidence_status: str = "NOT_RETRIEVED"
+    evidence_warning: str | None = None
+    cross_concept_evidence_status: str = "NOT_RETRIEVED"
+    cross_concept_evidence_warning: str | None = None
 
     @property
     def dropped_sections(self) -> list[str]:
@@ -247,6 +257,10 @@ class BuiltContext:
             "knowledgeState": self.knowledge_state,
             "knowledgeInjectedChunkIds": self.knowledge_injected_chunk_ids,
             "knowledgeDroppedChunkIds": self.knowledge_dropped_chunk_ids,
+            "evidenceStatus": self.evidence_status,
+            "evidenceWarning": self.evidence_warning,
+            "crossConceptEvidenceStatus": self.cross_concept_evidence_status,
+            "crossConceptEvidenceWarning": self.cross_concept_evidence_warning,
             "droppedSections": self.dropped_sections,
             "warnings": self.warnings,
             "sections": [section.as_dict() for section in self.sections],
@@ -271,7 +285,7 @@ class ContextBuilder:
         sections = self._dedupe(self._collect_sections(state))
         self._fit_budget(sections)
 
-        system_instruction = self._render_system_instruction(sections)
+        system_instruction = self._render_system_instruction(sections, state)
         messages = self._render_messages(sections, system_instruction)
 
         # `_fit_budget` 只按 section 内容做一次快速裁剪；这里再按最终渲染结果
@@ -282,7 +296,7 @@ class ContextBuilder:
                 break
             if not self._reduce_one(sections):
                 break
-            system_instruction = self._render_system_instruction(sections)
+            system_instruction = self._render_system_instruction(sections, state)
             messages = self._render_messages(sections, system_instruction)
 
         # 预算裁剪发生在检索之后。这里必须重新看「模型最终看到了哪些知识」，
@@ -303,7 +317,7 @@ class ContextBuilder:
             )
             # 状态区块是预算裁剪后补上的；它的篇幅很小，但必须真的渲染给模型，
             # 否则「检索到但没放下」与「没有检索到」在 Prompt 里仍然无法区分。
-            system_instruction = self._render_system_instruction(sections)
+            system_instruction = self._render_system_instruction(sections, state)
             messages = self._render_messages(sections, system_instruction)
 
         estimated = _prompt_tokens(messages)
@@ -350,6 +364,10 @@ class ContextBuilder:
             knowledge_state=knowledge_state,
             knowledge_injected_chunk_ids=injected_ids,
             knowledge_dropped_chunk_ids=dropped_ids,
+            evidence_status=state.evidence_status,
+            evidence_warning=state.evidence_warning,
+            cross_concept_evidence_status=state.cross_concept_evidence_status,
+            cross_concept_evidence_warning=state.cross_concept_evidence_warning,
         )
 
     # ---------- 1. 收集 ----------
@@ -488,6 +506,22 @@ class ContextBuilder:
                 )
             )
 
+        evidence_status_note = _render_evidence_status(state)
+        if evidence_status_note:
+            sections.append(
+                ContextSection(
+                    name="evidence_status",
+                    title="本轮证据检索状态",
+                    content=evidence_status_note,
+                    priority=PRIORITY_EVIDENCE_STATUS,
+                    source_ids=[
+                        f"evidence-status:{state.evidence_status}",
+                        f"cross-evidence-status:{state.cross_concept_evidence_status}",
+                    ],
+                    dedupe_key="evidence_status",
+                )
+            )
+
         for evidence in state.evidences:
             # 复盘轨迹已经把关联证据按时间渲染过；再走通用 evidence 区块会重复注入。
             if evidence.id in trajectory_evidence_ids:
@@ -611,7 +645,7 @@ class ContextBuilder:
 
     # ---------- 4/5. 渲染 ----------
 
-    def _render_system_instruction(self, sections: list[ContextSection]) -> str:
+    def _render_system_instruction(self, sections: list[ContextSection], state: AgentState) -> str:
         blocks: list[str] = [BASE_SYSTEM_INSTRUCTION]
 
         for name in RENDER_ORDER:
@@ -641,8 +675,17 @@ class ContextBuilder:
             for section in sections
         )
         if not kept_cognitive and not dropped_records:
-            # 真的什么都没检索到，才是「没有历史认知记录」。
-            blocks.append("## 学习者背景\n（本次没有检索到任何历史认知记录，按新知识正常教学。）")
+            if _evidence_degraded(state):
+                # 证据检索坏了，不能把「没检索到」说成「没有历史」。
+                blocks.append(
+                    "## 学习者背景\n"
+                    "（本次没有检索到可用的历史认知记录；但本轮证据检索发生降级，"
+                    "不能据此判断学习者没有相关历史，按新知识谨慎教学，"
+                    "不要断言用户从未学过相关内容。）"
+                )
+            else:
+                # 真的什么都没检索到，才是「没有历史认知记录」。
+                blocks.append("## 学习者背景\n（本次没有检索到任何历史认知记录，按新知识正常教学。）")
         elif dropped_records and not kept_records:
             # 检索到了，只是被预算丢掉：不能对用户谎称「没有历史」。
             names = "、".join(section.name for section in dropped_records)
@@ -684,6 +727,11 @@ class ContextBuilder:
         # 后者是正常的空结果。这里只把检索层给出的失败原因带出来。
         if state.related_concepts_warning:
             warnings.append(state.related_concepts_warning)
+        # 证据检索降级必须进入 meta / preview 的 warnings，不能只留在 trace 里。
+        if state.evidence_warning:
+            warnings.append(state.evidence_warning)
+        if state.cross_concept_evidence_warning:
+            warnings.append(state.cross_concept_evidence_warning)
         pending = [section.name for section in sections if section.dropped]
         if pending:
             warnings.append(f"以下片段因超出 Token 预算被丢弃：{', '.join(pending)}")
@@ -732,6 +780,11 @@ _BLOCK_HEADINGS = {
         "不要编造文件名或片段序号；资料不足时明确说明。不同资料/版本的事实要拆句，"
         "并分别标注各自来源；不要把两个来源的数字合并成一句后只标一个来源。"
         "与学习者认知冲突时，先确认是不是误区，再决定怎么讲。",
+    ),
+    "evidence_status": (
+        "本轮证据检索状态",
+        "> 这决定本轮能不能把「没有看到证据」当成「没有历史证据」。"
+        "降级只说明检索失败或不完整，不说明用户没有相关经历。",
     ),
     "evidence": (
         "判定依据",
@@ -1023,6 +1076,50 @@ def _budget_knowledge_status_note(
             "也不要把未放入的片段当作依据或编造引用。",
         ]
     )
+
+
+_EVIDENCE_DEGRADED = "DEGRADED"
+
+
+def _evidence_degraded(state: AgentState) -> bool:
+    return (
+        str(state.evidence_status) == _EVIDENCE_DEGRADED
+        or str(state.cross_concept_evidence_status) == _EVIDENCE_DEGRADED
+    )
+
+
+def _render_evidence_status(state: AgentState) -> str:
+    """只对 DEGRADED 输出解释；SUCCESS / EMPTY 不需要额外说明。
+
+    这段文字必须同时做两件事：说明“检索失败”，并明确禁止把它当成
+    “用户没有历史证据”。只写“检索失败”不够 —— 模型仍可能顺手补一句
+    “你没有相关记录”，而那正是本批要消除的错误结论。
+    """
+    blocks: list[str] = []
+    if str(state.evidence_status) == _EVIDENCE_DEGRADED:
+        blocks.append(
+            "\n".join(
+                [
+                    "- 原始概念证据检索：DEGRADED",
+                    f"- 检索层记录：{state.evidence_warning or '未提供具体原因'}",
+                    "- 说明：本轮证据检索部分失败，不能据此判断学习者没有相关历史。"
+                    "不要声称用户没有证据、从未学过或没有相关记录；"
+                    "如果必须回答，请说明本轮证据未能完整检索。",
+                ]
+            )
+        )
+    if str(state.cross_concept_evidence_status) == _EVIDENCE_DEGRADED:
+        blocks.append(
+            "\n".join(
+                [
+                    "- 跨概念证据检索：DEGRADED",
+                    f"- 检索层记录：{state.cross_concept_evidence_warning or '未提供具体原因'}",
+                    "- 说明：相关概念的证据检索失败或不完整；"
+                    "不能据此判断这些相关概念没有历史证据，也不要断言用户未学过它们。",
+                ]
+            )
+        )
+    return "\n".join(blocks)
 
 
 def _render_knowledge_status(status: str, warning: str | None) -> str:

@@ -16,6 +16,7 @@ from app.config import Settings
 from app.context.builder import ContextBuilder
 from app.llm.base import ChatMessage
 from app.retriever.base import (
+    EvidenceRetrievalResult,
     KnowledgeResult,
     KnowledgeStatus,
     RelatedConceptResult,
@@ -105,13 +106,13 @@ class FakeRetriever:
         return KnowledgeResult(status=KnowledgeStatus.NO_MATCH)
 
     async def get_evidences(
-        self, user_id: int, concept_ids: list[int], limit: int
-    ) -> list[EvidenceItem]:
+        self, user_id: int, space_id: int, concept_ids: list[int], limit: int
+    ) -> EvidenceRetrievalResult:
         self.evidence_calls.append((list(concept_ids), limit))
         found: list[EvidenceItem] = []
         for concept_id in concept_ids:
             found.extend(self.evidences.get(concept_id, []))
-        return found[:limit]
+        return EvidenceRetrievalResult.from_items(found[:limit])
 
     async def get_related_concepts(
         self,

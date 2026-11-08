@@ -26,7 +26,12 @@ from app.evidence_guard import (
     is_knowledge_request,
 )
 from app.llm.base import ChatMessage
-from app.retriever.base import KnowledgeQuery, KnowledgeResult, KnowledgeStatus
+from app.retriever.base import (
+    EvidenceRetrievalResult,
+    KnowledgeQuery,
+    KnowledgeResult,
+    KnowledgeStatus,
+)
 from app.runtime import AgentRuntime
 from app.schemas import ChatRequest, Concept, KnowledgeChunk
 from app.trace import TraceEventType
@@ -96,8 +101,10 @@ class FakeRetriever:
             warning=self.warning,
         )
 
-    async def get_evidences(self, user_id: int, concept_ids: list[int], limit: int):
-        return []
+    async def get_evidences(
+        self, user_id: int, space_id: int, concept_ids: list[int], limit: int
+    ):
+        return EvidenceRetrievalResult()
 
     async def aclose(self) -> None:
         return None

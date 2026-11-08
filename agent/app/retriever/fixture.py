@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.retriever.base import (
+    EvidenceRetrievalResult,
     KnowledgeQuery,
     KnowledgeResult,
     KnowledgeStatus,
@@ -108,14 +109,16 @@ class FixtureRetriever:
         )
 
     async def get_evidences(
-        self, user_id: int, concept_ids: list[int], limit: int
-    ) -> list[EvidenceItem]:
+        self, user_id: int, space_id: int, concept_ids: list[int], limit: int
+    ) -> EvidenceRetrievalResult:
         self._ensure_loaded()
-        if not concept_ids:
-            return []
+        if not concept_ids or limit <= 0:
+            return EvidenceRetrievalResult()
         wanted = set(concept_ids)
         items = [item for item in self._evidences if item.concept_id in wanted]
-        return items[-limit:] if limit > 0 else []
+        # Fixture 没有数据库排序语义：沿用原有「取最后 limit 条」的行为，
+        # 避免离线样例的 Evidence 顺序在本批改造中无声改变。
+        return EvidenceRetrievalResult.from_items(items[-limit:])
 
     async def get_related_concepts(
         self,

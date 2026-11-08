@@ -594,8 +594,8 @@ Memory 向量写入采用「读取现有 payload → 比较 `memory_version` →
 | 项 | 内容 |
 | --- | --- |
 | 严重度 | 中（影响证据覆盖范围，不改变 Evidence 的归属与写入语义） |
-| 状态 | 部分缓解（E1），**未完全修复** |
-| 代码位置 | `agent/app/runtime.py`（`_retrieve` / `_select_expansion_concepts` / `_mark_cross_concept_evidences`）、`agent/app/retriever/http_backend.py`（`get_related_concepts`）、`agent/app/context/builder.py`（`related_evidence` 区块）、`backend/backend/src/main/java/com/ails/backend/service/ConceptRelationService.java`、`ConceptRelationMapper.java` |
+| 状态 | 部分缓解（E1 + E3），E2 待做；多跳 / 真实关系数据仍未覆盖 |
+| 代码位置 | `agent/app/runtime.py`（`_retrieve` / `_select_expansion_concepts` / `_mark_cross_concept_evidences` / `_safe_evidences`）、`agent/app/retriever/base.py`（`EvidenceStatus` / `EvidenceRetrievalResult`）、`agent/app/retriever/http_backend.py`（`get_evidences` / `get_related_concepts`）、`agent/app/state/agent_state.py`、`agent/app/context/builder.py`（`evidence_status` / `related_evidence` 区块）、`backend/backend/src/main/java/com/ails/backend/service/ConceptRelationService.java`、`ConceptRelationMapper.java`、`EvidenceService.java`（`listRecentByConcepts`）、`EvidenceController.java`、`LearningEvidenceMapper.java`、`EvidenceSourceMapper.java` |
 
 ### 问题描述
 
@@ -617,6 +617,25 @@ E1 增加了**受控一跳扩展**：
   `related_via`，上下文单独渲染为「相关概念判定依据（历史参考）」，并明确禁止
   用它改写当前概念的 Understanding；`concept_id` 始终是证据的真实归属。
 
+E3 在本批补齐了检索状态与有界批量读取，并消除了 E1 引入的串行往返：
+
+- Agent 的 `get_evidences` 返回 `EvidenceRetrievalResult`，显式区分
+  `SUCCESS` / `EMPTY` / `DEGRADED`；连接失败、响应缺失、响应格式异常或部分
+  条目解析失败统一为 `DEGRADED` + warning，部分已解析条目仍保留；
+- `runtime.py` 把状态与 warning 写入 `AgentState` 和 RETRIEVE trace；
+  `ContextBuilder` 输出「本轮证据检索状态」区块，并在没有认知记录时使用
+  「本轮证据检索发生降级，不能据此判断学习者没有相关历史」的措辞，
+  **不再落成「没有任何历史认知记录」**；
+- 后端新增 `GET /api/evidences?spaceId=&conceptIds=&limit=`：服务端校验
+  `spaceId` 属于当前用户、`conceptIds` 属于该空间；SQL 内完成
+  `ORDER BY created_at DESC, id DESC` + `LIMIT`，Sources 用一次
+  `WHERE evidence_id IN (...)` 批量加载，不再逐条 `loadSources`；
+  `limit` 默认 3、服务端封顶 50；旧单概念接口保留兼容；
+- Runtime 第一轮检索把 Knowledge / Understanding / Memory / 原始 Evidence /
+  相关概念查询并行发出。原始 Evidence 不等待关系结果，关系查询失败也不会
+  阻塞其余四路；只有跨概念 Evidence 查询依赖关系结果，并与原始结果按
+  evidence id 合并去重。
+
 仍未解决的问题：
 
 1. **关系数据本身可能为空**：仓库内没有 `concept_relation` 的写入路径、Service
@@ -630,9 +649,10 @@ E1 增加了**受控一跳扩展**：
 4. **Concept Resolver（E2）未实现**：概念识别仍是规则版名称 / 别名匹配。
    如果当前消息没有识别出正确概念，或识别错概念，后续扩展的起点就是错的；
    E1 不能弥补这一问题。
-5. **检索状态与批量 Sources（E3）未实现**：跨概念扩展仍按概念逐个调用现有
-   Evidence 接口，只做小预算裁剪，没有统一的检索状态聚合、分页或批量 Sources；
-   证据数量较多时无法完整回看。
+5. **历史证据仍不能完整回看（已部分实现）**：E3 已统一检索状态并实现
+   「SQL 内 LIMIT + 批量 Sources」的有界查询，但接口只返回最近 N 条
+   （默认 3、服务端上限 50），没有分页游标；需要完整回看用户历史证据时，
+   仍缺分页接口。旧单概念接口为兼容保留，未分页。
 6. **失败语义已区分，但未重试**：关系查询失败返回 `FAILED` + warning，原始概念
    Evidence 继续；没有重试、熔断或跨请求缓存。
 
@@ -647,12 +667,15 @@ E1 增加了**受控一跳扩展**：
 
 ### 当前权衡（为什么只做这一批）
 
-- 需求明确限定 E0 + E1：先建立回归测试并打通受控一跳读取，E2 Concept Resolver
-  与 E3 检索状态 / 分页批量 Sources 不在本批范围；
+- 需求限定 E0 + E1 + E3：E3 先补齐检索状态与有界批量读取，并修复 E1 引入的
+  串行往返；E2 Concept Resolver 不在本批范围；
 - 引入 Qdrant Evidence 向量索引、Graphiti / Mem0 / 新图数据库都会扩大存储与
   一致性边界，且会绕过现有 `concept_relation` 的唯一真相；
 - 多跳扩展需要权重、环路、时效与预算模型，当前没有真实关系数据支撑校准，
-  贸然实现只会制造不可解释的召回。
+  贸然实现只会制造不可解释的召回；
+- 批量 Evidence 接口只做「最近 N 条」的有界查询，不引入游标分页：Agent 的
+  Evidence 是低预算按需召回，默认 `evidence_top_k=3`，完整历史回看不是本轮
+  对话链路的职责。
 
 ### 后续方向
 
@@ -660,8 +683,7 @@ E1 增加了**受控一跳扩展**：
   失败的可观测性；
 - 为 `concept_relation` 建立受控写入路径（人工维护或分析链路提议 + 审核），
   明确方向语义并补数据校验；
-- E3：统一 Evidence 检索状态，支持分页 / 批量 Sources，避免小预算裁剪导致
-  历史证据不可回看；
+- 在需要完整回看历史证据时，为 Evidence 批量接口增加游标分页；
 - 在上述基础上再评估多跳扩展与是否需要独立的 Evidence 向量索引。
 
 ### 测试覆盖
@@ -678,8 +700,23 @@ E1 增加了**受控一跳扩展**：
   `learning_space_id`、软删、类型过滤、limit 与方向 CASE；
 - `backend/.../SpaceControllerConceptRelationTest.java`：HTTP 字段契约与跨用户
   404；
-- 未覆盖：真实 `concept_relation` 数据写入 / 多跳 / 概念识别错误 / 分页批量
-  Sources —— 这些属于 E2 / E3 或后续数据治理范围。
+- `agent/tests/test_evidence_status_and_parallel.py`：Evidence
+  `SUCCESS` / `EMPTY` / `DEGRADED` 三态传播到 state 与 ContextBuilder；DEGRADED
+  输出「不能据此判断没有历史」且不落成普通无历史措辞；跨概念降级可见；四路检索
+  同时到达栅栏（证明并行）；关系失败不阻塞原始 Evidence / U / M；原始与跨概念
+  Evidence 合并去重、跨概念标记不变；HTTP 客户端只发一次有界批量请求、空结果 /
+  失败 / null / 部分解析的状态语义；
+- `backend/.../EvidenceBatchQueryTest.java`：服务层一次 LIMIT 查询 + 一次 IN
+  Sources，不逐条 `loadSources`；跨 space / 跨用户 / 空 conceptIds 拒绝；默认与
+  上限裁剪；conceptIds 去重；
+- `backend/.../EvidenceMapperBatchSqlTest.java`：静态校验证据 SQL 含
+  `user_id`、`concept_id IN`、`ORDER BY created_at DESC, id DESC`、`LIMIT ?`，
+  Sources SQL 为一次 `evidence_id IN`；
+- `backend/.../EvidenceControllerBatchTest.java`：`GET /api/evidences` 路径、
+  逗号分隔 conceptIds、可选 limit、sources 字段与跨用户 404；
+- 未覆盖：真实 `concept_relation` 数据写入 / 多跳 / 概念识别错误 / 真实 MySQL
+  上的分页与批量查询执行计划 —— 这些属于 E2、数据治理或需要独立 MySQL 的
+  集成环境。
 
 ---
 
@@ -698,7 +735,7 @@ E1 增加了**受控一跳扩展**：
 | DOC-01 | 中 | 不影响检索 / 权限，存在磁盘残留 | 部分（正常删除；IO 异常无覆盖） | 记录 |
 | DDL-01 | 中 | 不影响查询，升级 / 部署有风险 | 无迁移框架测试 | 记录 |
 | DIST-01 | 中 | 单实例安全，多实例可能版本回退 | 单进程充分、多实例无覆盖 | 记录 |
-| EVD-01 | 中 | 跨概念证据覆盖有限，不改变归属 | 受控一跳充分；多跳 / 真实关系数据无覆盖 | 部分缓解（E1），E2 / E3 待做 |
+| EVD-01 | 中 | 跨概念证据覆盖有限，不改变归属 | 受控一跳 + 三态/批量查询充分；多跳 / 真实关系数据无覆盖 | 部分缓解（E1 + E3），E2 / 分页待做 |
 
 以上均为**已知限制**，不是“已修复但未写文档”的项。后续修复时应同时补对应测试，
 不能只改代码。

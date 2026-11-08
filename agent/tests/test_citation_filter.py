@@ -20,7 +20,12 @@ from typing import AsyncIterator
 from app.citation_filter import StreamingCitationFilter, filter_text
 from app.config import Settings
 from app.llm.base import ChatMessage
-from app.retriever.base import KnowledgeQuery, KnowledgeResult, KnowledgeStatus
+from app.retriever.base import (
+    EvidenceRetrievalResult,
+    KnowledgeQuery,
+    KnowledgeResult,
+    KnowledgeStatus,
+)
 from app.runtime import AgentRuntime
 from app.schemas import ChatRequest, Concept, KnowledgeChunk
 
@@ -99,8 +104,10 @@ class FakeRetriever:
     ):
         return []
 
-    async def get_evidences(self, user_id: int, concept_ids: list[int], limit: int):
-        return []
+    async def get_evidences(
+        self, user_id: int, space_id: int, concept_ids: list[int], limit: int
+    ):
+        return EvidenceRetrievalResult()
 
     async def get_knowledge(self, query: KnowledgeQuery) -> KnowledgeResult:
         return KnowledgeResult(

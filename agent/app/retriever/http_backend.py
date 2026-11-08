@@ -7,7 +7,7 @@
 | Concept | `GET /api/spaces/{spaceId}/concepts` |
 | Understanding | `GET /api/understandings/{conceptId}` |
 | Memory | `GET /api/memories/search/hybrid?spaceId=&conceptId=&keyword=` |
-| Evidence | `GET /api/understandings/{conceptId}/evidence` |
+| Evidence | `GET /api/evidences?spaceId=&conceptIds=&limit=`（有界批量；旧单概念接口保留兼容） |
 | Knowledge 白名单 | `GET /api/spaces/{spaceId}/documents/ready-ids?embeddingModel=` |
 | Knowledge 向量 | 现有 Embedding Provider + Qdrant（`KnowledgeSearchService`） |
 
@@ -36,6 +36,7 @@ from typing import Any
 import httpx
 
 from app.retriever.base import (
+    EvidenceRetrievalResult,
     KnowledgeQuery,
     KnowledgeResult,
     RelatedConceptResult,
@@ -206,27 +207,63 @@ class HttpBackendRetriever:
             )
 
     async def get_evidences(
-        self, user_id: int, concept_ids: list[int], limit: int
-    ) -> list[EvidenceItem]:
-        if limit <= 0:
-            return []
-        results: list[EvidenceItem] = []
-        for concept_id in concept_ids:
-            data = await self._get(f"/api/understandings/{concept_id}/evidence", fatal=False)
-            results.extend(_parse_list(data, EvidenceItem))
-        # 后端每个 concept 各返回一段**已按时间倒序**（最新在前）的列表，但把多个 concept
-        # 的结果首尾拼起来之后，整体就不再有序了 —— 所以不能靠切片位置去取「最近」，
-        # 必须自己在 Python 侧按 createdAt 重排一次，再取前 limit 条。
-        #
-        # 这里踩过一次坑：原来写的是 results[-limit:]，注释还写着「后端按时间正序返回」。
-        # 后端其实是倒序，于是 [-limit:] 取到的是**最旧**的那几条 ——
-        # 列表看着有内容、也不报错，但 Tutor 拿到的是用户最早的证据，
-        # 之后所有的学习进展它一概看不见。方向反了的 bug 不会崩，只会一直安静地答错。
-        results.sort(
-            key=lambda item: item.created_at or datetime.min,
-            reverse=True,
-        )
-        return results[:limit]
+        self, user_id: int, space_id: int, concept_ids: list[int], limit: int
+    ) -> EvidenceRetrievalResult:
+        """一次有界批量查询：服务端按 created_at / id 倒序 LIMIT，并批量加载 sources。
+
+        不再逐概念请求、也不在应用层「全量拉取后切片」：
+        - 服务端封装了 `spaceId + conceptIds + limit`，并按用户/空间校验概念归属；
+        - 一次请求覆盖原始概念与跨概念扩展，避免 N 次往返；
+        - 失败返回 DEGRADED + warning，成功但无数据才是 EMPTY。
+        """
+        if limit <= 0 or not concept_ids:
+            return EvidenceRetrievalResult()
+        # 去重但保序：重复 conceptId 只会让服务端 IN 列表变长，不改变语义。
+        ordered_ids = list(dict.fromkeys(int(item) for item in concept_ids))
+        params: dict[str, Any] = {
+            "spaceId": space_id,
+            "conceptIds": ",".join(str(item) for item in ordered_ids),
+            "limit": limit,
+        }
+        try:
+            data = await self._get("/api/evidences", params=params, fatal=False)
+        except RetrievalError as exc:
+            # _get 对 401 始终抛错，即使 fatal=False。证据检索失败不能打挂整轮，
+            # 但必须显式降级，让上层知道「这不是没有历史证据」。
+            warning = (
+                f"证据检索失败（spaceId={space_id}, conceptIds={ordered_ids}）："
+                f"{exc}"
+            )
+            log.warning(warning)
+            return EvidenceRetrievalResult.degraded(warning)
+
+        if data is None:
+            warning = (
+                f"证据检索失败（spaceId={space_id}, conceptIds={ordered_ids}）："
+                "后端未返回可用数据。"
+            )
+            log.warning(warning)
+            return EvidenceRetrievalResult.degraded(warning)
+
+        if not isinstance(data, list):
+            warning = (
+                f"证据检索响应格式异常（spaceId={space_id}, conceptIds={ordered_ids}）："
+                f"{str(data)[:120]}"
+            )
+            log.warning(warning)
+            return EvidenceRetrievalResult.degraded(warning)
+
+        items = _parse_list(data, EvidenceItem)
+        if len(items) < len(data):
+            # 有数据但部分无法解析：已解析的仍然可用，但整体必须标成降级，
+            # 不能把「解析失败」伪装成「这些证据不存在」。
+            warning = (
+                f"证据检索结果不完整（spaceId={space_id}, conceptIds={ordered_ids}）："
+                f"{len(data) - len(items)} 条无法解析，已保留 {len(items)} 条。"
+            )
+            log.warning(warning)
+            return EvidenceRetrievalResult.degraded(warning, items=items)
+        return EvidenceRetrievalResult.from_items(items)
 
     async def get_related_concepts(
         self,

@@ -20,6 +20,7 @@ import logging
 
 from app.config import Settings
 from app.retriever.base import (
+    EvidenceRetrievalResult,
     KnowledgeQuery,
     KnowledgeResult,
     RelatedConceptResult,
@@ -157,9 +158,15 @@ class FallbackRetriever:
             )
 
     async def get_evidences(
-        self, user_id: int, concept_ids: list[int], limit: int
-    ) -> list[EvidenceItem]:
-        return await self._call("get_evidences", user_id=user_id, concept_ids=concept_ids, limit=limit)
+        self, user_id: int, space_id: int, concept_ids: list[int], limit: int
+    ) -> EvidenceRetrievalResult:
+        return await self._call(
+            "get_evidences",
+            user_id=user_id,
+            space_id=space_id,
+            concept_ids=concept_ids,
+            limit=limit,
+        )
 
     async def get_related_concepts(
         self,

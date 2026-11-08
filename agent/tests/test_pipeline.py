@@ -85,7 +85,11 @@ async def test_no_concept_hit_still_attempts_knowledge_retrieval(runtime):
 
 async def test_no_concept_does_not_call_understanding_memory_or_evidence(settings, monkeypatch):
     """用计数 Retriever 钉死：Knowledge 被调用，另外三条线一次都不碰。"""
-    from app.retriever.base import KnowledgeResult, KnowledgeStatus
+    from app.retriever.base import (
+        EvidenceRetrievalResult,
+        KnowledgeResult,
+        KnowledgeStatus,
+    )
     from app.state.agent_state import AgentState
 
     calls = {"knowledge": 0, "understanding": 0, "memory": 0, "evidence": 0}
@@ -114,7 +118,7 @@ async def test_no_concept_does_not_call_understanding_memory_or_evidence(setting
 
         async def get_evidences(self, *args):
             calls["evidence"] += 1
-            return []
+            return EvidenceRetrievalResult()
 
         async def aclose(self):
             return None

@@ -119,6 +119,69 @@ class RelatedConceptResult:
     warning: str | None = None
 
 
+class EvidenceStatus(str, Enum):
+    """一次 Evidence 检索的结果状态。
+
+    **不能把 DEGRADED 当成 EMPTY**：接口失败时如果把空列表交给上层，
+    上下文就会把「证据服务坏了」说成「这个用户没有历史证据」，
+    模型会据此断言用户从未学过相关内容 —— 这是一个不会报错的错误答案。
+    """
+
+    SUCCESS = "SUCCESS"
+    EMPTY = "EMPTY"
+    DEGRADED = "DEGRADED"
+
+
+@dataclass(slots=True)
+class EvidenceRetrievalResult:
+    """Evidence 检索结果：原始条目 + 查询状态 + 可观测告警。
+
+    - SUCCESS：查询成功且返回至少一条证据；
+    - EMPTY：查询成功，但用户在这些概念上确实没有证据；
+    - DEGRADED：查询失败或响应不完整，不能据此判断“没有历史”。
+
+    warnings 是可读字符串，包含 spaceId / conceptIds 与错误摘要，
+    会同时进入 trace、meta warnings 和上下文的「本轮证据检索状态」区块。
+    """
+
+    items: list[EvidenceItem] = field(default_factory=list)
+    status: EvidenceStatus = EvidenceStatus.EMPTY
+    warnings: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_items(
+        cls, items: list[EvidenceItem], *, warnings: list[str] | None = None
+    ) -> "EvidenceRetrievalResult":
+        cleaned = list(items or [])
+        return cls(
+            items=cleaned,
+            status=EvidenceStatus.SUCCESS if cleaned else EvidenceStatus.EMPTY,
+            warnings=list(warnings or []),
+        )
+
+    @classmethod
+    def degraded(
+        cls,
+        warnings: str | list[str],
+        *,
+        items: list[EvidenceItem] | None = None,
+    ) -> "EvidenceRetrievalResult":
+        normalized = [warnings] if isinstance(warnings, str) else list(warnings)
+        return cls(
+            items=list(items or []),
+            status=EvidenceStatus.DEGRADED,
+            warnings=normalized,
+        )
+
+    @property
+    def is_degraded(self) -> bool:
+        return self.status is EvidenceStatus.DEGRADED
+
+    @property
+    def warning_text(self) -> str | None:
+        return "；".join(item for item in self.warnings if item) or None
+
+
 @runtime_checkable
 class Retriever(Protocol):
     @property
@@ -153,9 +216,14 @@ class Retriever(Protocol):
         ...
 
     async def get_evidences(
-        self, user_id: int, concept_ids: list[int], limit: int
-    ) -> list[EvidenceItem]:
-        """判定依据。按需召回，默认条数很小 —— 不是每次回答都需要它。"""
+        self, user_id: int, space_id: int, concept_ids: list[int], limit: int
+    ) -> EvidenceRetrievalResult:
+        """判定依据。按需召回，默认条数很小 —— 不是每次回答都需要它。
+
+        返回**有界**结果（服务端按 limit 截断），并显式区分三种状态：
+        查到了（SUCCESS）、确实没有（EMPTY）、查询失败（DEGRADED）。
+        调用方不得把 DEGRADED 降级成空列表，否则会把故障说成“没有历史”。
+        """
         ...
 
     async def get_related_concepts(

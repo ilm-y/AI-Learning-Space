@@ -3,12 +3,14 @@ package com.ails.backend.service;
 import com.ails.backend.common.BusinessException;
 import com.ails.backend.dto.understanding.EvidenceResponse;
 import com.ails.backend.dto.understanding.EvidenceSourceResponse;
+import com.ails.backend.entity.Concept;
 import com.ails.backend.entity.EvidenceSource;
 import com.ails.backend.entity.LearningEvidence;
 import com.ails.backend.enums.EvidenceCorrectness;
 import com.ails.backend.enums.EvidenceFollowUpStatus;
 import com.ails.backend.enums.EvidenceSourceType;
 import com.ails.backend.enums.EvidenceType;
+import com.ails.backend.mapper.ConceptMapper;
 import com.ails.backend.mapper.EvidenceSourceMapper;
 import com.ails.backend.mapper.LearningEvidenceMapper;
 import com.ails.backend.utils.Hashing;
@@ -19,8 +21,13 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 证据链的唯一写入者。
@@ -46,8 +53,21 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class EvidenceService {
 
+    /**
+     * 批量 Evidence 查询的服务端边界。
+     * <p>
+     * 默认值与 Agent 的 {@code evidence_top_k}（默认 3）对齐；即使调用方传入更大的值，
+     * 服务端也最多返回 {@link #MAX_RECENT_LIMIT} 条，避免一次请求把整个证据链拖出来。
+     */
+    public static final int DEFAULT_RECENT_LIMIT = 3;
+    public static final int MAX_RECENT_LIMIT = 50;
+    /** 一次批量查询允许的 conceptId 上限，防止超长 IN 与跨空间探测。 */
+    public static final int MAX_CONCEPTS = 50;
+
     private final LearningEvidenceMapper evidenceMapper;
     private final EvidenceSourceMapper evidenceSourceMapper;
+    private final ConceptMapper conceptMapper;
+    private final LearningSpaceService spaceService;
 
     /**
      * 一条待写入的证据。
@@ -159,6 +179,99 @@ public class EvidenceService {
                 .stream()
                 .map(e -> EvidenceResponse.from(e, loadSources(e.getId())))
                 .toList();
+    }
+
+    /**
+     * 跨概念的有界证据查询，供 Agent 的 Evidence 检索使用。
+     * <p>
+     * 与旧 {@link #listByConcept} 的区别：
+     * <ul>
+     *   <li>SQL 内 {@code LIMIT}，不在应用层全量拉取后切片；</li>
+     *   <li>Sources 用一次 {@code WHERE evidence_id IN (...)} 批量加载，避免 N+1；</li>
+     *   <li>显式要求 {@code spaceId}：先校验空间属于当前用户，再要求每个
+     *       {@code conceptId} 都属于该空间（含未软删）。</li>
+     * </ul>
+     * 旧单概念接口保持原样，不改变现有前端与历史调用方的行为。
+     *
+     * @param userId     当前登录用户
+     * @param spaceId    学习空间；必须属于 userId
+     * @param conceptIds 要查询的概念；非空、去重、全部属于 spaceId
+     * @param limit      请求条数；服务端裁剪到 [1, MAX_RECENT_LIMIT]
+     */
+    @Transactional(readOnly = true)
+    public List<EvidenceResponse> listRecentByConcepts(
+            Long userId, Long spaceId, List<Long> conceptIds, Integer limit) {
+        if (spaceId == null) {
+            throw new BusinessException(400, "必须指定 spaceId");
+        }
+        // 1) 跨用户 / 已软删空间直接 404，不泄露空间是否存在。
+        spaceService.ownedSpace(userId, spaceId);
+
+        // 2) 概念必须属于该空间。selectList 已带 @TableLogic，软删概念会查不到。
+        List<Long> ids = normalizeConceptIds(conceptIds);
+        Map<Long, Concept> conceptsById = conceptMapper.selectList(
+                        new LambdaQueryWrapper<Concept>().in(Concept::getId, ids))
+                .stream()
+                .filter(concept -> Objects.equals(concept.getLearningSpaceId(), spaceId))
+                .collect(Collectors.toMap(
+                        Concept::getId, Function.identity(), (left, right) -> left));
+        for (Long conceptId : ids) {
+            if (!conceptsById.containsKey(conceptId)) {
+                throw BusinessException.notFound("知识点不存在");
+            }
+        }
+
+        // 3) 有界 SQL：过滤 + 倒序 + LIMIT 一次完成。
+        List<LearningEvidence> evidences = evidenceMapper.selectRecentByConcepts(
+                userId, ids, normalizeRecentLimit(limit));
+        if (evidences.isEmpty()) {
+            return List.of();
+        }
+
+        // 4) 一次 IN 查询加载全部 sources，再按 evidenceId 分组；禁止逐条 loadSources。
+        List<Long> evidenceIds = evidences.stream()
+                .map(LearningEvidence::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        Map<Long, List<EvidenceSourceResponse>> sourcesByEvidence = evidenceIds.isEmpty()
+                ? Map.of()
+                : evidenceSourceMapper.selectByEvidenceIds(evidenceIds).stream()
+                        .filter(source -> source.getEvidenceId() != null)
+                        .collect(Collectors.groupingBy(
+                                EvidenceSource::getEvidenceId,
+                                LinkedHashMap::new,
+                                Collectors.mapping(
+                                        EvidenceSourceResponse::from,
+                                        Collectors.toList())));
+        return evidences.stream()
+                .map(evidence -> EvidenceResponse.from(
+                        evidence,
+                        sourcesByEvidence.getOrDefault(evidence.getId(), List.of())))
+                .toList();
+    }
+
+    private static List<Long> normalizeConceptIds(List<Long> requested) {
+        if (requested == null || requested.isEmpty()) {
+            throw new BusinessException(400, "conceptIds 不能为空");
+        }
+        LinkedHashSet<Long> unique = new LinkedHashSet<>();
+        for (Long conceptId : requested) {
+            if (conceptId == null || conceptId <= 0) {
+                throw new BusinessException(400, "conceptIds 必须为正整数");
+            }
+            unique.add(conceptId);
+        }
+        if (unique.size() > MAX_CONCEPTS) {
+            throw new BusinessException(400, "一次最多查询 " + MAX_CONCEPTS + " 个知识点");
+        }
+        return List.copyOf(unique);
+    }
+
+    private static int normalizeRecentLimit(Integer requested) {
+        if (requested == null) {
+            return DEFAULT_RECENT_LIMIT;
+        }
+        return Math.max(1, Math.min(requested, MAX_RECENT_LIMIT));
     }
 
     /**

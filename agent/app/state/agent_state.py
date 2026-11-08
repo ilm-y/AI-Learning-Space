@@ -77,6 +77,11 @@ class AgentState:
     knowledge_status: str = "NOT_RETRIEVED"
     knowledge_warning: str | None = None
     evidences: list[EvidenceItem] = field(default_factory=list)
+    # 本轮 Evidence 检索状态：NOT_RETRIEVED / SUCCESS / EMPTY / DEGRADED。
+    # DEGRADED 表示查询失败或结果不完整，**不能**当成「用户没有历史证据」；
+    # ContextBuilder 会据此输出明确提示。
+    evidence_status: str = "NOT_RETRIEVED"
+    evidence_warning: str | None = None
     # ---------- 受控一跳跨概念扩展（仅 Evidence 检索触发时填充）----------
     # related_concepts 是后端返回的全部候选；expanded_concepts 是最终被选中、
     # 真正去查 Evidence 的最多 N 个概念（已排除原始识别概念并去重）。
@@ -87,6 +92,9 @@ class AgentState:
     # NOT_RETRIEVED / OK / EMPTY / PARTIAL / FAILED。失败不能伪装成 EMPTY。
     related_concepts_status: str = "NOT_RETRIEVED"
     related_concepts_warning: str | None = None
+    # 跨概念 Evidence 查询复用同一套三态语义，单独保留状态便于观测与上下文提示。
+    cross_concept_evidence_status: str = "NOT_RETRIEVED"
+    cross_concept_evidence_warning: str | None = None
     # 仅显式复盘时填充：真实 Revision 历史 + 由 trigger/reversal 关联精确找回的 Evidence。
     trajectories: list[LearningTrajectory] = field(default_factory=list)
     # 用户这句话是否是显式个人复盘（由 _is_history_review 判定，与是否检索到概念无关）。

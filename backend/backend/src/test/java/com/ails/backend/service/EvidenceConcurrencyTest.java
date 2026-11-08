@@ -5,6 +5,7 @@ import com.ails.backend.entity.LearningEvidence;
 import com.ails.backend.enums.EvidenceCorrectness;
 import com.ails.backend.enums.EvidenceSourceType;
 import com.ails.backend.enums.EvidenceType;
+import com.ails.backend.mapper.ConceptMapper;
 import com.ails.backend.mapper.EvidenceSourceMapper;
 import com.ails.backend.mapper.LearningEvidenceMapper;
 import org.junit.jupiter.api.Test;
@@ -34,10 +35,15 @@ class EvidenceConcurrencyTest {
     private LearningEvidenceMapper evidenceMapper;
     @Mock
     private EvidenceSourceMapper evidenceSourceMapper;
+    @Mock
+    private ConceptMapper conceptMapper;
+    @Mock
+    private LearningSpaceService spaceService;
 
     @Test
     void duplicateSourceFromConcurrentRunDoesNotFailTheAnalysis() {
-        EvidenceService service = new EvidenceService(evidenceMapper, evidenceSourceMapper);
+        EvidenceService service = new EvidenceService(
+                evidenceMapper, evidenceSourceMapper, conceptMapper, spaceService);
 
         LearningEvidence existing = new LearningEvidence();
         existing.setId(9L);
@@ -56,7 +62,8 @@ class EvidenceConcurrencyTest {
 
     @Test
     void duplicateKeyFromAnotherConstraintIsNotSwallowed() {
-        EvidenceService service = new EvidenceService(evidenceMapper, evidenceSourceMapper);
+        EvidenceService service = new EvidenceService(
+                evidenceMapper, evidenceSourceMapper, conceptMapper, spaceService);
 
         LearningEvidence existing = new LearningEvidence();
         existing.setId(9L);

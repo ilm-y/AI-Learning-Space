@@ -180,13 +180,28 @@ class LearningAnalyzer:
                 return self._empty_result()
 
             concept_ids = [concept.id for concept, _, _ in detected]
-            understandings, memories, evidences = await asyncio.gather(
+            understandings, memories, evidence_result = await asyncio.gather(
                 retriever.get_understandings(request.user_id, request.learning_space_id, concept_ids),
                 retriever.get_memories(
                     request.user_id, request.learning_space_id, concept_ids, request.user_message
                 ),
-                retriever.get_evidences(request.user_id, concept_ids, self._settings.evidence_top_k),
+                retriever.get_evidences(
+                    request.user_id,
+                    request.learning_space_id,
+                    concept_ids,
+                    self._settings.evidence_top_k,
+                ),
             )
+            # 分析链路只把证据当作上下文材料；DEGRADED 时不伪造“没有证据”，
+            # 但也不能因为证据检索失败就阻断分析本身。状态进 trace 供排查。
+            evidences = list(evidence_result.items)
+            evidence_status = evidence_result.status.value
+            if evidence_result.is_degraded:
+                log.warning(
+                    "分析链路证据检索降级：run=%s warnings=%s",
+                    request.run_id,
+                    evidence_result.warnings,
+                )
             trace.record(
                 TraceEventType.RETRIEVE,
                 source=retriever.name,
@@ -194,6 +209,8 @@ class LearningAnalyzer:
                 understandings=len(understandings),
                 memories=len(memories),
                 evidences=len(evidences),
+                evidenceStatus=evidence_status,
+                evidenceWarnings=evidence_result.warnings,
             )
 
             if self._llm.name == "mock":

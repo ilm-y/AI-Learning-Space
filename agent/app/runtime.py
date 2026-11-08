@@ -65,6 +65,7 @@ from app.history_guard import (
 from app.llm.base import LLMAdapter, LLMError, StreamCompletion
 from app.retriever import build_retriever, detect_concepts
 from app.retriever.base import (
+    EvidenceRetrievalResult,
     KnowledgeQuery,
     KnowledgeResult,
     RelatedConceptResult,
@@ -695,57 +696,87 @@ class AgentRuntime:
         # 复盘时用 Revision 关联精确回查，而不是再塞一份「最近 3 条」，
         # 否则同一批证据会在上下文里出现两次。
         fetch_recent_evidence = wants_evidence and not retrieve_trajectory
-        tasks: list = [self._safe_knowledge(retriever, knowledge_query)]
+        # 第一轮并行：Knowledge / U / M / 原始 Evidence / 相关概念互不等待。
+        # 原始 Evidence **不依赖关系结果**，它必须和 U / M / K 同时发出；
+        # 只有跨概念扩展才需要等关系结果。关系失败不得阻塞其余四路。
+        task_names: list[str] = []
+        tasks: list = []
+
+        def _add(name: str, coro) -> None:
+            task_names.append(name)
+            tasks.append(coro)
+
+        _add("knowledge", self._safe_knowledge(retriever, knowledge_query))
         if concept_ids:
-            tasks.extend(
-                [
-                    retriever.get_understandings(state.user_id, state.space_id, concept_ids),
-                    retriever.get_memories(state.user_id, state.space_id, concept_ids, query),
-                ]
+            _add(
+                "understandings",
+                retriever.get_understandings(state.user_id, state.space_id, concept_ids),
             )
-        # 相关概念查询与 U / M / Knowledge 并行；它自己负责把失败变成带 warning 的
-        # FAILED 结果，绝不抛断整轮检索。
-        related_task_index: int | None = None
+            _add(
+                "memories",
+                retriever.get_memories(state.user_id, state.space_id, concept_ids, query),
+            )
+        if fetch_recent_evidence:
+            # 原始概念的 Evidence 保持原有口径（evidence_top_k），不因扩展而挤占。
+            _add(
+                "evidences",
+                self._safe_evidences(
+                    retriever, state, concept_ids, self._settings.evidence_top_k
+                ),
+            )
         if fetch_recent_evidence and self._settings.evidence_related_concepts_limit > 0:
-            related_task_index = len(tasks)
-            tasks.append(self._safe_related_concepts(retriever, state, concept_ids))
+            # 相关概念查询自己负责把失败变成带 warning 的 FAILED 结果，
+            # 绝不抛断整轮检索。
+            _add("related", self._safe_related_concepts(retriever, state, concept_ids))
 
         results = await asyncio.gather(*tasks)
-        knowledge_result: KnowledgeResult = results[0]
+        retrieved = dict(zip(task_names, results))
+
+        knowledge_result: KnowledgeResult = retrieved["knowledge"]
         state.knowledge = knowledge_result.chunks
         state.knowledge_status = knowledge_result.status.value
         state.knowledge_warning = knowledge_result.warning
 
         if concept_ids:
-            state.understandings = results[1]
-            state.memories = results[2]
+            state.understandings = retrieved["understandings"]
+            state.memories = retrieved["memories"]
 
-        if related_task_index is not None:
-            related_result: RelatedConceptResult = results[related_task_index]
+        if "related" in retrieved:
+            related_result: RelatedConceptResult = retrieved["related"]
             state.related_concepts = related_result.items
             state.related_concepts_status = related_result.status.value
             state.related_concepts_warning = related_result.warning
 
+        if "evidences" in retrieved:
+            original_result: EvidenceRetrievalResult = retrieved["evidences"]
+            state.evidences = list(original_result.items)
+            state.evidence_status = original_result.status.value
+            state.evidence_warning = original_result.warning_text
+
         if fetch_recent_evidence:
-            # 扩展决策发生在任何 Evidence 查询之前：先根据关系选出要扩展的概念，
-            # 再用各自的预算查询。这样「扩展」不会依赖已经取回的证据内容。
+            # 扩展决策在关系结果返回后进行；原始 Evidence 已经并行取回，
+            # 因此「扩展」不依赖、也不会拖慢本轮的基础证据检索。
             state.expanded_concepts = _select_expansion_concepts(
                 concept_ids,
                 state.related_concepts,
                 self._settings.evidence_related_concepts_limit,
             )
-            # 原始概念的 Evidence 保持原有口径（evidence_top_k），不因扩展而挤占。
-            state.evidences = await retriever.get_evidences(
-                state.user_id, concept_ids, self._settings.evidence_top_k
-            )
             # 最多一跳、最多 N 个概念、独立的小预算（evidence_related_evidence_limit）。
             if state.expanded_concepts and self._settings.evidence_related_evidence_limit > 0:
                 expanded_ids = [item.concept_id for item in state.expanded_concepts]
-                cross = await retriever.get_evidences(
-                    state.user_id, expanded_ids, self._settings.evidence_related_evidence_limit
+                cross_result = await self._safe_evidences(
+                    retriever,
+                    state,
+                    expanded_ids,
+                    self._settings.evidence_related_evidence_limit,
                 )
+                state.cross_concept_evidence_status = cross_result.status.value
+                state.cross_concept_evidence_warning = cross_result.warning_text
                 state.cross_concept_evidences = _mark_cross_concept_evidences(
-                    cross, state.expanded_concepts, set(concept_ids), state.evidences
+                    cross_result.items,
+                    state.expanded_concepts,
+                    set(concept_ids),
+                    state.evidences,
                 )
                 state.evidences.extend(state.cross_concept_evidences)
 
@@ -763,9 +794,12 @@ class AgentRuntime:
                 attach_evidences(state.trajectories, state.evidences)
             elif wants_evidence:
                 # 没有 Revision 时仍保留原有按需召回，避免「复盘」比普通追问拿到更少信息。
-                state.evidences = await retriever.get_evidences(
-                    state.user_id, concept_ids, self._settings.evidence_top_k
+                fallback_result = await self._safe_evidences(
+                    retriever, state, concept_ids, self._settings.evidence_top_k
                 )
+                state.evidences = list(fallback_result.items)
+                state.evidence_status = fallback_result.status.value
+                state.evidence_warning = fallback_result.warning_text
 
         state.trace.record(
             TraceEventType.RETRIEVE,
@@ -777,7 +811,11 @@ class AgentRuntime:
             knowledgeStatus=state.knowledge_status,
             knowledgeCandidates=knowledge_result.candidates,
             evidences=len(state.evidences),
+            evidenceStatus=state.evidence_status,
+            evidenceWarning=state.evidence_warning,
             crossConceptEvidences=len(state.cross_concept_evidences),
+            crossConceptEvidenceStatus=state.cross_concept_evidence_status,
+            crossConceptEvidenceWarning=state.cross_concept_evidence_warning,
             evidenceRequested=wants_evidence,
             relatedConceptStatus=state.related_concepts_status,
             relatedConceptCandidates=[item.concept_id for item in state.related_concepts],
@@ -809,6 +847,48 @@ class AgentRuntime:
                 "知识检索返回格式异常，本次回答未使用文档资料。"
             )
         return result
+
+    async def _safe_evidences(
+        self,
+        retriever,
+        state: AgentState,
+        concept_ids: list[int],
+        limit: int,
+    ) -> EvidenceRetrievalResult:
+        """Evidence 检索的故障边界。
+
+        失败必须变成 DEGRADED，而不是空列表：否则上下文会把「证据服务坏了」
+        说成「用户没有历史证据」。DEGRADED 仍可携带部分已解析的条目。
+        """
+        try:
+            result = await retriever.get_evidences(
+                state.user_id, state.space_id, concept_ids, limit
+            )
+        except Exception as exc:  # noqa: BLE001 —— 证据检索失败不得打挂 /agent/chat
+            log.warning(
+                "证据检索未预期失败，标记降级：user=%s space=%s concepts=%s error=%s",
+                state.user_id,
+                state.space_id,
+                concept_ids,
+                type(exc).__name__,
+            )
+            return EvidenceRetrievalResult.degraded(
+                f"证据检索未预期失败（spaceId={state.space_id}, "
+                f"conceptIds={concept_ids}）：{type(exc).__name__}"
+            )
+        if isinstance(result, EvidenceRetrievalResult):
+            return result
+        if isinstance(result, list):
+            # 兼容尚未升级的检索源：旧契约的空列表无法区分故障与无数据，
+            # 只能按「成功空结果」处理，并把这一点记录在告警里。
+            log.warning("检索源返回了旧式 Evidence 列表，无法判断降级状态")
+            return EvidenceRetrievalResult.from_items(
+                result, warnings=["检索源返回旧式 Evidence 列表，无法确认查询是否完整。"]
+            )
+        log.warning("检索源返回了非 EvidenceRetrievalResult，按降级处理")
+        return EvidenceRetrievalResult.degraded(
+            f"证据检索返回格式异常（spaceId={state.space_id}, conceptIds={concept_ids}）。"
+        )
 
     async def _safe_related_concepts(
         self, retriever, state: AgentState, concept_ids: list[int]

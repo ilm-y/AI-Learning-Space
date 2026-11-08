@@ -7,6 +7,7 @@ import com.ails.backend.utils.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -24,9 +25,31 @@ public class EvidenceController {
 
     private final EvidenceService evidenceService;
 
+    /**
+     * 旧单概念接口：保持兼容，不改变既有前端与历史调用方语义。
+     * <p>
+     * 新调用方（Agent Evidence 检索）应使用下面的批量有界接口；
+     * 旧接口没有 spaceId / limit，无法在一次查询里完成空间校验与有界裁剪。
+     */
     @GetMapping("/api/understandings/{conceptId}/evidence")
     public ApiResponse<List<EvidenceResponse>> listByConcept(@PathVariable Long conceptId) {
         return ApiResponse.ok(evidenceService.listByConcept(SecurityUtil.currentUserId(), conceptId));
+    }
+
+    /**
+     * 跨概念的有界证据查询（Agent 专用读路径）。
+     * <p>
+     * {@code conceptIds} 支持逗号分隔（{@code conceptIds=1,2}）或重复参数；
+     * {@code limit} 由服务端封顶，默认 {@value EvidenceService#DEFAULT_RECENT_LIMIT}。
+     * 空间与概念归属都会校验：跨用户空间 404，跨空间概念 404。
+     */
+    @GetMapping("/api/evidences")
+    public ApiResponse<List<EvidenceResponse>> listRecent(
+            @RequestParam Long spaceId,
+            @RequestParam List<Long> conceptIds,
+            @RequestParam(required = false) Integer limit) {
+        return ApiResponse.ok(evidenceService.listRecentByConcepts(
+                SecurityUtil.currentUserId(), spaceId, conceptIds, limit));
     }
 
     /**

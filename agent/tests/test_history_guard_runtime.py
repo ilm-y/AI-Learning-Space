@@ -11,7 +11,12 @@ from datetime import datetime, timedelta
 from typing import AsyncIterator
 
 from app.llm.base import ChatMessage
-from app.retriever.base import KnowledgeQuery, KnowledgeResult, KnowledgeStatus
+from app.retriever.base import (
+    EvidenceRetrievalResult,
+    KnowledgeQuery,
+    KnowledgeResult,
+    KnowledgeStatus,
+)
 from app.runtime import AgentRuntime, _is_history_review
 from app.schemas import (
     Concept,
@@ -172,7 +177,7 @@ class ReviewRetriever:
         return KnowledgeResult(status=KnowledgeStatus.NO_MATCH)
 
     async def get_evidences(self, *args):
-        return _evidences()
+        return EvidenceRetrievalResult.from_items(_evidences())
 
     async def get_revisions(self, user_id: int, concept_ids: list[int]):
         return self._revisions

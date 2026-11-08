@@ -32,7 +32,12 @@ from app.citations import provided_labels_from_context, validate_citations
 from app.config import Settings
 from app.context.builder import ContextBuilder
 from app.llm.base import ChatMessage
-from app.retriever.base import KnowledgeQuery, KnowledgeResult, KnowledgeStatus
+from app.retriever.base import (
+    EvidenceRetrievalResult,
+    KnowledgeQuery,
+    KnowledgeResult,
+    KnowledgeStatus,
+)
 from app.runtime import AgentRuntime, PreparedRun
 from app.schemas import ChatRequest, Concept, KnowledgeChunk
 from app.trace import TraceEventType
@@ -124,9 +129,9 @@ class FakeRetriever:
         return []
 
     async def get_evidences(
-        self, user_id: int, concept_ids: list[int], limit: int
+        self, user_id: int, space_id: int, concept_ids: list[int], limit: int
     ):
-        return []
+        return EvidenceRetrievalResult()
 
     async def get_knowledge(self, query: KnowledgeQuery) -> KnowledgeResult:
         return KnowledgeResult(

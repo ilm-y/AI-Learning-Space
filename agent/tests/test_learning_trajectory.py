@@ -18,7 +18,7 @@ from app.context.trajectory import (
     historical_misconceptions,
 )
 from app.llm import build_llm_adapter
-from app.retriever.base import KnowledgeResult, KnowledgeStatus
+from app.retriever.base import EvidenceRetrievalResult, KnowledgeResult, KnowledgeStatus
 from app.runtime import AgentRuntime
 from app.schemas import (
     Concept,
@@ -287,7 +287,7 @@ async def test_runtime_does_not_read_revisions_for_plain_question(settings, monk
             return KnowledgeResult(status=KnowledgeStatus.NO_MATCH)
 
         async def get_evidences(self, *args):
-            return []
+            return EvidenceRetrievalResult()
 
         async def get_revisions(self, user_id, concept_ids):
             self.revisions_called = True

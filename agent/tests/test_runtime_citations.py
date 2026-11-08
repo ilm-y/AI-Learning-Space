@@ -7,7 +7,7 @@ from typing import AsyncIterator
 from app.citations import structured_citations, validate_citations
 from app.config import Settings
 from app.llm.base import ChatMessage
-from app.retriever.base import KnowledgeResult, KnowledgeStatus
+from app.retriever.base import EvidenceRetrievalResult, KnowledgeResult, KnowledgeStatus
 from app.runtime import AgentRuntime
 from app.schemas import (
     ChatRequest,
@@ -67,8 +67,10 @@ class FakeRetriever:
             return KnowledgeResult(status=KnowledgeStatus.NO_MATCH)
         return KnowledgeResult(chunks=[self.chunk], status=KnowledgeStatus.SUCCESS)
 
-    async def get_evidences(self, user_id: int, concept_ids: list[int], limit: int):
-        return []
+    async def get_evidences(
+        self, user_id: int, space_id: int, concept_ids: list[int], limit: int
+    ):
+        return EvidenceRetrievalResult()
 
     async def aclose(self) -> None:
         return None
