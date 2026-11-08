@@ -111,6 +111,9 @@ class DocumentIndexFencingIntegrationTest {
     private DocumentChunkService chunkService;
 
     @Autowired
+    private DocumentIndexVersionService versionService;
+
+    @Autowired
     private DocumentMapper documentMapper;
 
     @Autowired
@@ -179,7 +182,7 @@ class DocumentIndexFencingIntegrationTest {
 
         // worker A 的旧快照：attempt=1，active=1；此时 MySQL 已经是 B 的 attempt=2/active=2。
         Document snapshotA = snapshot(current, 1, 1);
-        indexService.cleanupOldVersions(snapshotA, 1, 1, 0, collection);
+        indexService.cleanupOldVersions(snapshotA, 1, 1, 0);
 
         // A 没有发删除请求；B 的活跃版本仍然完整。
         assertThat(AGENT.deleteCalls.get()).isZero();
@@ -213,7 +216,7 @@ class DocumentIndexFencingIntegrationTest {
         upsertPoints(collection, current.getId(), 1, 2);
         upsertPoints(collection, current.getId(), 2, 2);
 
-        indexService.cleanupOldVersions(current, 2, 2, 1, collection);
+        indexService.cleanupOldVersions(current, 2, 2, 1);
 
         assertThat(AGENT.deleteCalls.get()).isEqualTo(1);
         assertThat(pointCount(collection, current.getId(), 1)).isZero();
@@ -274,6 +277,8 @@ class DocumentIndexFencingIntegrationTest {
                 new AgentParsedChunk(0, "chunk-0-v" + version, 2, true, Map.of()),
                 new AgentParsedChunk(1, "chunk-1-v" + version, 2, true, Map.of())
         ), version);
+        // RAG-02：版本 -> collection 是清理时的唯一定位依据。
+        versionService.record(document.getId(), version, collection);
     }
 
     private static Document snapshot(Document source, int attempts, int activeVersion) {
@@ -418,6 +423,7 @@ class DocumentIndexFencingIntegrationTest {
     @EnableConfigurationProperties(DocumentStorageProperties.class)
     @Import({
             DocumentIndexService.class,
+            DocumentIndexVersionService.class,
             DocumentChunkService.class,
             DocumentStorageService.class,
             AgentDocumentClient.class,

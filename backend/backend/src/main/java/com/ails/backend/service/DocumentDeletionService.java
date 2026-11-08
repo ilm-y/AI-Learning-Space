@@ -38,6 +38,7 @@ public class DocumentDeletionService {
 
     private final DocumentMapper documentMapper;
     private final DocumentChunkService chunkService;
+    private final DocumentIndexVersionService versionService;
     private final DocumentStorageService storageService;
     private final AgentDocumentClient agentClient;
     private final DocumentIndexProperties properties;
@@ -45,12 +46,14 @@ public class DocumentDeletionService {
 
     public DocumentDeletionService(DocumentMapper documentMapper,
                                    DocumentChunkService chunkService,
+                                   DocumentIndexVersionService versionService,
                                    DocumentStorageService storageService,
                                    AgentDocumentClient agentClient,
                                    DocumentIndexProperties properties,
                                    @Qualifier("documentIndexExecutor") TaskExecutor executor) {
         this.documentMapper = documentMapper;
         this.chunkService = chunkService;
+        this.versionService = versionService;
         this.storageService = storageService;
         this.agentClient = agentClient;
         this.properties = properties;
@@ -125,8 +128,9 @@ public class DocumentDeletionService {
         try {
             // 1) Qdrant：按 document_id 删除全部版本；collection 不存在也视为成功。
             agentClient.deleteDocument(document);
-            // 2) MySQL chunk：可重复删除。
+            // 2) MySQL chunk 与版本定位记录：可重复删除。
             chunkService.deleteAll(documentId);
+            versionService.deleteByDocument(documentId);
             // 3) 文件：deleteQuietly 自身吞掉 IO 异常并记录路径。
             storageService.deleteQuietly(document.getStorageUri());
         } catch (Exception e) {

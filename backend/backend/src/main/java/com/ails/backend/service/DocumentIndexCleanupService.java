@@ -26,16 +26,16 @@ public class DocumentIndexCleanupService {
 
     private final DocumentMapper documentMapper;
     private final DocumentChunkService chunkService;
-    private final AgentDocumentClient agentClient;
+    private final DocumentIndexVersionService versionService;
     private final DocumentIndexProperties properties;
 
     public DocumentIndexCleanupService(DocumentMapper documentMapper,
                                        DocumentChunkService chunkService,
-                                       AgentDocumentClient agentClient,
+                                       DocumentIndexVersionService versionService,
                                        DocumentIndexProperties properties) {
         this.documentMapper = documentMapper;
         this.chunkService = chunkService;
-        this.agentClient = agentClient;
+        this.versionService = versionService;
         this.properties = properties;
     }
 
@@ -89,12 +89,11 @@ public class DocumentIndexCleanupService {
         if (deletable.isEmpty()) {
             return;
         }
-        // 先删 Agent 向量再删 MySQL chunk：Agent 失败时 chunk 记录仍在，下一轮
+        // RAG-02：按每个版本自己记录的 collection 清理，而不是当前活跃 collection。
+        // 先删 Agent 向量再删 MySQL chunk：Agent 失败时 chunk/版本记录仍在，下一轮
         // 扫描还能发现并重试；反过来会留下没有记录可定位的孤儿向量。
-        agentClient.deleteVersions(document, deletable, deletable.contains(0),
-                document.getVectorCollection());
-        chunkService.deleteVersions(documentId, deletable);
-        log.info("Cleaned stale index versions: documentId={}, activeVersion={}, stale={}",
-                documentId, activeVersion, deletable);
+        List<Integer> cleaned = versionService.purgeStaleVersions(document, deletable);
+        log.info("Cleaned stale index versions: documentId={}, activeVersion={}, stale={}, cleaned={}",
+                documentId, activeVersion, deletable, cleaned);
     }
 }

@@ -1,10 +1,11 @@
 # 已知限制与残余风险
 
 - 整理日期：2026-11-07；封版追加：2026-11-08；E2 追加：2026-11-08；
-  Chat 幂等 / 事务边界追加：2026-11-08；MEM-01 修复追加：2026-11-08
+  Chat 幂等 / 事务边界追加：2026-11-08；MEM-01 修复追加：2026-11-08；
+  RAG-02 / RAG-03 修复追加：2026-11-09
 - 仓库版本：审查基线 `13cec31`；封版追加基于 `6f6e940`（P0/P1/P2 修复已合入）；
   E2 基于 `d7a8384`（E1 + E3 已合入）；CHAT-01/02 基于 `dc8a495`；
-  MEM-01 基于 `2d1f6a4`
+  MEM-01 基于 `2d1f6a4`；RAG-02/03 基于 `21c95a2`（RAG-04 阶段 A 之后）
 - 范围：三阶段改造（Memory 状态机、RAG 索引可靠性、Citation 引用闭环）以及
   Web 客户端 / 混合检索封版后仍然存在、但本轮**不修**的已知问题。
 - 相关报告：[`THREE_PHASE_FINAL_REVIEW.md`](THREE_PHASE_FINAL_REVIEW.md)、
@@ -21,64 +22,67 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 严重度 | 中（存储/成本；不影响当前检索正确性） |
-| 状态 | 未修复 |
-| 代码位置 | `backend/backend/src/main/java/com/ails/backend/service/DocumentIndexService.java:175`、`:198-207`、`:233-253`；`DocumentIndexCleanupService.java:94-95`；`agent/app/vectorstore/qdrant_store.py:79` |
+| 严重度 | 中（新写入路径已修复；迁移前的 legacy 残留仍可能存在） |
+| 状态 | **已修复（新写入/切换路径）**；legacy 无记录部分为**不可定位边界**，不猜测 |
+| 代码位置 | `backend/backend/src/main/java/com/ails/backend/service/DocumentIndexVersionService.java`；`mapper/DocumentIndexVersionMapper.java`；`DocumentIndexService.java`（`runIndex` / `cleanupOldVersions` / `rollbackStagedVersion`）；`DocumentIndexCleanupService.java`；`DocumentDeletionService.java`；DDL 见 `backend/backend/src/main/resources/schema.sql` 与 `schema-migration-rag-02-03.sql` |
 
-### 问题描述
+### 原问题（已修复）
 
 索引版本与 collection 是两套维度：`index_version` 区分同一次配置下的新旧构建，
-collection 由 `embedding model + dimension` 决定。当 Embedding 配置变化（尤其是
-模型或维度变化）时，新构建会写入新的 collection，而 `document.vector_collection`
-只在 `complete` 成功后才切到新 collection。
+collection 由 `embedding model + dimension` 决定。旧实现把“新 collection”传给
+`cleanupOldVersions`，按旧 `index_version` 去新 collection 删除 points；旧版本
+points 实际在旧 collection，删不到，随后 MySQL chunk 记录被删，旧 points 失去
+定位依据。
 
-- 成功路径：`runIndex` 把 `validated.collection()`（**新 collection**）传给
-  `cleanupOldVersions`；清理时按 MySQL 中列出的旧 `index_version` 去**新 collection**
-  删除 points。旧版本 points 实际在**旧 collection**，删不到；随后 MySQL 旧 chunk
-  记录被删除，旧 collection 中的 points 失去定位依据，成为永久孤儿。
-- 回滚路径：`rollbackStagedVersion` 使用 `document.getVectorCollection()`（本次
-  `runIndex` 开始时读到的**旧快照**）。如果本次 attempt 实际写入了新 collection，
-  回滚删除也会打空；由于删除失败时保留 chunk 记录，这一路通常留下的是“可重试的
-  残留”，而不是直接永久孤儿。
-- 定时清理：`DocumentIndexCleanupService` 同样使用 `document.getVectorCollection()`
-  （当前 collection），不会回头清理旧 collection。
+### 修复方式
+
+1. 新增 `document_index_version(document_id, index_version, vector_collection)`，
+   在 `runIndex` 写入 `vector_ref` 之后、切换活跃版本之前调用
+   `DocumentIndexVersionService.record(...)` 记录**该 attempt 实际写入的 collection**。
+2. `purgeStaleVersions` 按版本记录把旧版本分组到各自的 collection，逐组调用
+   Agent 精确删除 `indexVersions`；只有该组向量删除成功后，才删除对应的 MySQL
+   chunk 与版本记录。某组失败时保留该组记录，下一次定时清理可重试；其他成功组
+   照常清理。
+3. `rollbackStagedVersion` 优先使用该 attempt 的版本记录定位 collection；记录缺失
+   时回退到 `document.vector_collection`（只删 `index_version=attempt`，不会误删
+   活跃版本）。
+4. `DocumentDeletionService` 在删除 chunk 后同步删除该文档的版本记录，避免留下
+   指向已删文档的定位信息。
+5. 迁移脚本只把 `document.vector_collection`（即当前活跃版本）保守回填为版本记录；
+   非活跃历史版本与 `vector_collection IS NULL` 的 legacy 文档保持无记录。
+
+### legacy 边界（仍存在，明确不猜测）
+
+- 迁移前已经存在的**非活跃版本**没有可靠位置信息；迁移前 `vector_collection` 为
+  NULL 的 legacy 文档同样没有记录。
+- 清理这些版本时**不会猜测 collection 名**：只删除 MySQL chunk/版本记录，并在日志
+  打出 `cleanup=unlocatable, documentId=..., activeVersion=..., versions=...,
+  collection=<unlocatable>`。Qdrant 中的 points 可能永久残留。
+- 对账任务对无 collection 记录的文档记为 `UNLOCATABLE`，不发 Qdrant 请求，也不把
+  它当作数据异常。
+- 这些残留需要按 `docs/operations/rag-04-legacy-reindex.md` 人工确认/重建后清理；
+  代码不会自动推断旧 collection。
 
 ### 影响范围
 
-- 不造成“旧向量被召回”：检索按当前 collection + 活跃 `doc_version` 过滤，旧 points
-  不参与召回。
-- 造成 Qdrant 存储泄漏与成本上升；在频繁切换 Embedding 配置或多租户长期运行时更明显。
-- 旧 collection 可能被反复写入/保留，运维难以判断哪些 collection 可删。
-
-### 当前权衡（为什么现在不修）
-
-- 彻底修复需要记录“每个 index_version 实际写入了哪个 collection”，即给
-  `document_chunk` 或新增版本表加 `index_collection` 字段，并让清理按
-  `(collection, versions)` 精确删除；这涉及 schema 迁移、Agent 删除接口和清理任务，
-  范围大于 RAG-01 的“删除条件”修复。
-- 当前优先级是“不误删新版本、不让旧版本参与召回”；RAG-02 只造成存储残留，
-  不影响这两个目标，因此本轮选择记录而不扩大改造。
-- 逐 attempt 记录 collection 也会增加每次索引的写入与迁移成本；在单机/小规模阶段
-  收益低于成本。
-
-### 后续方向
-
-1. 给版本化索引增加 `index_collection`（按 `document_id + index_version` 记录），
-   清理时按版本记录定位 collection。
-2. 或让 collection 命名包含 Embedding 指纹（含 endpoint），并在切换配置时保留
-   旧 collection 直到清理完成。
-3. 增加离线对账任务：按旧 collection 扫描 `document_id`，与 MySQL 版本记录比对，
-   删除无记录 points。
-4. 迁移完成后删除空 collection，并记录 collection 生命周期。
+- 新写入路径：旧版本 points 会从**它自己的 collection** 删除，不再产生新的孤儿。
+- legacy 残留：仍占用 Qdrant 存储与成本，但不参与召回（检索按当前 collection +
+  活跃 `doc_version` 过滤）。
+- 文档删除路径只对 `document.vector_collection` 调用文档级删除；历史 collection 中
+  的 legacy 残留不会被这条路径清理。
+- 反向对账只比较活跃版本的点数，不负责清理历史 collection 残留。
 
 ### 测试覆盖
 
-- **部分覆盖**：`DocumentIndexFencingIntegrationTest` 的 4 条测试覆盖“精确版本删除”
-  与“旧 worker 不误删新版本”，但全部在**同一个 collection** 内构造，没有覆盖
-  “模型/维度变化 → 新 collection”的场景。
-- **无覆盖**：成功清理跨 collection、回滚跨 collection、定时清理跨 collection
-  均无测试。
-- 结论：不能把 Fencing 4/4 当作 RAG-02 已覆盖。
+- **单元**：`DocumentIndexVersionServiceTest` 11 条，覆盖跨 collection 分组删除、
+  同 collection 合并、版本 0 legacy 标记、无记录不猜 collection、部分组失败保留
+  定位信息、记录写入/清理顺序。
+- **真实集成**：`DocumentVectorReconciliationIntegrationTest`（真实 MySQL + 真实
+  Qdrant + 本地假 Agent 转发）覆盖“旧点确实从旧 collection 删除、新 collection
+  不受影响”、同 collection 合并、legacy points 残留且不发删除请求。
+- **回归**：`DocumentIndexFencingIntegrationTest` 4/4、`DocumentIndexServiceIntegrationTest`
+  15/15、`DocumentServiceIntegrationTest` 7/7 均通过。
+- 结论：RAG-02 的新写入路径已闭环；legacy 残留是明确的、可观测的运维边界。
 
 ---
 
@@ -86,51 +90,69 @@ collection 由 `embedding model + dimension` 决定。当 Embedding 配置变化
 
 | 项 | 内容 |
 | --- | --- |
-| 严重度 | 中（可能静默丢失召回） |
-| 状态 | 未修复 |
-| 代码位置 | `backend/backend/src/main/java/com/ails/backend/service/DocumentIndexRecoveryService.java`（全文）；`DocumentMapper.selectReadyDocuments`（`DocumentMapper.java:30-70`） |
+| 严重度 | 中（静默召回缺失；现已可观测，但不会自动修复） |
+| 状态 | **已缓解**：定时 COUNT 对账 + 观测列；**不自动修改文档 status** |
+| 代码位置 | `backend/backend/src/main/java/com/ails/backend/service/DocumentVectorReconciliationService.java`；`mapper/DocumentMapper.selectReconcilableDocuments/updateVectorReconciliation`；`mapper/DocumentChunkMapper.countActiveVectorRefs`；`mapper/ScheduledTaskLeaseMapper.java`；`config/DocumentReconciliationProperties.java`；Agent `POST /agent/documents/vector-count` |
 
-### 问题描述
+### 修复方式（方案 A：轻量 COUNT）
 
-系统把 MySQL 当事实源、Qdrant 当派生存储，但只实现了“MySQL 状态/租约回收”，
-没有实现“Qdrant 实际 points 是否还在”的反向检查。若 Qdrant collection 被误删、
-points 丢失、或写入后未真正持久化，MySQL 中的文档仍可能是 `READY`，且
-`selectReadyDocuments` 的 SQL 只检查 MySQL 侧的
-`chunk_count = COUNT(index_version = active 且 vector_ref 非空)`，不会访问 Qdrant。
+- 定时任务默认每小时运行（`ails.document.reconcile.interval-ms`，默认
+  `3600000`，可用环境变量关闭/调整），扫描 `batchSize`（默认 200）个候选文档：
+  `READY`、未软删、`index_started_at IS NULL`、已完成索引、`chunk_count > 0`。
+- 对每个文档，MySQL 侧期望值 = 活跃 `index_version` 下 `vector_ref` 非空的
+  chunk 数；Qdrant 侧通过 Agent `vector-count` 做 exact COUNT（按
+  `document_id + index_version` 过滤）。
+- 为什么选 A：COUNT 是单次 RPC，成本与文档数线性相关；逐条 scroll/chunk_id
+  存在性校验是 O(chunks) 次查询，且对“数量相同但内容错位”同样无法证明正确性。
+  逐条校验保留为需要时的人工深挖手段，不作为常规路径。
+- 轮转覆盖：候选按 `vector_reconciliation_checked_at` 最久未检查优先排序（从未
+  检查的排最前），避免每轮只检查固定的前 N 条。
+- 多实例互斥：`scheduled_task_lease` 表租约，任务结束主动释放，进程崩溃后 TTL
+  （默认 30 分钟）自然过期。没有引入新中间件，也没有使用连接绑定的 `GET_LOCK`。
+- 结果写入 `document.vector_reconciliation_status/checked_at/detail`，**不修改
+  `status`、不写 `index_error`**。条件 UPDATE 带 `index_version`，避免切换后
+  旧结果覆盖新版本。
 
-结果是：文档在 UI 上显示 READY，但检索返回空；没有告警、没有自动重建。
+### 状态语义
 
-### 影响范围
+| 状态 | 含义 | 是否算异常 |
+| --- | --- | --- |
+| `OK` | collection 存在且 Qdrant point 数 == MySQL 活跃 chunk 数 | 否 |
+| `MISMATCH` | Qdrant 可达，但数量不同；**collection 已被删除也算此类** | 是（仅观测） |
+| `UNREACHABLE` | Agent/Qdrant 不可达或超时；**不代表数据缺失** | 否（不得据此标记文档异常） |
+| `UNLOCATABLE` | legacy 文档没有 collection 记录，无法对账 | 否 |
 
-- 静默召回缺失：用户以为文档已就绪，实际问答没有该来源。
-- 单文档/单 collection 故障可能长期不被发现；多租户下影响面取决于 collection 划分。
-- 不会造成错误召回（不会召回不存在的 points），但会造成“看起来正常、实际不可用”。
+结构化日志固定包含：
+`reconciliation=<ok|mismatch|unreachable|unlocatable>, documentId=<id>,
+spaceId=<id>, expected=<n>, actual=<m|unreachable|unknown>, collection=<name>`。
 
-### 当前权衡（为什么现在不修）
+### 残余风险（为什么不是“完全修复”）
 
-- 反向对账需要 scroll/采样 Qdrant、与 MySQL 版本表逐条比对，涉及跨服务分页、
-  大批量成本与幂等修复策略；当前阶段没有运维告警体系承接。
-- 现有 `DocumentIndexRecoveryService` 已覆盖进程崩溃/租约超时等更常见的故障；
-  Qdrant 整体丢失属于低频事件，本轮优先保证“不误删、不误召回”。
-- 直接在每个检索请求里校验 Qdrant 会引入额外延迟，不适合作为常规路径。
-
-### 后续方向
-
-1. 增加定时对账任务：按 READY 文档抽样/分页 scroll Qdrant，比较
-   `document_id + index_version + chunk_index` 集合与 MySQL。
-2. 对账失败时把文档标记为 `FAILED`/待重建，而不是继续 READY；或触发自动重建。
-3. 增加健康检查指标（READY 文档数 vs Qdrant points 数、空召回率）。
-4. 对 collection 删除/重建加运维审计与告警。
+- COUNT 只能证明数量一致，无法发现“数量相同但 point 内容错位/陈旧”的故障；
+  这类问题仍需逐条校验或重建。
+- 对账只覆盖活跃版本；非活跃版本的残留由 RAG-02 的清理路径负责。
+- 对账是**观测**，不是修复：发现 `MISMATCH` 后不会自动改状态或重建，需要运维
+  按日志/观测列触发重建。
+- 没有接入告警平台：当前只有日志和数据库观测列。
+- 单轮有 `batchSize` 上限；文档总数大于批量时，需要多轮才能覆盖全部文档。
+- `UNREACHABLE` 不会推进数据修复，但会在恢复后重新对账。
 
 ### 测试覆盖
 
-- **无覆盖**：没有 Qdrant points 丢失、collection 被删、MySQL READY 但 Qdrant 为空的
-  集成测试。
-- `DocumentIndexE2EIntegrationTest` 只验证“正常索引后 DB chunk 数 == Qdrant points 数”，
-  不验证故障后的对账/恢复。
-- 结论：RAG-03 是完全未覆盖的残余风险。
+- **单元**：`DocumentVectorReconciliationServiceTest` 10 条，覆盖 OK、0 点、
+  部分丢失、collection 缺失、不可达与不一致区分、legacy 不可定位、租约跳过、
+  两实例并发互斥、观测写失败不影响主流程。
+- **真实集成**：`DocumentVectorReconciliationIntegrationTest` 12 条（真实 MySQL +
+  真实 Qdrant），覆盖 OK/MISMATCH（0 与部分丢失）/collection 缺失/不可达/
+  UNLOCATABLE/重建中跳过/真实数据库租约阻塞与过期/轮转顺序。
+- SQL 解析：`DocumentReconciliationMapperSqlTest` 6 条，覆盖 `foreach`、轮转排序、
+  条件 UPDATE 与租约 SQL。
+- 结论：RAG-03 从“完全无覆盖”提升为“定时可观测、测试覆盖主要故障语义”，
+  但仍不是自动修复。
 
 ---
+
+
 
 ## RAG-04：legacy 文档没有 fingerprint，可能混入不同 endpoint 的向量
 
@@ -1042,8 +1064,8 @@ ANALYSIS run 不受影响。
 
 | ID | 严重度 | 是否影响正确性 | 测试覆盖 | 本轮处理 |
 | --- | --- | --- | --- | --- |
-| RAG-02 | 中 | 存储残留，不影响召回 | 部分（同 collection） | 记录 |
-| RAG-03 | 中 | 可能静默丢失召回 | 无 | 记录 |
+| RAG-02 | 中 | 新写入不再产生孤儿；legacy 残留仍占存储 | 单测 11 + 真实 MySQL/Qdrant 跨 collection 集成 3 | 已修复（新写入路径）；legacy 边界明确不猜测 |
+| RAG-03 | 中 | 静默召回缺失现可观测，但不会自动修复 | 单测 10 + SQL 6 + 真实 MySQL/Qdrant 集成 12 | 已缓解（定时 COUNT 对账 + 观测列 + 租约） |
 | RAG-04 | 中 | 可能降低召回质量 | 阶段 A：默认关闭严格开关、观测、诊断隔离、9 场景矩阵已覆盖；数据风险未消除 | 部分缓解（阶段 A） |
 | MEM-01 | 低-中 | 错误码曾为 500，不丢数据 | 真实 MySQL 并发 + 异常分类单测充分；MySQL 版本升级需回归 | 已修复（方案 A）；依赖异常 message 中的约束名 |
 | CIT-01 | 低-中 | 实时/历史展示不一致 | 单测 + 真实 MySQL 集成覆盖实时/历史一致性与降级 | 已修复（方案 C：统一活跃版本语义 + `isHistorical` 三态；旧记录无快照场景不可区分） |

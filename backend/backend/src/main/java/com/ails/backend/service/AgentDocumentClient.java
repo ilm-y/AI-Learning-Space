@@ -5,6 +5,8 @@ import com.ails.backend.dto.document.agent.AgentDeleteRequest;
 import com.ails.backend.dto.document.agent.AgentIndexRequest;
 import com.ails.backend.dto.document.agent.AgentIndexResponse;
 import com.ails.backend.dto.document.agent.AgentParseResponse;
+import com.ails.backend.dto.document.agent.AgentVectorCountRequest;
+import com.ails.backend.dto.document.agent.AgentVectorCountResponse;
 import com.ails.backend.entity.Document;
 import com.ails.backend.security.InternalIdentitySigner;
 import com.ails.backend.utils.JsonUtil;
@@ -50,6 +52,7 @@ public class AgentDocumentClient {
     private static final String PARSE_PATH = "/agent/documents/parse";
     private static final String INDEX_PATH = "/agent/documents/index";
     private static final String DELETE_PATH = "/agent/documents/delete";
+    private static final String VECTOR_COUNT_PATH = "/agent/documents/vector-count";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final HttpClient client;
@@ -169,6 +172,25 @@ public class AgentDocumentClient {
                 null,
                 versions,
                 deleteLegacy), "版本清理");
+    }
+
+    /**
+     * 统计某文档在指定 collection 中、指定 {@code index_version} 的 point 数量。
+     * 用于 RAG-03 反向对账；collection 不存在时 Agent 返回
+     * {@code collectionExists=false, count=0}，与网络不可达（异常）区分。
+     */
+    public AgentVectorCountResponse countPoints(Document document, String collection,
+                                                int indexVersion) {
+        requireInternalToken();
+        byte[] body = JsonUtil.toJson(new AgentVectorCountRequest(
+                document.getId(), collection, indexVersion)).getBytes(StandardCharsets.UTF_8);
+        JsonNode data = send(baseUrl + VECTOR_COUNT_PATH, body, "application/json",
+                indexTimeout, "向量计数", document.getUserId());
+        try {
+            return MAPPER.treeToValue(data, AgentVectorCountResponse.class);
+        } catch (Exception e) {
+            throw new DocumentIndexException(502, "Agent 向量计数响应不符合契约", e);
+        }
     }
 
     private void sendDelete(Document document, AgentDeleteRequest request, String action) {

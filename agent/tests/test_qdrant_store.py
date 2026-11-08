@@ -11,7 +11,10 @@ from types import SimpleNamespace
 import pytest
 from qdrant_client.http import models as qm
 
-from app.documents.errors import DocumentVectorStoreError
+from app.documents.errors import (
+    DocumentVectorStoreError,
+    DocumentVectorStoreUnavailable,
+)
 from app.embedding import HashEmbeddingProvider
 from app.vectorstore.qdrant_store import (
     ChunkVector,
@@ -532,3 +535,106 @@ async def test_versioned_search_filters_by_active_doc_version() -> None:
     query_filter = fake.query_calls[-1]["filter"]
     assert query_filter.should[0].key == "doc_version"
     assert query_filter.should[0].match.any == ["101:2"]
+
+
+async def _seed_versions(store: QdrantDocumentStore, collection: str) -> None:
+    provider = HashEmbeddingProvider(dimension=2)
+    vectors = await provider.embed(["a", "b", "c", "d"])
+    await store.index_document(
+        collection_name=collection,
+        document_id=1,
+        user_id=1,
+        space_id=1,
+        document_name="one",
+        file_type="md",
+        index_version=1,
+        chunks=[ChunkVector(1, 0, "a", vectors[0])],
+    )
+    await store.index_document(
+        collection_name=collection,
+        document_id=1,
+        user_id=1,
+        space_id=1,
+        document_name="one",
+        file_type="md",
+        index_version=2,
+        chunks=[
+            ChunkVector(2, 0, "b", vectors[1]),
+            ChunkVector(3, 1, "c", vectors[2]),
+        ],
+    )
+    await store.index_document(
+        collection_name=collection,
+        document_id=2,
+        user_id=1,
+        space_id=1,
+        document_name="two",
+        file_type="md",
+        index_version=1,
+        chunks=[ChunkVector(4, 0, "d", vectors[3])],
+    )
+
+
+async def test_count_document_points_scopes_by_document_and_index_version() -> None:
+    store, _ = make_store()
+    collection = await store.ensure_collection(model="hash-v1", dimension=2)
+    await _seed_versions(store, collection)
+
+    assert (
+        await store.count_document_points(
+            collection_name=collection, document_id=1, index_version=1
+        )
+        == 1
+    )
+    assert (
+        await store.count_document_points(
+            collection_name=collection, document_id=1, index_version=2
+        )
+        == 2
+    )
+    # 不传版本时统计该文档所有版本（用于排查，不用于 RAG-03 的活跃版本对账）。
+    assert (
+        await store.count_document_points(
+            collection_name=collection, document_id=1
+        )
+        == 3
+    )
+    assert (
+        await store.count_document_points(
+            collection_name=collection, document_id=3, index_version=1
+        )
+        == 0
+    )
+
+
+async def test_count_failure_is_reported_as_unavailable_not_zero() -> None:
+    store, fake = make_store()
+    collection = await store.ensure_collection(model="hash-v1", dimension=2)
+
+    async def broken_count(**_kwargs):
+        raise ConnectionError("connection refused")
+
+    fake.count = broken_count  # type: ignore[method-assign]
+
+    with pytest.raises(DocumentVectorStoreUnavailable, match="point 计数失败") as caught:
+        await store.count_document_points(
+            collection_name=collection, document_id=1, index_version=1
+        )
+    # 必须是 503（不可达），而不是 502/0；后端据此记为 UNREACHABLE。
+    assert caught.value.status_code == 503
+
+
+async def test_collection_exists_is_public_and_reports_unavailable() -> None:
+    store, fake = make_store()
+    collection = await store.ensure_collection(model="hash-v1", dimension=2)
+
+    assert await store.collection_exists(collection) is True
+    assert await store.collection_exists("missing_collection") is False
+
+    async def broken_exists(_name: str) -> bool:
+        raise ConnectionError("connection refused")
+
+    fake.collection_exists = broken_exists  # type: ignore[method-assign]
+
+    with pytest.raises(DocumentVectorStoreUnavailable, match="collection 状态查询失败"):
+        await store.collection_exists(collection)

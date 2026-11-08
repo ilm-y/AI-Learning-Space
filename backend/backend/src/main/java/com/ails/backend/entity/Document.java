@@ -87,8 +87,21 @@ public class Document {
      */
     private String embeddingFingerprint;
 
-    /** 索引实际写入的 Qdrant collection；删除/清理直接使用，避免重算 */
+    /** 当前活跃版本实际写入的 Qdrant collection；删除/清理直接使用，避免重算 */
     private String vectorCollection;
+
+    /**
+     * RAG-03 反向对账状态：{@code OK / MISMATCH / UNREACHABLE / UNLOCATABLE}。
+     * <p>这是<b>观测标记</b>，不是文档状态：对账发现不一致时不会把 READY 改成 FAILED。
+     * {@code UNREACHABLE} 只表示本次无法访问 Qdrant，不代表 points 缺失。
+     */
+    private String vectorReconciliationStatus;
+
+    /** 最近一次反向对账时间 */
+    private LocalDateTime vectorReconciliationCheckedAt;
+
+    /** 最近一次反向对账明细（expected/actual/collection） */
+    private String vectorReconciliationDetail;
 
     /**
      * 当前活跃的索引构建令牌（不透明、单调递增）。

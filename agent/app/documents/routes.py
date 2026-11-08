@@ -18,7 +18,11 @@ from app.config import Settings
 from app.documents.auth import require_internal_user
 from app.documents.errors import DocumentError, DocumentVectorStoreError
 from app.documents.parser import parse_document
-from app.documents.schemas import DeleteDocumentRequest, IndexDocumentRequest
+from app.documents.schemas import (
+    DeleteDocumentRequest,
+    IndexDocumentRequest,
+    VectorCountRequest,
+)
 from app.embedding.base import validate_vectors
 from app.vectorstore.qdrant_store import (
     ChunkVector,
@@ -206,6 +210,58 @@ async def delete(
                 "keepIndexVersion": payload.keep_index_version,
                 "indexVersions": payload.index_versions,
                 "deleteLegacy": payload.delete_legacy,
+            },
+        }
+    )
+
+
+@router.post("/vector-count")
+async def vector_count(
+    payload: VectorCountRequest,
+    request: Request,
+    internal_user_id: int = Depends(require_internal_user),
+) -> JSONResponse:
+    """RAG-03 反向对账：COUNT 指定文档/版本在指定 collection 中的 points。
+
+    语义刻意区分“可达但缺失”和“不可达”：
+
+    * collection 不存在 → `code=0, collectionExists=false, count=0`；
+    * Qdrant 不可达/超时 → HTTP 503（后端记为 UNREACHABLE，不标记文档异常）。
+
+    `internal_user_id` 只用于强制内部凭据；本接口不按用户过滤，调用方必须传入
+    由 MySQL 事实源确定的 collection。
+    """
+    store: QdrantDocumentStore = request.app.state.qdrant_store
+    collection = payload.collection
+
+    try:
+        exists = await store.collection_exists(collection)
+        count = 0
+        if exists:
+            count = await store.count_document_points(
+                collection_name=collection,
+                document_id=payload.document_id,
+                index_version=payload.index_version,
+            )
+    except DocumentError as exc:
+        return _error(exc.status_code, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        log.exception(
+            "文档向量计数未预期失败: documentId=%s, collection=%s",
+            payload.document_id,
+            collection,
+        )
+        return _error(500, f"Agent 内部错误：{type(exc).__name__}")
+
+    return JSONResponse(
+        content={
+            "code": 0,
+            "data": {
+                "documentId": payload.document_id,
+                "collection": collection,
+                "indexVersion": payload.index_version,
+                "collectionExists": exists,
+                "count": count,
             },
         }
     )

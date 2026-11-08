@@ -6,7 +6,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.documents.errors import DocumentEmbeddingError, DocumentVectorStoreError
+from app.documents.errors import (
+    DocumentEmbeddingError,
+    DocumentVectorStoreError,
+    DocumentVectorStoreUnavailable,
+)
 from app.documents.routes import router
 from app.embedding import HashEmbeddingProvider
 from app.internal_identity import mint_identity
@@ -31,6 +35,11 @@ class FakeStore:
         self.deleted: list[dict] = []
         self.deleted_versions_except: list[dict] = []
         self.deleted_versions: list[dict] = []
+        self.collection_present = True
+        self.counts: dict[tuple[str, int, int | None], int] = {}
+        self.count_error: Exception | None = None
+        self.count_calls: list[dict] = []
+        self.exists_calls: list[str] = []
 
     async def ensure_collection(self, *, model: str, dimension: int) -> str:
         self.ensured = (model, dimension)
@@ -81,6 +90,28 @@ class FakeStore:
                 "deleteLegacy": delete_legacy,
             }
         )
+
+    async def collection_exists(self, name: str) -> bool:
+        self.exists_calls.append(name)
+        return self.collection_present
+
+    async def count_document_points(
+        self,
+        *,
+        collection_name: str,
+        document_id: int,
+        index_version: int | None = None,
+    ) -> int:
+        if self.count_error is not None:
+            raise self.count_error
+        self.count_calls.append(
+            {
+                "collection": collection_name,
+                "documentId": document_id,
+                "indexVersion": index_version,
+            }
+        )
+        return self.counts.get((collection_name, document_id, index_version), 0)
 
 
 class FailingEmbedding(HashEmbeddingProvider):
@@ -396,3 +427,92 @@ def test_index_reports_embedding_and_qdrant_failures() -> None:
     )
     assert qdrant_response.status_code == 502
     assert qdrant_response.json()["code"] == 502
+
+
+def _vector_count_payload(**overrides):
+    payload = {
+        "documentId": 5,
+        "collection": "test_hash-v1_8",
+        "indexVersion": 2,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_vector_count_returns_exact_count_for_requested_version() -> None:
+    store = FakeStore()
+    store.counts[("test_hash-v1_8", 5, 2)] = 3
+    client = make_client(store=store)
+
+    response = client.post(
+        "/agent/documents/vector-count", json=_vector_count_payload(), headers=HEADERS
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 0
+    assert body["data"] == {
+        "documentId": 5,
+        "collection": "test_hash-v1_8",
+        "indexVersion": 2,
+        "collectionExists": True,
+        "count": 3,
+    }
+    assert store.count_calls == [
+        {"collection": "test_hash-v1_8", "documentId": 5, "indexVersion": 2}
+    ]
+
+
+def test_vector_count_missing_collection_is_reachable_zero_not_error() -> None:
+    store = FakeStore()
+    store.collection_present = False
+    client = make_client(store=store)
+
+    response = client.post(
+        "/agent/documents/vector-count", json=_vector_count_payload(), headers=HEADERS
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["collectionExists"] is False
+    assert data["count"] == 0
+    # collection 不存在时不再发起 count：Qdrant 对缺失集合的 count 会报错。
+    assert store.count_calls == []
+
+
+def test_vector_count_unavailable_is_503_so_backend_can_mark_unreachable() -> None:
+    store = FakeStore()
+    store.count_error = DocumentVectorStoreUnavailable("qdrant unavailable")
+    client = make_client(store=store)
+
+    response = client.post(
+        "/agent/documents/vector-count", json=_vector_count_payload(), headers=HEADERS
+    )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == 503
+
+
+def test_vector_count_requires_internal_auth_and_strict_payload() -> None:
+    client = make_client()
+
+    assert client.post(
+        "/agent/documents/vector-count", json=_vector_count_payload()
+    ).status_code == 401
+
+    # collection 不能为空/空白；额外字段被 extra="forbid" 拒绝。
+    assert client.post(
+        "/agent/documents/vector-count",
+        json=_vector_count_payload(collection="   "),
+        headers=HEADERS,
+    ).status_code == 422
+    assert client.post(
+        "/agent/documents/vector-count",
+        json=_vector_count_payload(unknown="x"),
+        headers=HEADERS,
+    ).status_code == 422
+    assert client.post(
+        "/agent/documents/vector-count",
+        json=_vector_count_payload(indexVersion=-1),
+        headers=HEADERS,
+    ).status_code == 422

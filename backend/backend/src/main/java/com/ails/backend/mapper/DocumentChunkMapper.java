@@ -76,4 +76,22 @@ public interface DocumentChunkMapper extends BaseMapper<DocumentChunk> {
     List<Integer> selectOtherVersions(
             @Param("documentId") Long documentId,
             @Param("activeVersion") Integer activeVersion);
+
+    /**
+     * RAG-03 反向对账的 MySQL 侧期望值：某个活跃版本中已写入 vector_ref 的 chunk 数。
+     *
+     * <p>它与检索白名单使用的 {@code chunk_count} 条件一致，但直接 COUNT 当前行，
+     * 不依赖 {@code document.chunk_count} 是否已经被正确更新。</p>
+     */
+    @Select("""
+            SELECT COUNT(*)
+            FROM document_chunk
+            WHERE document_id = #{documentId}
+              AND index_version = #{indexVersion}
+              AND vector_ref IS NOT NULL
+              AND vector_ref <> ''
+            """)
+    int countActiveVectorRefs(
+            @Param("documentId") Long documentId,
+            @Param("indexVersion") Integer indexVersion);
 }

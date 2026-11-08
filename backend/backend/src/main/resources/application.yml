@@ -123,6 +123,17 @@ ails:
       cleanup-initial-delay-ms: ${AILS_DOCUMENT_CLEANUP_INITIAL_DELAY_MS:120000}
       cleanup-batch-size: ${AILS_DOCUMENT_CLEANUP_BATCH_SIZE:50}
 
+    # RAG-03：Qdrant → MySQL 反向对账。只做轻量 COUNT，不修改文档 status；
+    # MISMATCH / UNREACHABLE / UNLOCATABLE 只写入观测列并打结构化日志。
+    # 默认每小时一次；按 READY 文档数调整 batch-size 与周期。
+    reconcile:
+      enabled: ${AILS_DOCUMENT_RECONCILE_ENABLED:true}
+      interval-ms: ${AILS_DOCUMENT_RECONCILE_INTERVAL_MS:3600000}
+      initial-delay-ms: ${AILS_DOCUMENT_RECONCILE_INITIAL_DELAY_MS:300000}
+      batch-size: ${AILS_DOCUMENT_RECONCILE_BATCH_SIZE:200}
+      # 多实例互斥租约；必须明显大于单批最坏耗时（含 Agent/Qdrant 超时）。
+      lease-ttl-ms: ${AILS_DOCUMENT_RECONCILE_LEASE_TTL_MS:1800000}
+
   # ===================== Memory 混合检索 =====================
   memory:
     # MySQL FULLTEXT + Agent/Qdrant 向量召回，RRF 融合后回源复核。

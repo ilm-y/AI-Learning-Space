@@ -22,8 +22,24 @@ fingerprint，最后才考虑把严格开关翻转为 true。
 
 ## 2. 前置条件（必须按顺序确认）
 
-1. **RAG-02 已完成**：跨 collection 清理/旧 collection 回收方案已落地。
-2. **RAG-03 已完成**：MySQL chunk 与 Qdrant points 的反向对账已落地。
+| 前置项 | 当前状态（2026-11-09） | 说明 |
+| --- | --- | --- |
+| RAG-02 跨 collection 清理 | **已落地** | 新增 `document_index_version` 记录每个版本实际写入的 collection；切换后清理按旧版本自己的 collection 删除。迁移前的非活跃版本与 `vector_collection IS NULL` 文档仍不可定位，不猜测。 |
+| RAG-03 反向对账 | **已落地（观测）** | 定时 COUNT 对账，写 `vector_reconciliation_status/checked_at/detail`；发现不一致**不会**自动改文档状态或重建。 |
+| 严格指纹开关 | 已实现，默认 `false` | 未翻转；翻转仍需产品签字。 |
+
+1. **先执行 RAG-02/03 迁移**（若尚未执行）：
+   ```bash
+   mysql -uroot -p <database> < backend/backend/src/main/resources/schema-migration-rag-02-03.sql
+   ```
+   - 迁移只回填**当前活跃版本**的 collection；这是重建后能定位“旧活跃版本 points”的前提。
+   - 迁移前已存在的非活跃版本、以及 `vector_collection` 为 NULL 的文档没有记录，
+     清理时不会猜测 collection，Qdrant 中可能永久残留（见 KNOWN_LIMITATIONS RAG-02）。
+2. **确认反向对账已开启**（默认 `true`）：
+   - `AILS_DOCUMENT_RECONCILE_ENABLED=true`；
+   - 可选调整 `AILS_DOCUMENT_RECONCILE_INTERVAL_MS`（默认 3600000）、
+     `AILS_DOCUMENT_RECONCILE_BATCH_SIZE`（默认 200）。
+   - 对账只写观测列，不会修改 `document.status`；`UNREACHABLE` 不代表数据缺失。
 3. **严格开关已实现且默认 false**：
    - `ails.retrieval.require-embedding-fingerprint`
      （环境变量 `AILS_RETRIEVAL_REQUIRE_EMBEDDING_FINGERPRINT`，默认 `false`）；
@@ -159,6 +175,39 @@ done
 
 建议每批处理后重新调用诊断端点，确认待重建数量单调下降。
 
+### 4.2 重建后的旧版本 points 清理（RAG-02 生效后）
+
+重建成功后，后端会异步清理旧 `index_version`。因为迁移已把**重建前的活跃版本**
+回填到 `document_index_version`，清理现在能定位到它当时所在的 collection：
+
+1. 确认版本记录存在（重建前活跃版本 + 重建后新版本）：
+   ```sql
+   SELECT document_id, index_version, vector_collection, created_at
+   FROM document_index_version
+   WHERE document_id = :documentId
+   ORDER BY index_version;
+   ```
+2. 观察清理日志（后端）：
+   - 成功：`Cleaned old index versions: documentId=..., activeVersion=...,
+     previousVersion=..., stale=[...], cleaned=[...]`；
+   - 某组失败：`旧版本向量清理失败，保留定位信息等待重试`，下一轮定时清理会重试；
+   - 无法定位：`cleanup=unlocatable, documentId=..., versions=...,
+     collection=<unlocatable>`，说明该版本属于迁移前残留，**不会自动删除**。
+3. 确认 Qdrant 旧 collection 中的该文档 points 已减少（按 `document_id +
+   index_version` 过滤 COUNT）。旧 collection 只有在其所有文档都清理完成后才可
+   由运维确认删除；本批代码不会自动删除 collection。
+4. 重建后可用反向对账列确认活跃版本状态：
+   ```sql
+   SELECT id, index_version, vector_reconciliation_status,
+          vector_reconciliation_checked_at, vector_reconciliation_detail
+   FROM document
+   WHERE id = :documentId;
+   ```
+   - `OK`：数量一致；
+   - `MISMATCH`：Qdrant 可达但数量不符，需要人工排查/重建；
+   - `UNREACHABLE`：Agent/Qdrant 不可达，**不是**数据缺失，不要据此改文档状态；
+   - `UNLOCATABLE`：没有 collection 记录（legacy），需人工确认。
+
 ## 5. 失败处理（必须作为产品决策显式确认）
 
 重建失败不会自动让 legacy 文档继续可用；严格模式下失败的文档会从白名单消失。
@@ -230,7 +279,9 @@ AILS_REQUIRE_EMBEDDING_FINGERPRINT=true
 - 不修改 collection 命名规则；
 - 不引入 `deployment_id` / `model_revision`；
 - 不新增 DDL、不做数据迁移；
-- 不做 RAG-02（跨 Collection 清理）与 RAG-03（反向对账）。
+- **RAG-02（跨 Collection 清理）与 RAG-03（反向对账）已作为独立改造落地**，
+  不在本 runbook 的“阶段 A”变更范围内；其迁移脚本、配置与边界见
+  `docs/audit/KNOWN_LIMITATIONS.md`。本 runbook 只引用它们作为重建前置/验证手段。
 
 ## 10. 指纹身份边界（务必知晓）
 

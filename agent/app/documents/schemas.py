@@ -62,6 +62,28 @@ class IndexDocumentRequest(BaseModel):
         return self
 
 
+class VectorCountRequest(BaseModel):
+    """反向对账：统计某文档某版本在指定 collection 中的 point 数。
+
+    `collection` 必须显式提供：后端在 legacy 文档无法定位 collection 时不会调用
+    本接口，Agent 也不应按“当前 provider 配置”猜测，否则会把对账变成误报。
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    document_id: int = Field(alias="documentId", gt=0)
+    collection: str = Field(min_length=1, max_length=255)
+    index_version: int = Field(alias="indexVersion", ge=0)
+
+    @field_validator("collection")
+    @classmethod
+    def collection_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("collection 不能为空")
+        return stripped
+
+
 class DeleteDocumentRequest(BaseModel):
     """删除某文档的向量。
 

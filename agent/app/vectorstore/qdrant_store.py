@@ -389,12 +389,21 @@ class QdrantDocumentStore:
                     match=qm.MatchValue(value=index_version),
                 )
             )
-        result = await self._client.count(
-            collection_name=collection_name,
-            count_filter=qm.Filter(must=conditions),
-            exact=True,
-        )
+        try:
+            result = await self._client.count(
+                collection_name=collection_name,
+                count_filter=qm.Filter(must=conditions),
+                exact=True,
+            )
+        except Exception as exc:  # noqa: BLE001 —— 对账必须区分“不可达”与“数量不一致”
+            raise DocumentVectorStoreUnavailable(
+                f"Qdrant point 计数失败：{type(exc).__name__}"
+            ) from exc
         return int(result.count)
+
+    async def collection_exists(self, name: str) -> bool:
+        """公开的 collection 存在性查询；网络异常转换为显式不可用错误。"""
+        return await self._collection_exists(name)
 
     async def search_knowledge(
         self,

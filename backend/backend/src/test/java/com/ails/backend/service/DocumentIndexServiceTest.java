@@ -61,6 +61,9 @@ class DocumentIndexServiceTest {
     private AgentDocumentClient agentClient;
 
     @Mock
+    private DocumentIndexVersionService versionService;
+
+    @Mock
     private TaskExecutor executor;
 
     private DocumentIndexService service;
@@ -79,8 +82,8 @@ class DocumentIndexServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DocumentIndexService(
-                documentMapper, chunkService, storageService, agentClient, PROPERTIES, executor);
+        service = new DocumentIndexService(documentMapper, chunkService, storageService,
+                agentClient, versionService, PROPERTIES, executor);
     }
 
     // ===================== submit / lease =====================
@@ -154,15 +157,18 @@ class DocumentIndexServiceTest {
 
         service.runIndex(42L, 1);
 
-        InOrder order = inOrder(storageService, agentClient, chunkService, documentMapper);
+        InOrder order = inOrder(
+                storageService, agentClient, chunkService, versionService, documentMapper);
         order.verify(storageService).read("space-1/doc.md");
         order.verify(agentClient).parse(any(), any());
         order.verify(chunkService).stageChunks(any(), any(), eq(1));
         order.verify(agentClient).index(any(), any());
         order.verify(chunkService).updateVectorRefs(42L, 1, Map.of(100L, "point-100"));
+        // RAG-02：版本 -> collection 必须在切换活跃版本之前落库。
+        order.verify(versionService).record(42L, 1, "collection");
         order.verify(documentMapper).update(isNull(), any());
         // 本次构建没有更早版本可清理。
-        verify(chunkService, never()).deleteVersions(any(), any());
+        verify(versionService, never()).purgeStaleVersions(any(), any());
 
         ArgumentCaptor<AgentIndexRequest> request = ArgumentCaptor.forClass(AgentIndexRequest.class);
         verify(agentClient).index(any(), request.capture());
@@ -183,7 +189,7 @@ class DocumentIndexServiceTest {
         when(documentMapper.update(isNull(), any())).thenReturn(1);
         when(chunkService.listOtherVersions(42L, 1)).thenReturn(List.of(0));
         doThrow(new RuntimeException("qdrant cleanup unavailable"))
-                .when(agentClient).deleteVersions(any(), any(), eq(true), any());
+                .when(versionService).purgeStaleVersions(any(), any());
 
         service.runIndex(42L, 1);
 
@@ -312,10 +318,11 @@ class DocumentIndexServiceTest {
                 .contains("status=");
 
         // 切换后才清理旧版本 1，新老版本不会混在活跃索引里。
-        InOrder order = inOrder(documentMapper, agentClient, chunkService);
+        // RAG-02：具体按哪个 collection 删除由版本记录决定，见
+        // DocumentIndexVersionServiceTest 的跨 collection 用例。
+        InOrder order = inOrder(documentMapper, versionService);
         order.verify(documentMapper).update(isNull(), any());
-        order.verify(agentClient).deleteVersions(any(), eq(List.of(1)), eq(false), any());
-        order.verify(chunkService).deleteVersions(42L, List.of(1));
+        order.verify(versionService).purgeStaleVersions(document, List.of(1));
     }
 
     /**

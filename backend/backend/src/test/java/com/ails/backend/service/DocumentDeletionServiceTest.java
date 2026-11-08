@@ -46,6 +46,9 @@ class DocumentDeletionServiceTest {
     private DocumentChunkService chunkService;
 
     @Mock
+    private DocumentIndexVersionService versionService;
+
+    @Mock
     private DocumentStorageService storageService;
 
     @Mock
@@ -70,8 +73,8 @@ class DocumentDeletionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DocumentDeletionService(
-                documentMapper, chunkService, storageService, agentClient, PROPERTIES, executor);
+        service = new DocumentDeletionService(documentMapper, chunkService, versionService,
+                storageService, agentClient, PROPERTIES, executor);
     }
 
     // ===================== request delete =====================

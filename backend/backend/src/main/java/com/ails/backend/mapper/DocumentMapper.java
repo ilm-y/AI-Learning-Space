@@ -3,6 +3,7 @@ package com.ails.backend.mapper;
 import com.ails.backend.dto.document.LegacyReadyDocument;
 import com.ails.backend.dto.document.LegacyReadySummary;
 import com.ails.backend.dto.document.ReadyDocument;
+import com.ails.backend.dto.document.ReconcilableDocument;
 import com.ails.backend.entity.Document;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Param;
@@ -378,4 +379,67 @@ public interface DocumentMapper extends BaseMapper<Document> {
             </script>
             """)
     List<Long> selectDocumentsWithStaleVersions(@Param("limit") int limit);
+
+    /**
+     * RAG-03 反向对账候选：当前 READY、未软删、已完成索引、有 chunk 的文档。
+     *
+     * <p>排除 {@code index_started_at IS NOT NULL}（正在重建）的文档：重建窗口内
+     * 活跃版本仍是旧版本，此时对账没有额外价值，还会与索引流程抢外部调用。</p>
+     *
+     * <p>不在这里过滤 {@code vector_collection}：collection 为 NULL 的 legacy 文档
+     * 需要被扫描到并记录为 {@code UNLOCATABLE}，而不是静默跳过。</p>
+     *
+     * <p><b>轮转排序：</b>按 {@code vector_reconciliation_checked_at} 最久未检查优先
+     * （从未检查的排最前），而不是固定 {@code id} 顺序。否则每轮都只检查同一批
+     * 前 N 个文档，超过 {@code batchSize} 的文档永远不会被对账。每轮写回
+     * {@code checked_at} 后，被检查的文档自然排到队尾，实现全量轮转。</p>
+     */
+    @Select("""
+            <script>
+            SELECT d.id                 AS id,
+                   d.user_id            AS userId,
+                   d.learning_space_id  AS spaceId,
+                   d.index_version      AS indexVersion,
+                   d.vector_collection  AS vectorCollection
+            FROM document d
+            WHERE d.status = 'READY'
+              AND d.deleted_at IS NULL
+              AND d.index_started_at IS NULL
+              AND d.indexed_at IS NOT NULL
+              AND d.embedding_model IS NOT NULL
+              AND d.embedding_model &lt;&gt; ''
+              AND d.chunk_count &gt; 0
+              AND d.index_version IS NOT NULL
+            ORDER BY (d.vector_reconciliation_checked_at IS NULL) DESC,
+                     d.vector_reconciliation_checked_at ASC,
+                     d.id
+            LIMIT #{limit}
+            </script>
+            """)
+    List<ReconcilableDocument> selectReconcilableDocuments(@Param("limit") int limit);
+
+    /**
+     * 写入反向对账结果。
+     *
+     * <p>故意<b>不修改 status</b>：一次网络抖动或 Qdrant 短暂不可达不应把 READY
+     * 文档打成 FAILED。条件里带 {@code index_version}，保证结果只写到被检查的那个
+     * 版本；若期间发生了切换，旧结果不会覆盖新版本。</p>
+     */
+    @Update("""
+            <script>
+            UPDATE document
+            SET vector_reconciliation_status = #{status},
+                vector_reconciliation_checked_at = #{checkedAt},
+                vector_reconciliation_detail = #{detail}
+            WHERE id = #{id}
+              AND status = 'READY'
+              AND deleted_at IS NULL
+              AND index_version = #{indexVersion}
+            </script>
+            """)
+    int updateVectorReconciliation(@Param("id") Long id,
+                                   @Param("indexVersion") Integer indexVersion,
+                                   @Param("status") String status,
+                                   @Param("checkedAt") LocalDateTime checkedAt,
+                                   @Param("detail") String detail);
 }

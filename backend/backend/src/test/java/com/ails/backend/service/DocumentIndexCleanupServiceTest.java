@@ -14,9 +14,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -36,7 +35,7 @@ class DocumentIndexCleanupServiceTest {
     private DocumentChunkService chunkService;
 
     @Mock
-    private AgentDocumentClient agentClient;
+    private DocumentIndexVersionService versionService;
 
     private DocumentIndexCleanupService service;
 
@@ -48,7 +47,7 @@ class DocumentIndexCleanupServiceTest {
     @BeforeEach
     void setUp() {
         service = new DocumentIndexCleanupService(
-                documentMapper, chunkService, agentClient, PROPERTIES);
+                documentMapper, chunkService, versionService, PROPERTIES);
     }
 
     @Test
@@ -58,12 +57,8 @@ class DocumentIndexCleanupServiceTest {
 
         service.cleanup(9L);
 
-        verify(agentClient).deleteVersions(
-                any(Document.class),
-                org.mockito.ArgumentMatchers.eq(List.of(1, 2)),
-                org.mockito.ArgumentMatchers.eq(false),
-                any());
-        verify(chunkService).deleteVersions(9L, List.of(1, 2));
+        // RAG-02：清理委托给版本服务，由它按“每个版本自己的 collection”分组删除。
+        verify(versionService).purgeStaleVersions(any(Document.class), eq(List.of(1, 2)));
     }
 
     @Test
@@ -74,7 +69,7 @@ class DocumentIndexCleanupServiceTest {
 
         service.cleanup(9L);
 
-        verifyNoInteractions(chunkService, agentClient);
+        verifyNoInteractions(chunkService, versionService);
     }
 
     @Test
@@ -83,7 +78,7 @@ class DocumentIndexCleanupServiceTest {
 
         service.cleanup(9L);
 
-        verifyNoInteractions(chunkService, agentClient);
+        verifyNoInteractions(chunkService, versionService);
     }
 
     @Test
@@ -93,7 +88,7 @@ class DocumentIndexCleanupServiceTest {
 
         service.cleanup(9L);
 
-        verifyNoInteractions(agentClient);
+        verifyNoInteractions(versionService);
         verify(chunkService, never()).deleteVersions(anyLong(), any());
     }
 
@@ -102,7 +97,7 @@ class DocumentIndexCleanupServiceTest {
         when(documentMapper.selectById(9L)).thenReturn(document(3, null));
         when(chunkService.listOtherVersions(9L, 3)).thenReturn(List.of(1));
         doThrow(new DocumentIndexException(503, "agent down"))
-                .when(agentClient).deleteVersions(any(), any(), anyBoolean(), any());
+                .when(versionService).purgeStaleVersions(any(), any());
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.cleanup(9L))
                 .isInstanceOf(DocumentIndexException.class);
@@ -118,7 +113,7 @@ class DocumentIndexCleanupServiceTest {
 
         service.cleanupStaleVersions();
 
-        verifyNoInteractions(chunkService, agentClient);
+        verifyNoInteractions(chunkService, versionService);
     }
 
     private static Document document(Integer indexVersion, LocalDateTime startedAt) {

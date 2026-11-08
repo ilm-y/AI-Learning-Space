@@ -559,6 +559,7 @@ class DocumentIndexServiceIntegrationTest {
     @Import({
             DocumentService.class,
             DocumentIndexService.class,
+            DocumentIndexVersionService.class,
             DocumentIndexRecoveryService.class,
             DocumentDeletionService.class,
             DocumentChunkService.class,

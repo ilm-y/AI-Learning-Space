@@ -331,6 +331,7 @@ class DocumentIndexE2EIntegrationTest {
     @EnableConfigurationProperties(DocumentStorageProperties.class)
     @Import({
             DocumentIndexService.class,
+            DocumentIndexVersionService.class,
             DocumentChunkService.class,
             DocumentStorageService.class,
             AgentDocumentClient.class,

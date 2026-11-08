@@ -457,7 +457,10 @@ CREATE TABLE IF NOT EXISTS `document` (
     `embedding_provider` VARCHAR(64)            DEFAULT NULL COMMENT 'hash / openai-compatible',
     `embedding_dimension` INT                  DEFAULT NULL COMMENT '向量维度',
     `embedding_fingerprint` VARCHAR(128)        DEFAULT NULL COMMENT 'provider+model+dimension+endpoint 指纹',
-    `vector_collection` VARCHAR(255)           DEFAULT NULL COMMENT '实际写入的 Qdrant collection',
+    `vector_collection` VARCHAR(255)           DEFAULT NULL COMMENT '当前活跃版本实际写入的 Qdrant collection',
+    `vector_reconciliation_status` VARCHAR(16) DEFAULT NULL COMMENT '反向对账结果：OK / MISMATCH / UNREACHABLE / UNLOCATABLE',
+    `vector_reconciliation_checked_at` DATETIME DEFAULT NULL COMMENT '最近一次反向对账时间',
+    `vector_reconciliation_detail` VARCHAR(512) DEFAULT NULL COMMENT '最近一次反向对账明细（expected/actual/collection）',
     `index_version`     INT           NOT NULL DEFAULT 0 COMMENT '当前活跃构建令牌，与 document_chunk.index_version 对应',
     `index_started_at`  DATETIME               DEFAULT NULL COMMENT '构建租约开始时间；非空表示有 writer',
     `indexed_at`        DATETIME               DEFAULT NULL,
@@ -493,6 +496,28 @@ CREATE TABLE IF NOT EXISTS `document_chunk` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_chunk_doc_ver_idx` (`document_id`, `index_version`, `chunk_index`),
     CONSTRAINT `fk_chunk_document` FOREIGN KEY (`document_id`) REFERENCES `document` (`id`) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- RAG-02：每个索引版本实际写入的 Qdrant collection。
+-- 旧版本清理必须按“该版本自己的 collection”删除 points；document.vector_collection
+-- 只保存当前活跃版本，切换后旧版本的位置信息会丢失。
+CREATE TABLE IF NOT EXISTS `document_index_version` (
+    `document_id`       BIGINT       NOT NULL,
+    `index_version`     INT          NOT NULL,
+    `vector_collection` VARCHAR(255) NOT NULL COMMENT '该版本实际写入的 Qdrant collection',
+    `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`document_id`, `index_version`),
+    KEY `idx_div_collection` (`vector_collection`),
+    CONSTRAINT `fk_div_document` FOREIGN KEY (`document_id`) REFERENCES `document` (`id`) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- RAG-03：定时任务租约，保证多实例下同一任务只有一个执行者。
+CREATE TABLE IF NOT EXISTS `scheduled_task_lease` (
+    `task_name`  VARCHAR(64) NOT NULL,
+    `owner`      VARCHAR(128) NOT NULL,
+    `expires_at` DATETIME    NOT NULL,
+    `updated_at` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`task_name`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 -- 模块 15：学习计划（第一版只做目标清单）

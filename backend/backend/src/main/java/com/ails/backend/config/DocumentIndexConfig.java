@@ -17,7 +17,8 @@ import java.util.concurrent.ThreadPoolExecutor;
  * AbortPolicy —— 队列满时把拒绝信号抛回调用方，由业务层显式落 FAILED。</p>
  */
 @Configuration
-@EnableConfigurationProperties(DocumentIndexProperties.class)
+@EnableConfigurationProperties({DocumentIndexProperties.class,
+        DocumentReconciliationProperties.class})
 @EnableScheduling
 public class DocumentIndexConfig {
 

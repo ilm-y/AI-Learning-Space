@@ -58,6 +58,7 @@ public class DocumentIndexService {
     private final DocumentChunkService chunkService;
     private final DocumentStorageService storageService;
     private final AgentDocumentClient agentClient;
+    private final DocumentIndexVersionService versionService;
     private final DocumentIndexProperties properties;
     private final TaskExecutor executor;
 
@@ -65,12 +66,14 @@ public class DocumentIndexService {
                                 DocumentChunkService chunkService,
                                 DocumentStorageService storageService,
                                 AgentDocumentClient agentClient,
+                                DocumentIndexVersionService versionService,
                                 DocumentIndexProperties properties,
                                 @Qualifier("documentIndexExecutor") TaskExecutor executor) {
         this.documentMapper = documentMapper;
         this.chunkService = chunkService;
         this.storageService = storageService;
         this.agentClient = agentClient;
+        this.versionService = versionService;
         this.properties = properties;
         this.executor = executor;
     }
@@ -156,6 +159,9 @@ public class DocumentIndexService {
             AgentIndexResponse indexed = agentClient.index(document, indexRequest(document, staged, version));
             validated = validateIndexResponse(staged, indexed);
             chunkService.updateVectorRefs(documentId, version, validated.refs());
+            // RAG-02：先持久化“本版本写入哪个 collection”，再切换活跃版本。
+            // 切换后 document.vector_collection 会被覆盖，旧版本的位置信息只能靠这里。
+            versionService.record(documentId, version, validated.collection());
 
             // 唯一的“生效”动作：条件切换。失败时旧 index_version 原样保留。
             complete(documentId, attempt, staged.size(), parsed.parserVersion(), validated);
@@ -172,7 +178,7 @@ public class DocumentIndexService {
         // 切换已成功。清理失败不能反过来影响 READY 状态，也不能让旧 points 被检索
         // （检索按 doc_version 过滤）。下一轮清理任务会继续重试。
         try {
-            cleanupOldVersions(document, version, version, previousVersion, validated.collection());
+            cleanupOldVersions(document, version, version, previousVersion);
         } catch (Exception e) {
             log.warn("旧索引清理失败，稍后重试: documentId={}, activeVersion={}, error={}",
                     documentId, version, e.toString());
@@ -203,8 +209,10 @@ public class DocumentIndexService {
         try {
             // 只删本次 attempt 的 points。保留其他所有版本：即使删除期间 lease
             // 被新 worker 抢占，也不可能碰到新 worker 的版本。
-            agentClient.deleteVersions(document, List.of(attempt), false,
-                    document.getVectorCollection());
+            // RAG-02：优先用本次版本实际写入的 collection；没有记录（Agent 索引
+            // 在写入 collection 记录前就失败）时才回退到旧快照。
+            String attemptedCollection = versionService.findCollection(document.getId(), attempt);
+            agentClient.deleteVersions(document, List.of(attempt), false, attemptedCollection);
             vectorsCleaned = true;
         } catch (Exception e) {
             log.warn("清理失败构建的 Qdrant points 失败: documentId={}, attempt={}",
@@ -217,6 +225,7 @@ public class DocumentIndexService {
         }
         try {
             chunkService.deleteVersion(document.getId(), attempt);
+            versionService.deleteVersions(document.getId(), List.of(attempt));
         } catch (Exception e) {
             log.warn("清理失败构建的 chunk 失败: documentId={}, attempt={}", document.getId(), attempt, e);
         }
@@ -231,7 +240,7 @@ public class DocumentIndexService {
      * 删除前仍校验 attempt，确保旧 worker 不会以过期身份执行清理。</p>
      */
     void cleanupOldVersions(Document document, int attempt, int activeVersion,
-                            int previousVersion, String collection) {
+                            int previousVersion) {
         if (!stillOwnsAttempt(document.getId(), attempt, "清理旧索引版本")) {
             return;
         }
@@ -244,13 +253,13 @@ public class DocumentIndexService {
                     document.getId(), activeVersion);
             return;
         }
-        boolean deleteLegacy = stale.contains(0);
+        // RAG-02：按每个版本自己的 collection 清理，而不是本次新索引的 collection。
         // 先清理 Agent 向量、再删 MySQL 旧 chunk：若 Agent 失败，chunk 记录仍在，
         // 定时清理任务还能重新发现这个文档并重试；反过来失败则会永久留下孤儿向量。
-        agentClient.deleteVersions(document, stale, deleteLegacy, collection);
-        chunkService.deleteVersions(document.getId(), stale);
-        log.info("Cleaned old index versions: documentId={}, activeVersion={}, previousVersion={}, stale={}",
-                document.getId(), activeVersion, previousVersion, stale);
+        List<Integer> cleaned = versionService.purgeStaleVersions(document, stale);
+        log.info("Cleaned old index versions: documentId={}, activeVersion={}, previousVersion={}, "
+                        + "stale={}, cleaned={}",
+                document.getId(), activeVersion, previousVersion, stale, cleaned);
     }
 
     /**
