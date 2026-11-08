@@ -48,6 +48,11 @@ export interface ChatStreamHandlers {
 export interface ChatStreamRequest {
   conversationId: number
   content: string
+  /**
+   * 幂等键：同一次发送（含自动重试）必须复用同一个值。
+   * 不传时由 streamChatMessage 生成一个；调用方若要重试同一问题，应自己生成并复用。
+   */
+  clientRequestId?: string
   signal?: AbortSignal
 }
 
@@ -164,7 +169,7 @@ export async function consumeSseStream(
  * 这里会转成 ApiError 抛出；客户端中止会抛出 AbortError。
  */
 export async function streamChatMessage(
-  { conversationId, content, signal }: ChatStreamRequest,
+  { conversationId, content, clientRequestId, signal }: ChatStreamRequest,
   handlers: ChatStreamHandlers = {},
 ): Promise<void> {
   const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/+$/, '')
@@ -179,7 +184,10 @@ export async function streamChatMessage(
         Accept: 'text/event-stream',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({
+        content,
+        clientRequestId: clientRequestId ?? newClientRequestId(),
+      }),
       signal,
     },
   )
@@ -234,6 +242,17 @@ export async function streamChatMessage(
   })
 
   handlers.onClose?.()
+}
+
+/**
+ * 生成后端要求的 clientRequestId（8–64 字符）。
+ * 优先用 crypto.randomUUID；非安全上下文（如局域网 http）没有该 API 时退回随机串。
+ */
+function newClientRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
 }
 
 async function toApiError(response: Response): Promise<ApiError> {

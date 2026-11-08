@@ -1,8 +1,9 @@
 # 已知限制与残余风险
 
-- 整理日期：2026-11-07；封版追加：2026-11-08；E2 追加：2026-11-08
+- 整理日期：2026-11-07；封版追加：2026-11-08；E2 追加：2026-11-08；
+  Chat 幂等 / 事务边界追加：2026-11-08
 - 仓库版本：审查基线 `13cec31`；封版追加基于 `6f6e940`（P0/P1/P2 修复已合入）；
-  E2 基于 `d7a8384`（E1 + E3 已合入）
+  E2 基于 `d7a8384`（E1 + E3 已合入）；CHAT-01/02 基于 `dc8a495`
 - 范围：三阶段改造（Memory 状态机、RAG 索引可靠性、Citation 引用闭环）以及
   Web 客户端 / 混合检索封版后仍然存在、但本轮**不修**的已知问题。
 - 相关报告：[`THREE_PHASE_FINAL_REVIEW.md`](THREE_PHASE_FINAL_REVIEW.md)、
@@ -819,6 +820,124 @@ E2 在本批新增**结构化 Concept Resolver**，补规则识别的同义表�
 
 ---
 
+## CHAT-01：Chat POST 无幂等键（本批已修复，残余风险见下）
+
+| 项 | 内容 |
+| --- | --- |
+| 严重度 | 中（重复消息 / 重复生成 / 重复计费） |
+| 状态 | 已修复（本批）；崩溃遗留的 RUNNING run 仍无补偿 |
+| 代码位置 | `backend/backend/src/main/java/com/ails/backend/dto/conversation/MessageRequest.java`；`service/ChatService.java`（`stream` / `replay`）；`service/ChatTurnService.java`；`common/ChatReplayException.java`；`common/GlobalExceptionHandler.java`；`mapper/MessageMapper.java`、`mapper/AgentRunMapper.java`；`schema.sql`、`schema-migration-chat-idempotency.sql` |
+
+### 问题描述与修复
+
+`POST /api/conversations/{id}/messages` 现在要求必填 `clientRequestId`
+（UUID 字符串，8–64 字符），并在数据库层用
+`UNIQUE(conversation_id, client_request_id)` 兜底。唯一键只取
+`conversation_id + client_request_id`，不含 `user_id`：`conversation.id` 全局唯一，
+且每次写入前都校验对话归属，加入 `user_id` 只会扩大索引、不增加约束力；
+`message` 表本身也没有 `user_id` 列。
+
+重放不重新生成，直接以 JSON 提前返回（`ChatReplayException` +
+`@ExceptionHandler`，强制 `application/json`，避免被请求的
+`Accept: text/event-stream` 协商成流式）：
+
+| 状态 | 数据条件 | HTTP | `state` / 关键字段 | 是否重跑 |
+| --- | --- | --- | --- | --- |
+| A 处理中 | USER 消息 + run ∈ `RUNNING/PENDING/STALE` | **202** | `PROCESSING`，`message=请求处理中，请勿重复提交`，带 `userMessageId/runId` | 否 |
+| B 已完成 | USER + run ∈ `COMPLETED/TRUNCATED` + 助手消息存在 | **200** | `COMPLETED` / `TRUNCATED`，带 `userMessageId/assistantMessageId/runId/runStatus` | 否 |
+| C 数据不一致 | USER 消息存在但无 run | **409** | `INCONSISTENT`，`runId=null`，提示换新 id | 否 |
+| 失败 | run=`FAILED` 且无助手消息 | **409** | `FAILED`，提示换新 id | 否 |
+| 内容冲突 | 同 id、不同 `content` | **409** | `CLIENT_REQUEST_CONFLICT` | 否 |
+| 终态不一致 | run 终态但助手消息缺失 / 不可见 | **409** | `INCONSISTENT` | 否 |
+
+所有重放响应都带 `idempotentReplay=true`。实现上先 `findExisting`，命中即回放；
+并发时输掉 `UNIQUE` 插入的一方捕获 `DuplicateKeyException`，再回查赢家回放。
+数据库唯一键同时写在 `message`（仅 USER 消息写入该列）和 `agent_run`
+（仅 CHAT run）上，MySQL 唯一索引允许多个 NULL，因此 ASSISTANT 消息与
+ANALYSIS run 不受影响。
+
+### 残余风险（为什么仍保留在已知限制里）
+
+- **进程崩溃窗口**：预创建事务提交后、生成线程启动前若进程崩溃，会留下一条
+  永久 `RUNNING` 的 CHAT run。当前没有 CHAT run 的 STALE 补偿扫描（只有
+  ANALYSIS 有），该 `clientRequestId` 会一直命中 A 态返回 202。恢复方式是换一个
+  `clientRequestId` 重新提问；自动补偿需要定义「多久算遗留」与安全抢占语义，
+  不在本批范围。
+- **无 Web 入口限流 / 请求体上限**：DTO 的 `content ≤ 8000` 与
+  `clientRequestId` 长度校验只是第一道防线。真正的请求体大小限制
+  （`server.max-http-request-size` 或网关）与按用户/对话的速率限制**尚未实现**，
+  属于 TODO；当前超长 JSON 仍会完整读入内存后才被校验拒绝。
+- `clientRequestId` 为必填是**有意的破坏性变更**：仓库内没有需要兼容的旧客户端；
+  服务端随机生成会彻底破坏「客户端重试」的语义。旧客户端不传该字段会得到 400。
+
+### 测试覆盖
+
+真实 Tomcat + 真实 MySQL（`ChatSseIntegrationTest`）：
+
+- `completedReplayReturns200AndDoesNotWrite`：B 态 200，id 与首次一致，消息/run 不增加；
+- `inFlightReplayReturns202Processing`：A 态 202 `PROCESSING`，不返回 200；
+- `userMessageWithoutRunReturns409Inconsistent`：C 态 409，不补 run、不重跑；
+- `sameClientRequestIdWithDifferentContentReturns409`：409 `CLIENT_REQUEST_CONFLICT`；
+- `differentClientRequestIdsCreateSeparateTurns`：不同 id 正常创建第二轮；
+- `concurrentSameClientRequestIdCreatesExactlyOneTurn`：两个并发 POST，一个 SSE 赢家、
+  一个 202，最终 1 USER / 1 ASSISTANT / 1 run；
+- `duplicateClientRequestIdRejectedByDatabaseConstraint`：直接重复插入命中
+  `uk_msg_conv_client_request`；
+- `invalidRequestFieldsReturn400`：缺 id / 长度越界 / 8001 字符内容均 400 且不落库；
+- `ChatServiceTest` 两条单测覆盖 B 态 200 与 A 态 202 的回放分支不调用 Agent。
+
+---
+
+## CHAT-02：用户消息与 Run 创建缺少事务边界（本批已修复）
+
+| 项 | 内容 |
+| --- | --- |
+| 严重度 | 中（留下「有提问、无回答、无 run」的半截数据） |
+| 状态 | 已修复（采用方案 1：预创建事务） |
+| 代码位置 | `service/ChatTurnService.java`（`prepare`）；`service/MessageService.java`（`appendUserMessage`）；`service/ConversationService.java`（`ownedConversationForUpdate`）；`mapper/ConversationMapper.java`（`selectByIdForUpdate`） |
+
+### 问题描述与方案选择
+
+旧实现中 `appendUserMessage`、`beginTurn`、`createRun` 三步各自独立提交。若 run
+创建失败，数据库会留下 USER 消息但没有 run：客户端收到错误，消息列表却已经多了一条
+「没人回答的提问」，重试还会再插一条。
+
+本批选择**方案 1（预创建事务）**而不是补偿：
+
+- 这三步只依赖 `conversation` 与 `content`，不依赖流式生成结果，可以安全地放进
+  一个短事务；
+- ASSISTANT 消息不参与该事务，仍在流结束后独立写入；
+- 任一步失败整体回滚，不会产生需要标记 / 清理的孤儿数据，也不需要新增状态字段；
+- 补偿方案需要额外的「失败标记 + 扫描 + 幂等删除」，复杂度和观测成本都更高。
+
+事务内第一步是 `SELECT conversation ... FOR UPDATE`（当前读）：同一对话的预创建
+被串行化，并且能读到并发事务刚提交的 `session_id`，避免两个并发首条消息各自创建
+重复 Session。事务提交后才创建 `SseEmitter` 并提交生成线程。
+
+失败语义：预创建失败时记录 `conversationId + clientRequestId` 的 error 日志并把
+异常抛给全局处理器（500），**不会**出现「USER 已落库、客户端收到 200」的情况。
+若历史脏数据仍有「USER 无 run」，幂等查询会将其识别为 C 态并返回 409，而不是静默
+补 run 或重跑。
+
+### 残余风险
+
+- 崩溃窗口仍存在：预创建提交后、生成线程启动前进程退出，会留下 `RUNNING` run
+  （与 CHAT-01 同一条风险，不重复计）。
+- `beginTurn` 在预创建事务内执行概念匹配与 Session 解析，事务比纯写入略长；
+  当前为短查询，未观察到锁竞争，但高并发同一对话时会被 `FOR UPDATE` 串行化。
+  这是为了保证 `session_id` 与序号正确性而有意接受的代价。
+
+### 测试覆盖
+
+- `ChatSseIntegrationTest.runCreationFailureRollsBackWholeTurn`：用 `@SpyBean`
+  让 `agentRunMapper.insert` 抛异常，断言 500 且 USER/ASSISTANT/run/Session 均为 0、
+  `conversation.last_message_seq=0`、`session_id` 仍为 NULL；
+- `ChatSseIntegrationTest` 其余正常路径同时验证预创建后 `message.end` 到达时
+  助手消息已落库、run 最终收敛为 `COMPLETED/TRUNCATED/FAILED`；
+- `ChatServiceTest` 验证 `prepare` 只调用一次，且 run 上记录 `assistantMessageId`。
+
+---
+
 ## 汇总
 
 | ID | 严重度 | 是否影响正确性 | 测试覆盖 | 本轮处理 |
@@ -835,6 +954,8 @@ E2 在本批新增**结构化 Concept Resolver**，补规则识别的同义表�
 | DDL-01 | 中 | 不影响查询，升级 / 部署有风险 | 无迁移框架测试 | 记录 |
 | DIST-01 | 中 | 单实例安全，多实例可能版本回退 | 单进程充分、多实例无覆盖 | 记录 |
 | EVD-01 | 中 | 跨概念证据覆盖有限，不改变归属 | 受控一跳 + 三态/批量查询 + E2 契约/降级/E1 边界充分；真实模型 / 多跳 / 真实关系数据无覆盖 | 部分缓解（E1 + E2 + E3）；真实模型评测 / 分页待做 |
+| CHAT-01 | 中 | 重复请求曾会重复落库 / 重复生成 | 幂等 A/B/C、并发、唯一键、校验 400、回放单测均覆盖 | 已修复；崩溃遗留 RUNNING run 与 Web 入口限流仍待做 |
+| CHAT-02 | 中 | run 创建失败曾留下 USER 孤儿 | 注入 run 插入失败断言全量回滚 | 已修复（方案 1：预创建事务） |
 
 以上均为**已知限制**，不是“已修复但未写文档”的项。后续修复时应同时补对应测试，
 不能只改代码。

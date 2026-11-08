@@ -19,7 +19,7 @@
 | R-P2-03 | 真实模型上游空流 | **根因已确认**：reasoning 耗尽小预算 + `finish_reason=length`；语义质量仍 BLOCKED |
 | R-P2-04 | 缺少 DB / SSE E2E | **已补齐**：SSE 7 用例、MQ 46 项；仍有未覆盖项 |
 | R-P2-05 | 语义评分没有 LLM Judge | 仍用固定 rubric，未引入 Judge |
-| R-P2-06 | SSE POST 无幂等键 | **未实现**：重复 POST 会重复落消息与 CHAT run |
+| R-P2-06 | SSE POST 无幂等键 | **已修复**：必填 `clientRequestId` + DB 唯一键；A/B/C、并发、回滚均有真实 MySQL 测试 |
 | R-P2-07 | SSE 预流错误被内容协商改写成 401 | **已修复**，2 条回归测试 |
 | R-P2-08 | preview 404 被标成 `backend_unavailable` 并回退 Fixture | 低危可观测性缺陷，非数据泄露 |
 | R-ENV-01 | 测试替身不等于真实权限 | Phase 2.1 已用真实 HTTP + 真实 MySQL 补证 |
@@ -139,7 +139,7 @@ Phase 2.1 对照实测确认根因：`deepseek-flash` 先输出 `reasoning_conte
 仍未执行 / 未实现：
 
 - SSE 第一个 delta 后、落库前客户端断开（NOT_COVERED）；
-- SSE POST 幂等键（NOT_IMPLEMENTED，见 R-P2-06）；
+- SSE POST 幂等键（**已修复**，见 R-P2-06；Web 入口请求体大小 / 速率限制仍未实现）；
 - 性能基线 / 压测（NOT_MEASURED）。
 
 证据：[phase2.1-integration-results.md](phase2.1-integration-results.md)。
@@ -150,17 +150,45 @@ Phase 1 使用固定 rubric（关键词 + 禁止表述），确定性、可复�
 不敏感。rubric 不参与 PASS/FAIL。若引入 Judge，必须使用不同模型，且不能覆盖
 DB / 权限 / 状态 / 路径断言。
 
-### R-P2-06 SSE POST 没有幂等键（未实现）
+### R-P2-06 SSE POST 没有幂等键（已修复，残余风险保留）
 
-`MessageRequest` 只有 `content`，没有 `clientRequestId` / 幂等键。重复 POST 同一
-内容会创建两条 USER、两条 ASSISTANT、两个 CHAT run；Evidence 由 dedupe_key 收敛，
-Revision 不重复（SSE-2.1-06 实测）。
+**原现象：** `MessageRequest` 只有 `content`，重复 POST 同一内容会创建两条 USER、
+两条 ASSISTANT、两个 CHAT run；Evidence 由 dedupe_key 收敛，Revision 不重复
+（SSE-2.1-06 实测）。
 
-**影响：** 客户端重试、网络重放、用户双击都可能产生重复对话轮次。
+**修复（2026-11-08）：**
 
-**建议：** 增加客户端请求 id，服务端在用户消息落库前按 `(conversationId,
-clientRequestId)` 唯一约束收敛；补真实 HTTP 重复请求回归。当前**不得**声称
-“重复请求已去重”。
+- `MessageRequest` 新增必填 `clientRequestId`（8–64 字符）；缺失 / 越界 / 内容超过
+  8000 字符均在 DTO 校验层返回 400。
+- `message` 增加 `UNIQUE(conversation_id, client_request_id)`，`agent_run` 增加
+  `client_request_id` + `assistant_message_id` 及同样的唯一键；迁移见
+  `schema-migration-chat-idempotency.sql`。
+- 重放不重新生成，按状态返回 JSON：处理中 202 `PROCESSING`、已完成 200
+  `COMPLETED/TRUNCATED`、USER 无 run 409 `INCONSISTENT`、失败 409 `FAILED`、
+  同 id 不同内容 409 `CLIENT_REQUEST_CONFLICT`。详见
+  [`../audit/KNOWN_LIMITATIONS.md#chat-01chat-post-无幂等键本批已修复残余风险见下`](../audit/KNOWN_LIMITATIONS.md)。
+- 同一批把 USER 消息 + Session 归属 + CHAT run 收进一个预创建事务（CHAT-02），
+  run 创建失败时整体回滚，不再留下「有提问、无 run」的半截数据。
+
+**回归（真实 Tomcat + 真实 MySQL，`ChatSseIntegrationTest`，17/17 通过）：**
+
+- `completedReplayReturns200AndDoesNotWrite`
+- `inFlightReplayReturns202Processing`
+- `userMessageWithoutRunReturns409Inconsistent`
+- `sameClientRequestIdWithDifferentContentReturns409`
+- `differentClientRequestIdsCreateSeparateTurns`
+- `concurrentSameClientRequestIdCreatesExactlyOneTurn`
+- `duplicateClientRequestIdRejectedByDatabaseConstraint`
+- `runCreationFailureRollsBackWholeTurn`
+- `invalidRequestFieldsReturn400`
+
+旧的 `duplicatePostWithoutIdempotencyKeyCreatesDuplicateMessages` 已删除：它断言的
+正是「没有幂等键时重复落库」这一待修复行为，修复后语义不再成立。其余 SSE 用例的
+断言未改变，只是在请求体里补了随机 `clientRequestId`。
+
+**仍存在的风险：** 预创建提交后、生成线程启动前进程崩溃会留下永久 `RUNNING` 的
+CHAT run（无 stale 补偿）；`content ≤ 8000` 只是 DTO 校验，Web 入口的请求体大小
+限制（`server.max-http-request-size` / 网关）与速率限制**尚未实现**，属于 TODO。
 
 ### R-P2-07 SSE 预流错误被改写成 401（已修复）
 
@@ -237,7 +265,9 @@ Boot 使用默认绑定 `0.0.0.0:8081/8099`。内部接口仍需 token + 签名�
 
 ## 建议的下一步
 
-1. 为 SSE POST 增加幂等键并补真实 HTTP 重复请求回归（R-P2-06）；
+1. ~~为 SSE POST 增加幂等键并补真实 HTTP 重复请求回归（R-P2-06）~~ —— 已完成
+   （2026-11-08，见 R-P2-06）；剩余：Web 入口请求体大小 / 速率限制与 CHAT run
+   stale 补偿；
 2. 补 SSE 第一个 delta 后断开的用例，明确“已开始生成但未落库”的契约；
 3. 在独立环境做性能基线，单独报告；不要用本轮小样本推算；
 4. 确认 B04 文案合并；

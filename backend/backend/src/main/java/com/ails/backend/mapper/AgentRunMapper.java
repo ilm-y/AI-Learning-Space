@@ -12,6 +12,19 @@ import java.util.List;
 public interface AgentRunMapper extends BaseMapper<AgentRun> {
 
     /**
+     * 按 {@code (conversation_id, client_request_id)} 查幂等键对应的 CHAT run。
+     * <p>
+     * 与 message 上的唯一键同源：USER 消息与 run 在同一个预创建事务里写入，
+     * 因此正常数据最多一行。{@code LIMIT 1} 只是防御历史 / 手工数据。
+     */
+    @Select("SELECT * FROM agent_run "
+            + "WHERE conversation_id = #{conversationId} "
+            + "  AND client_request_id = #{clientRequestId} "
+            + "ORDER BY id DESC LIMIT 1")
+    AgentRun selectByConversationAndClientRequestId(@Param("conversationId") Long conversationId,
+                                                    @Param("clientRequestId") String clientRequestId);
+
+    /**
      * 补偿扫描：找出创建时间早于 cutoff、仍停在非终态的分析任务。
      * <p>
      * 只取 ANALYSIS：CHAT / TEST run 的生命周期由各自请求线程负责，不能被这里误杀。

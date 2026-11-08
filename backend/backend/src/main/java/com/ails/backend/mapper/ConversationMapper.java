@@ -19,6 +19,18 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
     int incrementLastMessageSeq(@Param("id") Long id);
 
     /**
+     * 锁定一行对话并读取最新已提交值。
+     * <p>
+     * 这是<b>当前读</b>（{@code FOR UPDATE}），不建立一致性快照：如果它等待了另一个
+     * 事务提交，随后第一条普通 SELECT 建立的快照会包含对方的写入。聊天预创建事务
+     * 依赖这一点读取最新的 {@code session_id}，避免并发首条消息各自创建 Session。
+     * <p>
+     * 必须在事务中调用；锁持有到事务提交/回滚。
+     */
+    @Select("SELECT * FROM conversation WHERE id = #{id} AND deleted_at IS NULL FOR UPDATE")
+    Conversation selectByIdForUpdate(@Param("id") Long id);
+
+    /**
      * 读回刚分配的序号。必须和 {@link #incrementLastMessageSeq} 在同一个事务里；
      * 读的是本事务自己刚写入的值，不受 REPEATABLE READ 快照影响。
      */

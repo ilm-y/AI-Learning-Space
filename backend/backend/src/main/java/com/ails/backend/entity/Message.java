@@ -58,6 +58,14 @@ public class Message {
     /** 对话内顺序，从 1 开始 */
     private Integer sequenceNo;
 
+    /**
+     * 客户端幂等键，仅 USER 消息有值。
+     * <p>
+     * 与 {@code conversation_id} 组成唯一键 {@code uk_msg_conv_client_request}；
+     * ASSISTANT / TEST / EVENT 消息为 NULL，MySQL 唯一索引允许多个 NULL。
+     */
+    private String clientRequestId;
+
     /** 软删标记：删除对话时保留学习历史，不做物理删除 */
     @TableLogic(value = "null", delval = "now()")
     private LocalDateTime deletedAt;

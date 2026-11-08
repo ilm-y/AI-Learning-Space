@@ -4,7 +4,9 @@ import com.ails.backend.agent.AgentGateway;
 import com.ails.backend.agent.AgentStreamHandler;
 import com.ails.backend.agent.StreamCompletion;
 import com.ails.backend.common.BusinessException;
+import com.ails.backend.common.ChatReplayException;
 import com.ails.backend.dto.agent.ChatAgentRequest;
+import com.ails.backend.dto.conversation.ChatReplayResponse;
 import com.ails.backend.dto.conversation.CitationMetadata;
 import com.ails.backend.dto.conversation.CitationResponse;
 import com.ails.backend.entity.AgentRun;
@@ -12,14 +14,13 @@ import com.ails.backend.entity.Conversation;
 import com.ails.backend.entity.LearningSession;
 import com.ails.backend.entity.Message;
 import com.ails.backend.enums.AgentRunStatus;
-import com.ails.backend.enums.AgentRunType;
 import com.ails.backend.enums.ConversationStatus;
 import com.ails.backend.mapper.AgentRunMapper;
-import com.ails.backend.utils.TraceIds;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -30,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -39,9 +41,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>
  * <h3>一次发消息请求的端到端流程</h3>
  * <ol>
- *   <li>前端 POST {@code /api/conversations/{id}/messages}，body 只有 {@code {content}}；</li>
- *   <li>{@link #stream}（Tomcat 请求线程）：校验对话归属、同步落库用户消息、
- *       写一条 agent_run（RUNNING）、创建 {@link SseEmitter} 并立即返回 ——
+ *   <li>前端 POST {@code /api/conversations/{id}/messages}，body 为
+ *       {@code {content, clientRequestId}}；</li>
+ *   <li>{@link #stream}（Tomcat 请求线程）：校验对话归属、在一个短事务里
+ *       同步落库用户消息 + 预创建 agent_run（RUNNING）（见 {@link ChatTurnService}）、
+ *       创建 {@link SseEmitter} 并立即返回 ——
  *       此刻 HTTP 响应头已发出（Content-Type: text/event-stream），请求线程释放回池子；</li>
  *   <li>生成与推送被丢进 {@code chatStreamExecutor} 线程池（见
  *       {@link com.ails.backend.config.AsyncConfig}），慢生成不占 Tomcat 请求线程；</li>
@@ -77,6 +81,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 它跑完照样要落库助手消息、把 run 写成 COMPLETED —— 用户重进对话时回复是完整的。
  * <p>
  * 真实的生成能力由 {@link AgentGateway} 提供，本类不认识 Python，也不认识桩实现。
+ * <p>
+ * <h3>幂等（clientRequestId）</h3>
+ * 同一对话内同一个 {@code clientRequestId} 只允许产生一轮对话。首次请求照常建立 SSE；
+ * 重放则<b>不建立 SSE</b>，直接以 JSON 提前返回（见 {@link ChatReplayException}）：
+ * <ul>
+ *   <li>原请求仍在处理（run = RUNNING / PENDING / STALE）→ <b>202</b>，
+ *       {@code idempotentReplay=true}、{@code state=PROCESSING}，绝不假装成功；</li>
+ *   <li>已完成且有助手消息（run = COMPLETED / TRUNCATED）→ <b>200</b>，带回
+ *       {@code userMessageId / assistantMessageId / runId}，不重新生成；</li>
+ *   <li>用户消息存在但 run 缺失（数据不一致）→ <b>409</b>，{@code state=INCONSISTENT}；</li>
+ *   <li>run 已失败且没有助手消息 → <b>409</b>，{@code state=FAILED}，不自动重跑；</li>
+ *   <li>同一 clientRequestId 被复用于不同内容 → <b>409</b>，
+ *       {@code state=CLIENT_REQUEST_CONFLICT}，防止把一次误重发当成新问题。</li>
+ * </ul>
+ * 并发同 clientRequestId 由 {@code uk_msg_conv_client_request} 兜底：输掉插入的一方
+ * 拿到 {@link DuplicateKeyException}，随后按上面的规则回放赢家的结果。
  */
 @Slf4j
 @Service
@@ -92,7 +112,11 @@ public class ChatService {
     private final MessageService messageService;
     private final AgentGateway agentGateway;
     private final AgentRunMapper agentRunMapper;
-    private final LearningAnalysisService learningAnalysisService;
+    /**
+     * 一轮对话的预创建事务：用户消息 + Session 归属 + agent_run(RUNNING) 要么一起存在，
+     * 要么一条都不存在。同时提供幂等命中查询。见 {@link ChatTurnService}。
+     */
+    private final ChatTurnService chatTurnService;
     /**
      * 回复落库之后的学习分析。由 {@link AnalysisDispatchService} 决定是投递 MQ 还是同步执行；
      * 同步路径的细节见 {@link TurnAnalysisService}。
@@ -115,32 +139,51 @@ public class ChatService {
      * {@code chat-stream-*} 线程上，那条线程没有 SecurityContext（它不属于任何请求），
      * {@code SecurityUtil} 在那里会直接抛 401。所以请求线程把 token 取好、当参数带下去。
      */
-    public SseEmitter stream(Long userId, Long conversationId, String content, String authToken) {
+    public SseEmitter stream(Long userId, Long conversationId, String content,
+                             String clientRequestId, String authToken) {
         // 1) 权限校验：对话必须属于当前用户（否则 403/404）；已归档的对话不再接受新消息
         Conversation conversation = conversationService.ownedConversation(userId, conversationId);
         if (conversation.getStatus() != ConversationStatus.ACTIVE) {
             throw new BusinessException(400, "对话已归档，无法发送消息");
         }
 
-        // 2) 同步落库用户消息（仍在请求线程）—— 此刻前端再 GET /messages 就能看到它
-        Message userMessage = messageService.appendUserMessage(userId, conversationId, content);
+        // 2) 幂等命中检查：同一对话 + 同一 clientRequestId 已经开过一轮，直接回放原结果。
+        //    这一步发生在预创建之前，因此重放不会新增用户消息、不会新增 run、更不会重新生成。
+        Optional<ChatTurnService.TurnSnapshot> existing =
+                chatTurnService.findExisting(conversationId, clientRequestId);
+        if (existing.isPresent()) {
+            throw replay(conversationId, content, existing.get());
+        }
 
-        // 3) 在调用 Agent 之前先落定「这条对话属于哪个学习活动」。
-        //    顺序是硬要求，不能挪到生成之后：Session 是懒创建的，新对话的第一条消息发出时
-        //    session_id 还是 NULL，而 Agent 的上下文里要带「本阶段学习目标」。
-        //    放到回复生成完之后，最该继承上个 Session 目标的那一轮（新开对话接着学同一个知识点）
-        //    反而什么都带不上 —— 见 docs/session-design.md §一.4 / §六。
-        //    这一步也顺手把这一轮的 Concept 匹配算好，后面 analyzeQuietly 直接复用，不重复查库。
-        //
-        //    它排在 createRun 之前，是为了让 agent_run.session_id 在插入时就写对 ——
-        //    否则得再补一次 UPDATE，而且中间那段时间里这行轨迹的归属是错的。
-        LearningAnalysisService.TurnOpening opening =
-                learningAnalysisService.beginTurn(conversation, content);
+        // 3) 预创建事务（仍在请求线程）：锁对话行 → 落用户消息 → 归属 Session → 建 agent_run(RUNNING)。
+        //    四步在同一事务里，任何一步失败整体回滚，不会留下「用户消息存在但 run 不存在」的半截状态；
+        //    也保证 GET /messages 立刻能看到用户消息、序号严格按请求到达顺序分配。
+        //    Session 归属是懒创建的（新对话第一条消息发出时 session_id 还是 NULL），
+        //    必须在调 Agent 之前确定，否则 Agent 拿不到本阶段学习目标 ——
+        //    见 docs/session-design.md §一.4 / §六。
+        ChatTurnService.TurnSnapshot turn;
+        try {
+            turn = chatTurnService.prepare(conversation, content, clientRequestId);
+        } catch (DuplicateKeyException e) {
+            // 并发同 clientRequestId：另一边先提交了唯一键（uk_msg_conv_client_request），
+            // 本事务已整体回滚。回查赢家并按同一套规则回放；查不到就不要伪造成功，原样抛出。
+            Optional<ChatTurnService.TurnSnapshot> winner =
+                    chatTurnService.findExisting(conversationId, clientRequestId);
+            if (winner.isPresent()) {
+                throw replay(conversationId, content, winner.get());
+            }
+            throw e;
+        } catch (RuntimeException e) {
+            // 预创建失败没有留下任何可观察的半成品（事务已回滚），但必须留下排查线索。
+            log.error("prepare chat turn failed, conversationId={}, clientRequestId={}",
+                    conversationId, clientRequestId, e);
+            throw e;
+        }
+        Message userMessage = turn.userMessage();
+        AgentRun run = turn.run();
+        LearningAnalysisService.TurnOpening opening = turn.opening();
 
-        // 4) 建 agent_run 轨迹行（RUNNING）—— runId 是后续所有 SSE 事件携带的 id，也是排查失败的入口
-        AgentRun run = createRun(userId, conversationId, content, sessionId(opening));
-
-        // 5) 创建 SSE 连接句柄。SseEmitter 是 Spring MVC 的异步响应对象：
+        // 4) 创建 SSE 连接句柄。SseEmitter 是 Spring MVC 的异步响应对象：
         //    返回给 Controller 后 HTTP 响应不再被请求线程阻塞，
         //    之后任何线程都能通过 emitter.send() 往里推数据，直到 emitter.complete() 关流。
         SseEmitter emitter = createEmitter();
@@ -155,7 +198,7 @@ public class ChatService {
         emitter.onTimeout(() -> finishRunIfRunning(run, AgentRunStatus.FAILED, "SSE 超时", startedAt));
         emitter.onError(e -> finishRunIfRunning(run, AgentRunStatus.FAILED, String.valueOf(e.getMessage()), startedAt));
 
-        // 6) 丢进线程池：生成 + 推送在 chat-stream-* 线程上执行，
+        // 5) 丢进线程池：生成 + 推送在 chat-stream-* 线程上执行，
         //    本请求线程此刻立即把 emitter 返回给 Controller，回池子接下一个请求。
         //    必须包一层：线程池饱和时 execute 会抛 RejectedExecutionException。等它冒到
         //    DispatcherServlet 时响应头早就发出去（Content-Type: text/event-stream），
@@ -280,6 +323,9 @@ public class ChatService {
                         // 截断时保留已经生成的部分内容，但持久化层同时记下「不完整」。
                         assistantMessage = messageService.appendAssistantMessage(
                                 conversation.getId(), buffer.toString(), truncated, citations);
+                        // 把助手消息 id 记到 run 上：重放要凭它找回「这一轮的回复」，
+                        // 而不是拿 conversation 最新一条助手消息去猜（并发轮次会猜错）。
+                        run.setAssistantMessageId(assistantMessage.getId());
                         // 结束事件：messageId 让前端把「刚流式出来的那段字」锚定到消息列表的具体行上。
                         // 正常完成保持原有字段不变；截断时追加明确标记，旧客户端可忽略。
                         Map<String, Object> end = new LinkedHashMap<>();
@@ -399,31 +445,81 @@ public class ChatService {
                 session.getId(), session.getTitle(), session.getGoal(), session.getCurrentFocus());
     }
 
-    // ================= agent_run =================
+    // ================= 幂等回放 =================
 
     /**
-     * 为本次生成写一条轨迹行（RUNNING）。
-     * inputSummary 截断到 255 字符，匹配 agent_run.input_summary 列宽。
+     * 把一条已存在的轮次翻译成「提前 JSON 响应」。
+     * <p>
+     * <b>绝不重新生成。</b>没有可回放终态时宁可返回 409 让客户端换一个
+     * {@code clientRequestId} 重发，也不静默重跑 —— 重跑会多出用户消息、run 和费用，
+     * 而调用方无法判断这到底是不是自己那次请求。
+     * <p>
+     * 内容不一致单独判冲突：同一个 id 配不同内容几乎一定是调用方复用了 id，
+     * 把它当成「重放」会返回一段与当前输入无关的回答。
      */
-    private AgentRun createRun(Long userId, Long conversationId, String content, Long sessionId) {
-        AgentRun run = new AgentRun();
-        run.setUserId(userId);
-        run.setConversationId(conversationId);
-        // 归属的学习活动。可能为 null：闲聊不产生也不归属任何 Session（Resolver 的 NONE 分支），
-        // 这不是数据缺失，见 docs/session-design.md §五。
-        run.setSessionId(sessionId);
-        run.setRunType(AgentRunType.CHAT);
-        run.setStatus(AgentRunStatus.RUNNING);
-        run.setInputSummary(truncate(content, 255));
-        run.setTraceId(TraceIds.newId());
-        agentRunMapper.insert(run);
-        return run;
+    private ChatReplayException replay(Long conversationId, String content,
+                                       ChatTurnService.TurnSnapshot snapshot) {
+        Message userMessage = snapshot.userMessage();
+        AgentRun run = snapshot.run();
+        Message assistantMessage = snapshot.assistantMessage();
+        Long runId = run == null ? null : run.getId();
+        Long assistantMessageId = assistantMessage == null ? null : assistantMessage.getId();
+        String runStatus = run == null || run.getStatus() == null ? null : run.getStatus().name();
+
+        if (!Objects.equals(userMessage.getContent(), content)) {
+            return new ChatReplayException(409, new ChatReplayResponse(
+                    true, ChatReplayResponse.STATE_CLIENT_REQUEST_CONFLICT, conversationId,
+                    userMessage.getId(), runId, assistantMessageId, runStatus,
+                    "clientRequestId 已用于不同的消息内容，请使用新的 clientRequestId"));
+        }
+
+        if (run == null) {
+            // 用户消息存在却没有 run：预创建事务本应让两者同生共死，走到这里说明历史脏数据
+            // 或有人绕过服务直接写库。明确暴露不一致，不自动补 run、不自动重跑。
+            return new ChatReplayException(409, new ChatReplayResponse(
+                    true, ChatReplayResponse.STATE_INCONSISTENT, conversationId,
+                    userMessage.getId(), null, null, null,
+                    "该消息已存在但没有对应的生成记录，请使用新的 clientRequestId 重新发送"));
+        }
+
+        AgentRunStatus status = run.getStatus();
+        if (status == AgentRunStatus.RUNNING
+                || status == AgentRunStatus.PENDING
+                || status == AgentRunStatus.STALE) {
+            // 仍然在处理中。202 不是成功：客户端应继续等待原连接或稍后重试查询，
+            // 而不是把这次响应当成「已拿到回复」。
+            return new ChatReplayException(202, new ChatReplayResponse(
+                    true, ChatReplayResponse.STATE_PROCESSING, conversationId,
+                    userMessage.getId(), runId, assistantMessageId, runStatus,
+                    "请求处理中，请勿重复提交"));
+        }
+
+        if ((status == AgentRunStatus.COMPLETED || status == AgentRunStatus.TRUNCATED)
+                && assistantMessage != null) {
+            String state = status == AgentRunStatus.TRUNCATED
+                    ? ChatReplayResponse.STATE_TRUNCATED
+                    : ChatReplayResponse.STATE_COMPLETED;
+            return new ChatReplayException(200, new ChatReplayResponse(
+                    true, state, conversationId,
+                    userMessage.getId(), runId, assistantMessageId, runStatus,
+                    "请求已完成，返回原结果"));
+        }
+
+        if (status == AgentRunStatus.FAILED && assistantMessage == null) {
+            // 失败不自动重试：重试是调用方的决定，必须由它换一个新的 clientRequestId 表达。
+            return new ChatReplayException(409, new ChatReplayResponse(
+                    true, ChatReplayResponse.STATE_FAILED, conversationId,
+                    userMessage.getId(), runId, null, runStatus,
+                    "原请求已失败且没有可回放的回复，请使用新的 clientRequestId 重新发送"));
+        }
+
+        return new ChatReplayException(409, new ChatReplayResponse(
+                true, ChatReplayResponse.STATE_INCONSISTENT, conversationId,
+                userMessage.getId(), runId, assistantMessageId, runStatus,
+                "生成记录已进入终态但没有可回放的助手消息"));
     }
 
-    /** 本轮归属的 Session id；{@link LearningAnalysisService.TurnOpening#session()} 可能为 null。 */
-    private static Long sessionId(LearningAnalysisService.TurnOpening opening) {
-        return opening.session() == null ? null : opening.session().getId();
-    }
+    // ================= agent_run =================
 
     /**
      * 收尾 agent_run。用只带 id 的空实体 updateById，MyBatis-Plus 默认忽略 null 字段，
@@ -439,6 +535,7 @@ public class ChatService {
         patch.setStatus(status);
         patch.setOutputSummary(outputSummary);
         patch.setErrorMessage(truncate(error, 1000));
+        patch.setAssistantMessageId(run.getAssistantMessageId());
         patch.setFinishedAt(LocalDateTime.now());
         patch.setDurationMs(toMillis(startedAt, patch.getFinishedAt()));
         agentRunMapper.updateById(patch);

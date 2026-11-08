@@ -315,9 +315,12 @@ Agent 关键环境变量：
      （使用 `AFTER truncated`，必须在第 4 步之后，否则旧库会报 1054）；
   6. `schema-migration-phase54-message-seq.sql` —— `conversation.last_message_seq`，
      并按已有消息回填；
+  7. `schema-migration-chat-idempotency.sql` —— `message.client_request_id`、
+     `agent_run.client_request_id` / `assistant_message_id` 及两个幂等唯一键
+     （Chat POST 幂等与预创建事务）；
 - **顺序依赖**：`phase3-citations` 依赖 `phase7-truncation`；
-  `rag-reliability` 依赖 `document-rag`；`memory-fulltext` 与
-  `phase54-message-seq` 与上述两组互不依赖；
+  `rag-reliability` 依赖 `document-rag`；`memory-fulltext`、
+  `phase54-message-seq`、`chat-idempotency` 与上述两组互不依赖；
 - 执行示例（密码不要写进命令历史时改用 `MYSQL_PWD` 或本地配置文件）：
 
   ```bash

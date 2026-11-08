@@ -154,8 +154,11 @@ Authorization: Bearer <token>
 Content-Type: application/json
 Accept: text/event-stream
 
-{ "content": "用户这一轮说的话" }
+{ "content": "用户这一轮说的话", "clientRequestId": "550e8400-e29b-41d4-a716-446655440000" }
 ```
+
+`clientRequestId` **必填**（8–64 字符，建议 UUID），一次用户发送动作生成一次；
+同一次发送的自动重试必须复用同一个值。`content` 最长 8000 字符，超长返回 400。
 
 | 项 | 值 |
 | --- | --- |
@@ -210,15 +213,45 @@ data: {"messageId":88,"runId":101,"citations":[{"documentId":12,"chunkId":340,"c
 
 - `message.error` 可能出现在任何阶段。收到后**必须丢弃已渲染的半成品**。
 - 正常路径下 `message.start` → 若干 `message.delta` → `message.end`，随后服务端关闭连接。
-- 若使用 `@microsoft/fetch-event-source` 之类的库，遇到连接关闭不要自动重连：一次 POST 就是一轮对话，重连会重复发送消息。失败后让用户手动重试。
+- 若使用 `@microsoft/fetch-event-source` 之类的库，遇到连接关闭不要自动重连：一次 POST 就是一轮对话。若确需重试，必须复用同一个 `clientRequestId`，服务端会回放原结果（202/200/409），不会重复落库；不要用新 id 重发同一问题。
 
-### 3.4 重要行为
+### 3.4 幂等回放（同 `clientRequestId` 重复 POST）
 
-1. **用户消息在流开始前已同步落库。** 请求返回响应头之前，用户消息已经写入数据库并分配 `sequenceNo`。因此流式过程中随时 `GET /api/conversations/{id}/messages` 都能看到用户消息；助手消息只有收到 `message.end` 后才落库。
+重放**不会**建立 SSE、不会重新生成，直接返回 JSON（强制
+`application/json`），响应体形如：
+
+```json
+{
+  "idempotentReplay": true,
+  "state": "PROCESSING",
+  "conversationId": 9,
+  "userMessageId": 87,
+  "runId": 101,
+  "assistantMessageId": null,
+  "runStatus": "RUNNING",
+  "message": "请求处理中，请勿重复提交"
+}
+```
+
+| 原请求状态 | HTTP | `state` | 前端处理 |
+| --- | --- | --- | --- |
+| 仍在生成（`RUNNING/PENDING/STALE`） | **202** | `PROCESSING` | 提示「请求处理中」，继续等待原连接或稍后重试；**不要**当成成功 |
+| 已完成 / 截断 | **200** | `COMPLETED` / `TRUNCATED` | 用 `assistantMessageId` 拉取历史消息，不要重新生成 |
+| USER 消息存在但无 run | **409** | `INCONSISTENT` | 提示用户换一个 `clientRequestId` 重发 |
+| 原请求失败且无回复 | **409** | `FAILED` | 提示失败；重试必须使用新的 `clientRequestId` |
+| 同 id、不同 `content` | **409** | `CLIENT_REQUEST_CONFLICT` | 客户端 bug：每次发送内容应生成新的 id |
+
+### 3.5 重要行为
+
+1. **用户消息在流开始前已同步落库。** 请求返回响应头之前，用户消息、Session 归属与
+   `agent_run(RUNNING)` 已在同一事务里提交（失败则整体回滚）。因此流式过程中随时
+   `GET /api/conversations/{id}/messages` 都能看到用户消息；助手消息只有收到
+   `message.end` 后才落库。
 2. **流建立前发生的错误返回普通 JSON，不是 SSE。** 以下情况在创建 `SseEmitter` 之前抛出，走全局异常处理：
    - 对话不存在 / 不属于当前用户 → `404`；
    - 对话已归档（`status != ACTIVE`）→ `400`，`message = "对话已归档，无法发送消息"`；
-   - 请求体 `content` 为空 → `400`。
+   - 请求体 `content` 为空或超过 8000 字符、`clientRequestId` 缺失或长度越界 → `400`；
+   - 预创建事务失败（极少见）→ `500`，且不会留下用户消息。
 
    所以前端要**先看响应头**：`Content-Type: text/event-stream` 才按 SSE 解析，否则按 `ApiResponse` 解析错误。
 3. **线程池饱和时**仍返回 SSE，但会立即推送 `message.start` + `message.error`（`code = 503`，`message = "服务繁忙，请稍后重试"`）。

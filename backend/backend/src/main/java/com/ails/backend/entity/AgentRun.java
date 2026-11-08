@@ -38,6 +38,22 @@ public class AgentRun {
 
     private AgentRunStatus status;
 
+    /**
+     * 客户端幂等键，仅 CHAT run 有值；与 {@code conversation_id} 组成唯一键。
+     * <p>
+     * 幂等回放时用它把「同一轮请求」的 USER 消息与 run 对上，而不是靠
+     * 「对话里最新一条 CHAT run」猜测 —— 后者在并发不同 clientRequestId 时会错。
+     */
+    private String clientRequestId;
+
+    /**
+     * 本次 CHAT run 产出的助手消息 id，正常完成 / 截断时写入。
+     * <p>
+     * 消息表没有反向的 run_id，回放时需要一条明确的边来回答「这一轮的结果是哪条消息」。
+     * 失败或仍在生成时为 NULL。
+     */
+    private Long assistantMessageId;
+
     private String inputSummary;
 
     private String outputSummary;

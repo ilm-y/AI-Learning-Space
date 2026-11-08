@@ -435,6 +435,9 @@ message.error   { runId, code, message }
   `GET /messages` 的助手消息也带 `truncated` 字段，重新加载后仍能区分。
   正常完成的 `message.end` 字段保持不变，旧客户端可以忽略新增字段。
 - 用户消息在请求线程里**同步落库**（保证 `GET /messages` 立刻看得到、序号按请求顺序分配），生成与推送在 `chatStreamExecutor` 线程池里跑。
+- 请求体必须带 `clientRequestId`（8–64 字符，建议 UUID）：同一对话内重复 POST 同一个 id
+  不会重复落库或重新生成，而是以 JSON 回放（202 处理中 / 200 已完成 / 409 失败或冲突）。
+  详见 `docs/audit/KNOWN_LIMITATIONS.md` 的 CHAT-01 / CHAT-02。
 - 对话结束后会静默跑一次消息分析；**分析失败不影响已经推完的对话** —— 用户已经拿到回复了，回滚没有意义。
 - 前端必须用支持流式的 HTTP 客户端（Flutter 侧是 `http` 的 `StreamedResponse`），普通 `fetch` 拿不到中间态。
 
@@ -443,7 +446,7 @@ message.error   { runId, code, message }
 ```bash
 curl -N -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -X POST http://127.0.0.1:8080/api/conversations/1/messages \
-  -d '{"content":"TLB 是什么？"}'
+  -d '{"content":"TLB 是什么？","clientRequestId":"550e8400-e29b-41d4-a716-446655440000"}'
 ```
 
 不加 `-N` 时 curl 会缓冲，你会以为流没通；加了之后事件逐条到达，`message.start` 立刻可见。

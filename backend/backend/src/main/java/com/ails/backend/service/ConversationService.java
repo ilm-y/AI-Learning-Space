@@ -78,6 +78,25 @@ public class ConversationService {
     }
 
     /**
+     * 取当前用户拥有的对话并<b>锁定该行</b>，供聊天预创建事务使用。
+     * <p>
+     * 与 {@link #ownedConversation} 的区别：
+     * <ul>
+     *   <li>使用 {@code SELECT ... FOR UPDATE}，必须在外层事务中调用，锁持有到事务结束；</li>
+     *   <li>读到的是最新已提交值（当前读），因此能看到并发事务刚写入的 {@code session_id}。</li>
+     * </ul>
+     * 同一对话的 append 由此串行化；不同对话锁不同主键行，互不阻塞。
+     */
+    public Conversation ownedConversationForUpdate(Long userId, Long conversationId) {
+        Conversation conversation = conversationMapper.selectByIdForUpdate(conversationId);
+        if (conversation == null || !conversation.getUserId().equals(userId)) {
+            throw BusinessException.notFound("对话不存在");
+        }
+        spaceService.ownedSpace(userId, conversation.getLearningSpaceId());
+        return conversation;
+    }
+
+    /**
      * 取当前用户拥有的对话，否则视为不存在。
      * <p>
      * 除了对话本身的归属，还要确认它所在的学习空间仍然存在：空间被软删之后，

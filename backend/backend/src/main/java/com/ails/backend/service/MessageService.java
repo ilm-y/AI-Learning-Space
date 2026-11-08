@@ -68,12 +68,29 @@ public class MessageService {
     }
 
     /**
-     * 落一条用户消息。返回的实体已带 sequenceNo。
+     * 落一条带幂等键的用户消息。返回的实体已带 sequenceNo 与 clientRequestId。
+     * <p>
+     * <b>调用方契约：</b>{@code conversation} 必须已经过归属校验，并且是在
+     * {@code SELECT ... FOR UPDATE} 中读到的（见
+     * {@link ConversationService#ownedConversationForUpdate}）。本方法不再重复查库，
+     * 而是直接使用这个已锁定的对象 —— 目的是让「序号自增」成为事务里的第一个
+     * 数据库动作，避免在拿到对话行锁之前就建立一致性快照，从而读到过期的
+     * {@code session_id}。单独的 {@code appendUserMessage} 调用不应绕过这个前提。
+     * <p>
+     * 唯一键 {@code uk_msg_conv_client_request} 由数据库兜底：并发同
+     * {@code clientRequestId} 时，输掉的事务会得到 {@code DuplicateKeyException}，
+     * 由 {@code ChatService} 转成幂等回放。
      */
     @Transactional
-    public Message appendUserMessage(Long userId, Long conversationId, String content) {
-        Conversation conversation = requireActiveConversation(userId, conversationId);
-        return append(conversation, MessageRole.USER, MessageType.TEXT, content);
+    public Message appendUserMessage(Conversation conversation, String content, String clientRequestId) {
+        if (conversation == null) {
+            throw BusinessException.notFound("对话不存在");
+        }
+        if (conversation.getStatus() != ConversationStatus.ACTIVE) {
+            throw new BusinessException(400, "对话已归档，无法发送消息");
+        }
+        return append(conversation, MessageRole.USER, MessageType.TEXT, content,
+                null, List.of(), clientRequestId);
     }
 
     /**
@@ -112,7 +129,7 @@ public class MessageService {
             throw BusinessException.notFound("对话不存在");
         }
         return append(conversation, MessageRole.ASSISTANT, MessageType.TEXT, content,
-                truncated ? Boolean.TRUE : null, citations);
+                truncated ? Boolean.TRUE : null, citations, null);
     }
 
     /**
@@ -131,7 +148,8 @@ public class MessageService {
         if (conversation == null) {
             throw BusinessException.notFound("对话不存在");
         }
-        return append(conversation, MessageRole.ASSISTANT, MessageType.TEST, content);
+        return append(conversation, MessageRole.ASSISTANT, MessageType.TEST, content,
+                null, List.of(), null);
     }
 
     /**
@@ -187,17 +205,16 @@ public class MessageService {
 
     // ================= 内部实现 =================
 
-    private Message append(Conversation conversation, MessageRole role, MessageType type, String content) {
-        return append(conversation, role, type, content, null, List.of());
-    }
-
     private Message append(Conversation conversation, MessageRole role, MessageType type,
-                           String content, Boolean truncated, List<CitationMetadata> citations) {
+                           String content, Boolean truncated, List<CitationMetadata> citations,
+                           String clientRequestId) {
         Message message = new Message();
         message.setConversationId(conversation.getId());
         message.setRole(role);
         message.setMessageType(type);
         message.setContent(content);
+        // 只有 USER 消息带幂等键；其余消息保持 NULL，不参与唯一约束。
+        message.setClientRequestId(clientRequestId);
         // 只在截断时写 true；普通消息保持 null，交给数据库默认值 0。
         message.setTruncated(truncated);
         // 空引用写 NULL；JSON 序列化只在这里发生，读取侧统一经过 CitationService。
@@ -238,14 +255,6 @@ public class MessageService {
             throw BusinessException.notFound("对话不存在");
         }
         return last;
-    }
-
-    private Conversation requireActiveConversation(Long userId, Long conversationId) {
-        Conversation conversation = conversationService.ownedConversation(userId, conversationId);
-        if (conversation.getStatus() != ConversationStatus.ACTIVE) {
-            throw new BusinessException(400, "对话已归档，无法发送消息");
-        }
-        return conversation;
     }
 
     /** 粗略 token 估算（正式接入 LLM 前仅用于占位展示） */

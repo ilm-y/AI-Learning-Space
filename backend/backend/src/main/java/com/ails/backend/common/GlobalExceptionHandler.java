@@ -1,5 +1,6 @@
 package com.ails.backend.common;
 
+import com.ails.backend.dto.conversation.ChatReplayResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -24,6 +25,21 @@ public class GlobalExceptionHandler {
         int status = (ex.getCode() >= 400 && ex.getCode() < 600) ? ex.getCode() : 500;
         return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON)
                 .body(ApiResponse.fail(ex.getCode(), ex.getMessage()));
+    }
+
+    /**
+     * 幂等回放 / 冲突的提前响应。
+     * <p>
+     * 这不是错误：202 表示原请求仍在处理，200 表示命中已完成的回放，409 表示
+     * 原请求失败 / 数据不一致 / clientRequestId 被复用于不同内容。统一强制
+     * {@code application/json}，避免请求的 {@code Accept: text/event-stream}
+     * 把响应协商成流式（参见 R-P2-07）。
+     */
+    @ExceptionHandler(ChatReplayException.class)
+    public ResponseEntity<ChatReplayResponse> handleChatReplay(ChatReplayException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(ex.getResponse());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

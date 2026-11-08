@@ -3,8 +3,10 @@ package com.ails.backend.service;
 import com.ails.backend.agent.AgentGateway;
 import com.ails.backend.agent.AgentStreamHandler;
 import com.ails.backend.agent.StreamCompletion;
+import com.ails.backend.common.ChatReplayException;
 import com.ails.backend.dto.agent.AgentCitation;
 import com.ails.backend.dto.agent.ChatAgentRequest;
+import com.ails.backend.dto.conversation.ChatReplayResponse;
 import com.ails.backend.dto.conversation.CitationMetadata;
 import com.ails.backend.dto.conversation.CitationResponse;
 import com.ails.backend.entity.AgentRun;
@@ -24,15 +26,18 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -59,17 +64,19 @@ class ChatServiceTest {
     private static final long RUN_ID = 200L;
     private static final String QUESTION = "TLB 缓存的是什么？";
     private static final String ANSWER = "TLB 缓存的是页表项。";
+    private static final String CLIENT_REQUEST_ID = "client-request-0001";
 
     private ConversationService conversationService;
     private MessageService messageService;
     private AgentGateway agentGateway;
     private AgentRunMapper agentRunMapper;
-    private LearningAnalysisService learningAnalysisService;
+    private ChatTurnService chatTurnService;
     private AnalysisDispatchService analysisDispatchService;
     private ChatService chatService;
 
     private Conversation conversation;
     private Message userMessage;
+    private AgentRun runningRun;
     private LearningAnalysisService.TurnOpening opening;
 
     @BeforeEach
@@ -78,7 +85,7 @@ class ChatServiceTest {
         messageService = mock(MessageService.class);
         agentGateway = mock(AgentGateway.class);
         agentRunMapper = mock(AgentRunMapper.class);
-        learningAnalysisService = mock(LearningAnalysisService.class);
+        chatTurnService = mock(ChatTurnService.class);
         analysisDispatchService = mock(AnalysisDispatchService.class);
 
         conversation = new Conversation();
@@ -91,18 +98,22 @@ class ChatServiceTest {
         userMessage.setId(USER_MESSAGE_ID);
         userMessage.setConversationId(CONVERSATION_ID);
         userMessage.setContent(QUESTION);
+        userMessage.setClientRequestId(CLIENT_REQUEST_ID);
+
+        runningRun = new AgentRun();
+        runningRun.setId(RUN_ID);
+        runningRun.setConversationId(CONVERSATION_ID);
+        runningRun.setUserId(USER_ID);
+        runningRun.setStatus(AgentRunStatus.RUNNING);
+        runningRun.setClientRequestId(CLIENT_REQUEST_ID);
 
         opening = new LearningAnalysisService.TurnOpening(List.of(), null);
 
         when(conversationService.ownedConversation(USER_ID, CONVERSATION_ID)).thenReturn(conversation);
-        when(messageService.appendUserMessage(USER_ID, CONVERSATION_ID, QUESTION)).thenReturn(userMessage);
+        when(chatTurnService.findExisting(CONVERSATION_ID, CLIENT_REQUEST_ID)).thenReturn(Optional.empty());
+        when(chatTurnService.prepare(conversation, QUESTION, CLIENT_REQUEST_ID))
+                .thenReturn(new ChatTurnService.TurnSnapshot(userMessage, opening, runningRun, null));
         when(messageService.history(eq(CONVERSATION_ID), eq(USER_MESSAGE_ID), anyInt())).thenReturn(List.of());
-        when(learningAnalysisService.beginTurn(conversation, QUESTION)).thenReturn(opening);
-        when(agentRunMapper.insert(any(AgentRun.class))).thenAnswer(invocation -> {
-            AgentRun run = invocation.getArgument(0);
-            run.setId(RUN_ID);
-            return 1;
-        });
     }
 
     @Test
@@ -115,7 +126,7 @@ class ChatServiceTest {
         TestEmitter emitter = new TestEmitter(false, false);
         chatService = serviceWith(emitter);
 
-        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token");
 
         verify(messageService).appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList());
         verify(analysisDispatchService).dispatch(
@@ -124,8 +135,10 @@ class ChatServiceTest {
         assertThat(emitter.completed).isTrue();
         assertThat(completedRun().getStatus()).isEqualTo(AgentRunStatus.COMPLETED);
         verify(agentGateway, times(1)).streamReply(any(ChatAgentRequest.class), any(AgentStreamHandler.class));
-        // 没有重复保存：每个方法各一次
-        verify(messageService, times(1)).appendUserMessage(USER_ID, CONVERSATION_ID, QUESTION);
+        // 预创建事务只走一次；用户消息不是由 ChatService 自己重复写入的
+        verify(chatTurnService, times(1)).prepare(conversation, QUESTION, CLIENT_REQUEST_ID);
+        // run 上记录助手消息 id，供后续同 clientRequestId 回放定位
+        assertThat(completedRun().getAssistantMessageId()).isEqualTo(ASSISTANT_MESSAGE_ID);
         verify(analysisDispatchService, times(1)).dispatch(
                 any(Conversation.class), any(Message.class), any(String.class), any(Long.class),
                 any(String.class), any(LearningAnalysisService.TurnOpening.class));
@@ -142,7 +155,7 @@ class ChatServiceTest {
         TestEmitter emitter = new TestEmitter(true, false);
         chatService = serviceWith(emitter);
 
-        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token");
 
         verify(messageService, times(1)).appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList());
         verify(analysisDispatchService, times(1)).dispatch(
@@ -160,7 +173,7 @@ class ChatServiceTest {
         TestEmitter emitter = new TestEmitter(false, true);
         chatService = serviceWith(emitter);
 
-        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token");
 
         assertThat(emitter.completed).isTrue();
         verify(messageService, times(1)).appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList());
@@ -184,7 +197,7 @@ class ChatServiceTest {
         TestEmitter emitter = new TestEmitter(false, false);
         chatService = serviceWith(emitter);
 
-        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token");
 
         // 已生成的部分仍要保存，用户重进对话时不会看到空洞
         verify(messageService).appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(true), anyList());
@@ -206,7 +219,7 @@ class ChatServiceTest {
         TestEmitter emitter = new TestEmitter(false, false);
         chatService = serviceWith(emitter);
 
-        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token");
 
         verifyNoInteractions(analysisDispatchService);
         assertThat(completedRun().getStatus()).isEqualTo(AgentRunStatus.FAILED);
@@ -230,7 +243,7 @@ class ChatServiceTest {
         TestEmitter emitter = new TestEmitter(false, false);
         chatService = serviceWith(emitter);
 
-        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, "token");
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token");
 
         // ① 引用交给持久化层（落库后 GET /messages 才能恢复）
         ArgumentCaptor<List<CitationMetadata>> stored = ArgumentCaptor.forClass(List.class);
@@ -245,6 +258,55 @@ class ChatServiceTest {
                 .isEqualTo(List.of(new CitationResponse(10L, 1L, 0, "zenframe.md", true)));
     }
 
+    @Test
+    @DisplayName("幂等重放：已完成轮次直接回放原 id，不创建新 run、不调用 Agent")
+    void completedReplayReturnsOriginalIdsWithoutRegenerating() {
+        Message assistant = assistantMessage();
+        runningRun.setStatus(AgentRunStatus.COMPLETED);
+        runningRun.setAssistantMessageId(ASSISTANT_MESSAGE_ID);
+        when(chatTurnService.findExisting(CONVERSATION_ID, CLIENT_REQUEST_ID))
+                .thenReturn(Optional.of(new ChatTurnService.TurnSnapshot(
+                        userMessage, null, runningRun, assistant)));
+
+        chatService = serviceWith(new TestEmitter(false, false));
+
+        Throwable thrown = catchThrowable(() ->
+                chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token"));
+
+        assertThat(thrown).isInstanceOf(ChatReplayException.class);
+        ChatReplayException replay = (ChatReplayException) thrown;
+        assertThat(replay.getStatus()).isEqualTo(200);
+        assertThat(replay.getResponse().idempotentReplay()).isTrue();
+        assertThat(replay.getResponse().state()).isEqualTo(ChatReplayResponse.STATE_COMPLETED);
+        assertThat(replay.getResponse().userMessageId()).isEqualTo(USER_MESSAGE_ID);
+        assertThat(replay.getResponse().assistantMessageId()).isEqualTo(ASSISTANT_MESSAGE_ID);
+        assertThat(replay.getResponse().runId()).isEqualTo(RUN_ID);
+
+        // 重放不生成、不写库：这是幂等的核心要求
+        verifyNoInteractions(agentGateway);
+        verify(chatTurnService, never()).prepare(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("幂等重放：run 仍在 RUNNING 时返回 202 处理中，而不是 200")
+    void processingReplayReturns202() {
+        when(chatTurnService.findExisting(CONVERSATION_ID, CLIENT_REQUEST_ID))
+                .thenReturn(Optional.of(new ChatTurnService.TurnSnapshot(
+                        userMessage, null, runningRun, null)));
+
+        chatService = serviceWith(new TestEmitter(false, false));
+
+        Throwable thrown = catchThrowable(() ->
+                chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token"));
+
+        assertThat(thrown).isInstanceOf(ChatReplayException.class);
+        ChatReplayException replay = (ChatReplayException) thrown;
+        assertThat(replay.getStatus()).isEqualTo(202);
+        assertThat(replay.getResponse().state()).isEqualTo(ChatReplayResponse.STATE_PROCESSING);
+        verifyNoInteractions(agentGateway);
+        verify(chatTurnService, never()).prepare(any(), any(), any());
+    }
+
     private void handlerWithDeltaAndComplete() {
         doAnswer(invocation -> {
             AgentStreamHandler handler = invocation.getArgument(1);
@@ -257,7 +319,7 @@ class ChatServiceTest {
     private ChatService serviceWith(SseEmitter emitter) {
         TaskExecutor inline = Runnable::run;
         return new ChatService(conversationService, messageService, agentGateway,
-                agentRunMapper, learningAnalysisService, analysisDispatchService, inline) {
+                agentRunMapper, chatTurnService, analysisDispatchService, inline) {
             @Override
             protected SseEmitter createEmitter() {
                 return emitter;

@@ -158,11 +158,15 @@ CREATE TABLE IF NOT EXISTS `message` (
     `truncated`       TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '助手回复是否因 Token 上限被截断',
     `citations`       JSON                 DEFAULT NULL COMMENT '助手回复的结构化来源 [{documentId,chunkId,chunkIndex,sourceTitle}]；不存 chunk 正文',
     `sequence_no`     INT         NOT NULL COMMENT '对话内顺序，从 1 开始',
+    `client_request_id` VARCHAR(64)       DEFAULT NULL COMMENT '客户端幂等键；仅 USER 消息写入，其余为 NULL',
     `deleted_at`      DATETIME             DEFAULT NULL COMMENT '软删标记',
     `created_at`      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     -- 刻意加强：文档只写普通 INDEX，这里加 UNIQUE 以防并发写入撞号（见 plan.md §8）
     UNIQUE KEY `uk_msg_conv_seq` (`conversation_id`, `sequence_no`),
+    -- 聊天幂等：同一对话内一个 clientRequestId 只允许一条 USER 消息。
+    -- MySQL 唯一索引允许多个 NULL，因此 ASSISTANT 等不带幂等键的消息不受影响。
+    UNIQUE KEY `uk_msg_conv_client_request` (`conversation_id`, `client_request_id`),
     CONSTRAINT `fk_msg_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `conversation` (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
@@ -543,6 +547,8 @@ CREATE TABLE IF NOT EXISTS `agent_run` (
     `output_summary`  TEXT,
     `duration_ms`     INT               DEFAULT NULL,
     `error_message`   TEXT              COMMENT '给人看的失败说明，不存堆栈',
+    `client_request_id` VARCHAR(64)     DEFAULT NULL COMMENT 'CHAT run 的幂等键，与触发它的 USER 消息一致',
+    `assistant_message_id` BIGINT       DEFAULT NULL COMMENT '本轮最终落库的助手消息 id，供幂等回放定位',
     `created_at`      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `finished_at`     DATETIME          DEFAULT NULL,
     PRIMARY KEY (`id`),
@@ -550,6 +556,8 @@ CREATE TABLE IF NOT EXISTS `agent_run` (
     KEY `idx_agent_conv` (`conversation_id`),
     KEY `idx_agent_session` (`session_id`),
     KEY `idx_agent_run_trace` (`trace_id`),
+    -- 一轮对话只能有一条带幂等键的 run；ANALYSIS 等 run 该列为 NULL，不受约束。
+    UNIQUE KEY `uk_agent_conv_client_request` (`conversation_id`, `client_request_id`),
     CONSTRAINT `fk_agent_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
     CONSTRAINT `fk_agent_conv` FOREIGN KEY (`conversation_id`) REFERENCES `conversation` (`id`),
     CONSTRAINT `fk_agent_session` FOREIGN KEY (`session_id`) REFERENCES `learning_session` (`id`)

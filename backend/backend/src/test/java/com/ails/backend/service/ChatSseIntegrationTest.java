@@ -5,9 +5,12 @@ import com.ails.backend.agent.AgentStreamHandler;
 import com.ails.backend.agent.StreamCompletion;
 import com.ails.backend.dto.agent.AgentCitation;
 import com.ails.backend.dto.agent.ChatAgentRequest;
+import com.ails.backend.entity.AgentRun;
 import com.ails.backend.entity.Conversation;
 import com.ails.backend.entity.Message;
+import com.ails.backend.mapper.AgentRunMapper;
 import com.ails.backend.utils.JwtUtil;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +26,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -38,12 +42,15 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -55,7 +62,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
- * SSE 主动断开契约 —— 真实 HTTP 服务 + 真实 MySQL + 真实 ChatService/MessageService/规则分析。
+ * SSE 契约 + Chat 幂等 / 预创建事务 —— 真实 HTTP 服务 + 真实 MySQL + 真实
+ * ChatService/MessageService/规则分析。
  *
  * <p>默认跳过。启用：</p>
  * <pre>
@@ -67,6 +75,10 @@ import static org.mockito.Mockito.verify;
  * {@link HttpClient} 读取 {@code text/event-stream}，在收到指定事件后主动关闭响应体来模拟
  * 客户端断开；消息、agent_run、Evidence 全部由真实服务写入独立 MySQL 库
  * {@code ails_chat_sse_it}，断言直接读库。</p>
+ *
+ * <p>第 5 节验证幂等：A/B/C 三态、不同 clientRequestId、并发同 id、数据库唯一键、
+ * run 创建失败的整事务回滚、DTO 校验 400。幂等命中与失败注入分别通过真实 JSON
+ * 响应和 {@code @SpyBean} 断言，不靠 sleep 猜时序。</p>
  *
  * <p>Agent 侧被替换为 {@link ControllableAgentGateway}：本阶段验证的是后端 SSE 状态机，
  * 真实 Agent 的 MQ/HTTP 链路已在 Phase 2.1 的 MQ E2E 中覆盖。分析边界用
@@ -92,6 +104,9 @@ class ChatSseIntegrationTest {
     private static final String ANSWER_PART_1 = "TLB 缓存的是页表项。";
     private static final String ANSWER_PART_2 = "它让地址翻译不必每次访问内存。";
 
+    /** 独立测试库的幂等表结构只补一次；Spring 上下文在同类测试方法间复用。 */
+    private static volatile boolean idempotencySchemaReady;
+
     @LocalServerPort
     private int port;
 
@@ -112,6 +127,9 @@ class ChatSseIntegrationTest {
 
     @SpyBean
     private MessageService messageService;
+
+    @SpyBean
+    private AgentRunMapper agentRunMapper;
 
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
@@ -136,6 +154,7 @@ class ChatSseIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        ensureChatIdempotencySchema();
         clearDatabase();
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         userId = insertUser("chat_sse_it_" + suffix);
@@ -409,26 +428,235 @@ class ChatSseIntegrationTest {
         assertThat(denied.statusCode()).isEqualTo(404);
     }
 
-    // ===================== 5. 重复请求 / 越权 =====================
+    // ===================== 5. 幂等（clientRequestId） =====================
 
     @Test
-    @DisplayName("未实现：无幂等键，重复 POST 同一内容会重复落库（作为缺口证据记录，不计为通过）")
-    void duplicatePostWithoutIdempotencyKeyCreatesDuplicateMessages() throws Exception {
-        // 第一次请求
-        try (SseStream stream = openStream(conversationId, token, QUESTION)) {
+    @DisplayName("B 态重放：同 clientRequestId 已完成，再次 POST → 200 幂等回放，不新增消息/run")
+    void completedReplayReturns200AndDoesNotWrite() throws Exception {
+        String clientRequestId = newClientRequestId();
+        long assistantMessageId;
+        long runId;
+        try (SseStream stream = openStream(conversationId, token, QUESTION, clientRequestId)) {
+            SseEvent end = readUntil(stream, "message.end");
+            assertThat(end).isNotNull();
+            JsonNode data = objectMapper.readTree(end.data());
+            assistantMessageId = data.get("messageId").asLong();
+            runId = data.get("runId").asLong();
+        }
+        Long userMessageId = jdbc.queryForObject(
+                "SELECT id FROM message WHERE role = 'USER'", Long.class);
+        await("run 终态", () -> "COMPLETED".equals(runStatus()));
+
+        HttpResponse<String> replay = postJson(conversationId, token, QUESTION, clientRequestId);
+
+        assertThat(replay.statusCode()).as("body=%s", replay.body()).isEqualTo(200);
+        JsonNode body = objectMapper.readTree(replay.body());
+        assertThat(body.get("idempotentReplay").asBoolean()).isTrue();
+        assertThat(body.get("state").asText()).isEqualTo("COMPLETED");
+        assertThat(body.get("conversationId").asLong()).isEqualTo(conversationId);
+        assertThat(body.get("userMessageId").asLong()).isEqualTo(userMessageId);
+        assertThat(body.get("assistantMessageId").asLong()).isEqualTo(assistantMessageId);
+        assertThat(body.get("runId").asLong()).isEqualTo(runId);
+        assertThat(body.get("runStatus").asText()).isEqualTo("COMPLETED");
+
+        // 回放不产生任何新写入，也没有重新生成
+        assertThat(countMessages("USER")).isEqualTo(1);
+        assertThat(countMessages("ASSISTANT")).isEqualTo(1);
+        assertThat(countRuns("CHAT")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("不同 clientRequestId：正常创建第二轮，消息与 run 各 +1")
+    void differentClientRequestIdsCreateSeparateTurns() throws Exception {
+        try (SseStream stream = openStream(conversationId, token, QUESTION, newClientRequestId())) {
             assertThat(readUntil(stream, "message.end")).isNotNull();
         }
-        // 第二次请求：服务端没有 clientRequestId / 幂等键，无法区分“重试”和“再问一次”。
-        try (SseStream stream = openStream(conversationId, token, QUESTION)) {
+        try (SseStream stream = openStream(conversationId, token, QUESTION, newClientRequestId())) {
             assertThat(readUntil(stream, "message.end")).isNotNull();
         }
 
         assertThat(countMessages("USER")).isEqualTo(2);
         assertThat(countMessages("ASSISTANT")).isEqualTo(2);
         assertThat(countRuns("CHAT")).isEqualTo(2);
-        // 相同内容产生的 Evidence 由 dedupe_key 收敛，Revision 不重复；重复的只是消息与 run。
-        assertThat(count("learning_evidence")).isEqualTo(1);
-        assertThat(count("understanding_revision")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("A 态重放：原请求仍在生成 → 202 PROCESSING，绝不返回 200 假装成功")
+    void inFlightReplayReturns202Processing() throws Exception {
+        String clientRequestId = newClientRequestId();
+        agentGateway.blockStream();
+
+        CompletableFuture<SseEvent> first = CompletableFuture.supplyAsync(() -> {
+            try (SseStream stream = openStream(conversationId, token, QUESTION, clientRequestId)) {
+                return readUntil(stream, "message.end");
+            } catch (Exception e) {
+                throw new java.util.concurrent.CompletionException(e);
+            }
+        });
+        assertThat(agentGateway.awaitStreamEntered(20, TimeUnit.SECONDS))
+                .as("首个请求应已进入生成阶段（run=RUNNING）")
+                .isTrue();
+
+        HttpResponse<String> replay = postJson(conversationId, token, QUESTION, clientRequestId);
+
+        assertThat(replay.statusCode()).as("body=%s", replay.body()).isEqualTo(202);
+        JsonNode body = objectMapper.readTree(replay.body());
+        assertThat(body.get("idempotentReplay").asBoolean()).isTrue();
+        assertThat(body.get("state").asText()).isEqualTo("PROCESSING");
+        assertThat(body.get("message").asText()).contains("请求处理中");
+        assertThat(body.get("runStatus").asText()).isEqualTo("RUNNING");
+        // 重放期间库里只有首请求的一轮，没有第二条用户消息 / 第二个 run
+        assertThat(countMessages("USER")).isEqualTo(1);
+        assertThat(countMessages("ASSISTANT")).isZero();
+        assertThat(countRuns("CHAT")).isEqualTo(1);
+
+        agentGateway.releaseStream();
+        SseEvent end = first.get(20, TimeUnit.SECONDS);
+        assertThat(end).isNotNull();
+        assertThat(end.name()).isEqualTo("message.end");
+        await("首请求正常完成", () -> "COMPLETED".equals(runStatus()));
+    }
+
+    @Test
+    @DisplayName("C 态：USER 消息存在但无 run → 409 INCONSISTENT，不补 run、不重跑")
+    void userMessageWithoutRunReturns409Inconsistent() throws Exception {
+        String clientRequestId = newClientRequestId();
+        jdbc.update("INSERT INTO message (conversation_id, role, message_type, content, "
+                        + "sequence_no, client_request_id) VALUES (?, 'USER', 'TEXT', ?, 1, ?)",
+                conversationId, QUESTION, clientRequestId);
+
+        HttpResponse<String> response = postJson(conversationId, token, QUESTION, clientRequestId);
+
+        assertThat(response.statusCode()).as("body=%s", response.body()).isEqualTo(409);
+        JsonNode body = objectMapper.readTree(response.body());
+        assertThat(body.get("idempotentReplay").asBoolean()).isTrue();
+        assertThat(body.get("state").asText()).isEqualTo("INCONSISTENT");
+        assertThat(body.get("userMessageId").asLong()).isPositive();
+        assertThat(body.get("runId").isNull()).isTrue();
+
+        // 不自动补 run、不自动重跑
+        assertThat(countMessages("USER")).isEqualTo(1);
+        assertThat(countMessages("ASSISTANT")).isZero();
+        assertThat(countRuns("CHAT")).isZero();
+    }
+
+    @Test
+    @DisplayName("同 clientRequestId 复用于不同内容 → 409 CLIENT_REQUEST_CONFLICT")
+    void sameClientRequestIdWithDifferentContentReturns409() throws Exception {
+        String clientRequestId = newClientRequestId();
+        try (SseStream stream = openStream(conversationId, token, QUESTION, clientRequestId)) {
+            assertThat(readUntil(stream, "message.end")).isNotNull();
+        }
+
+        HttpResponse<String> response = postJson(
+                conversationId, token, "另一个完全不同的问题", clientRequestId);
+
+        assertThat(response.statusCode()).as("body=%s", response.body()).isEqualTo(409);
+        JsonNode body = objectMapper.readTree(response.body());
+        assertThat(body.get("state").asText()).isEqualTo("CLIENT_REQUEST_CONFLICT");
+        assertThat(countMessages("USER")).isEqualTo(1);
+        assertThat(countRuns("CHAT")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("并发同 clientRequestId：数据库唯一键兜底，只有一个赢家，另一个 202")
+    void concurrentSameClientRequestIdCreatesExactlyOneTurn() throws Exception {
+        String clientRequestId = newClientRequestId();
+        agentGateway.blockStream();
+
+        HttpRequest firstRequest = postRequest(conversationId, token, QUESTION, clientRequestId);
+        HttpRequest secondRequest = postRequest(conversationId, token, QUESTION, clientRequestId);
+        CompletableFuture<HttpResponse<InputStream>> firstFuture =
+                http.sendAsync(firstRequest, HttpResponse.BodyHandlers.ofInputStream());
+        CompletableFuture<HttpResponse<InputStream>> secondFuture =
+                http.sendAsync(secondRequest, HttpResponse.BodyHandlers.ofInputStream());
+
+        assertThat(agentGateway.awaitStreamEntered(20, TimeUnit.SECONDS))
+                .as("赢家应已开始生成并阻塞在 Agent 调用里")
+                .isTrue();
+        HttpResponse<InputStream> first = firstFuture.get(20, TimeUnit.SECONDS);
+        HttpResponse<InputStream> second = secondFuture.get(20, TimeUnit.SECONDS);
+
+        HttpResponse<InputStream> streaming = first.statusCode() == 200 ? first : second;
+        HttpResponse<InputStream> replay = first.statusCode() == 200 ? second : first;
+        assertThat(streaming.statusCode()).isEqualTo(200);
+        assertThat(streaming.headers().firstValue("Content-Type").orElse(""))
+                .contains("text/event-stream");
+        assertThat(replay.statusCode())
+                .as("并发同幂等键只能有一个赢家，另一个必须是 202 而不是 200")
+                .isEqualTo(202);
+        String replayBody = new String(replay.body().readAllBytes(), StandardCharsets.UTF_8);
+        assertThat(objectMapper.readTree(replayBody).get("state").asText()).isEqualTo("PROCESSING");
+
+        agentGateway.releaseStream();
+        try (SseStream stream = new SseStream(streaming.body(),
+                streaming.headers().firstValue("Content-Type").orElse(""))) {
+            assertThat(readUntil(stream, "message.end")).isNotNull();
+        }
+        await("唯一 run 终态", () -> "COMPLETED".equals(runStatus()));
+
+        assertThat(countMessages("USER")).isEqualTo(1);
+        assertThat(countMessages("ASSISTANT")).isEqualTo(1);
+        assertThat(countRuns("CHAT")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("数据库唯一键 uk_msg_conv_client_request 真实生效：重复 USER 消息插入被拒绝")
+    void duplicateClientRequestIdRejectedByDatabaseConstraint() throws Exception {
+        String clientRequestId = newClientRequestId();
+        try (SseStream stream = openStream(conversationId, token, QUESTION, clientRequestId)) {
+            assertThat(readUntil(stream, "message.end")).isNotNull();
+        }
+
+        assertThatThrownBy(() -> jdbc.update(
+                "INSERT INTO message (conversation_id, role, message_type, content, "
+                        + "sequence_no, client_request_id) VALUES (?, 'USER', 'TEXT', 'dup', 999, ?)",
+                conversationId, clientRequestId))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("uk_msg_conv_client_request");
+    }
+
+    // ===================== 5.1 T2：预创建事务边界 =====================
+
+    @Test
+    @DisplayName("方案 1：run 创建失败 → 整个预创建事务回滚，不留 USER 消息 / Session / 序号")
+    void runCreationFailureRollsBackWholeTurn() throws Exception {
+        doThrow(new RuntimeException("simulated run insert failure"))
+                .when(agentRunMapper).insert(any(AgentRun.class));
+
+        HttpResponse<String> response = postJson(
+                conversationId, token, QUESTION, newClientRequestId());
+
+        assertThat(response.statusCode()).as("body=%s", response.body()).isEqualTo(500);
+        assertThat(response.body()).contains("服务器内部错误");
+        // 方案 1 的核心断言：任何一步失败都不能留下半截状态
+        assertThat(countMessages("USER")).isZero();
+        assertThat(countMessages("ASSISTANT")).isZero();
+        assertThat(countRuns("CHAT")).isZero();
+        assertThat(count("learning_session")).isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT last_message_seq FROM conversation WHERE id = ?", Integer.class,
+                conversationId)).isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT session_id FROM conversation WHERE id = ?", Long.class,
+                conversationId)).isNull();
+    }
+
+    @Test
+    @DisplayName("请求校验：缺 clientRequestId / 长度越界 / 内容超长均返回 400")
+    void invalidRequestFieldsReturn400() throws Exception {
+        assertThat(postRaw("{\"content\":\"" + QUESTION + "\"}").statusCode()).isEqualTo(400);
+        assertThat(postRaw("{\"content\":\"" + QUESTION + "\",\"clientRequestId\":\"short\"}")
+                .statusCode()).isEqualTo(400);
+        assertThat(postRaw("{\"content\":\"" + QUESTION + "\",\"clientRequestId\":\""
+                + "x".repeat(65) + "\"}").statusCode()).isEqualTo(400);
+        assertThat(postRaw("{\"content\":\"" + "a".repeat(8001)
+                + "\",\"clientRequestId\":\"" + newClientRequestId() + "\"}")
+                .statusCode()).isEqualTo(400);
+
+        // 校验失败不能落库
+        assertThat(countMessages("USER")).isZero();
+        assertThat(countRuns("CHAT")).isZero();
     }
 
     @Test
@@ -446,6 +674,58 @@ class ChatSseIntegrationTest {
     }
 
     // ===================== 辅助 =====================
+
+    /**
+     * 测试库可能由更早版本的 schema.sql 创建。{@code CREATE TABLE IF NOT EXISTS}
+     * 不会给已存在的表补列，所以这里按 schema-migration-chat-idempotency.sql 的
+     * 内容补一次结构（幂等）。只作用于独立测试库，不影响生产迁移脚本。
+     */
+    private void ensureChatIdempotencySchema() {
+        if (idempotencySchemaReady) {
+            return;
+        }
+        synchronized (ChatSseIntegrationTest.class) {
+            if (idempotencySchemaReady) {
+                return;
+            }
+            ensureColumn("message", "client_request_id",
+                    "ALTER TABLE message ADD COLUMN client_request_id VARCHAR(64) NULL "
+                            + "AFTER sequence_no");
+            ensureIndex("message", "uk_msg_conv_client_request",
+                    "ALTER TABLE message ADD UNIQUE KEY uk_msg_conv_client_request "
+                            + "(conversation_id, client_request_id)");
+            ensureColumn("agent_run", "client_request_id",
+                    "ALTER TABLE agent_run ADD COLUMN client_request_id VARCHAR(64) NULL "
+                            + "AFTER error_message");
+            ensureColumn("agent_run", "assistant_message_id",
+                    "ALTER TABLE agent_run ADD COLUMN assistant_message_id BIGINT NULL "
+                            + "AFTER client_request_id");
+            ensureIndex("agent_run", "uk_agent_conv_client_request",
+                    "ALTER TABLE agent_run ADD UNIQUE KEY uk_agent_conv_client_request "
+                            + "(conversation_id, client_request_id)");
+            idempotencySchemaReady = true;
+        }
+    }
+
+    private void ensureColumn(String table, String column, String ddl) {
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns "
+                        + "WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",
+                Integer.class, table, column);
+        if (count == null || count == 0) {
+            jdbc.execute(ddl);
+        }
+    }
+
+    private void ensureIndex(String table, String index, String ddl) {
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.statistics "
+                        + "WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?",
+                Integer.class, table, index);
+        if (count == null || count == 0) {
+            jdbc.execute(ddl);
+        }
+    }
 
     private void blockAnalysis(CountDownLatch entered, CountDownLatch release) {
         doAnswer(invocation -> {
@@ -487,32 +767,67 @@ class ChatSseIntegrationTest {
     }
 
     private SseStream openStream(Long conversation, String authToken, String content) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl() + "/api/conversations/" + conversation + "/messages"))
-                .timeout(Duration.ofSeconds(30))
-                .header("Authorization", "Bearer " + authToken)
-                .header("Accept", "text/event-stream")
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(
-                        "{\"content\":\"" + content + "\"}", StandardCharsets.UTF_8))
-                .build();
-        HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        return openStream(conversation, authToken, content, newClientRequestId());
+    }
+
+    private SseStream openStream(Long conversation, String authToken, String content,
+                                 String clientRequestId) throws Exception {
+        HttpResponse<InputStream> response = http.send(
+                postRequest(conversation, authToken, content, clientRequestId),
+                HttpResponse.BodyHandlers.ofInputStream());
         assertThat(response.statusCode()).isEqualTo(200);
         return new SseStream(response.body(),
                 response.headers().firstValue("Content-Type").orElse(""));
     }
 
-    private HttpResponse<String> postJson(Long conversation, String authToken, String content) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
+    private HttpResponse<String> postJson(Long conversation, String authToken, String content)
+            throws Exception {
+        return postJson(conversation, authToken, content, newClientRequestId());
+    }
+
+    private HttpResponse<String> postJson(Long conversation, String authToken, String content,
+                                          String clientRequestId) throws Exception {
+        return http.send(postRequest(conversation, authToken, content, clientRequestId),
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    }
+
+    private HttpRequest postRequest(Long conversation, String authToken, String content,
+                                    String clientRequestId) {
+        return HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl() + "/api/conversations/" + conversation + "/messages"))
                 .timeout(Duration.ofSeconds(30))
                 .header("Authorization", "Bearer " + authToken)
                 .header("Accept", "text/event-stream")
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
-                        "{\"content\":\"" + content + "\"}", StandardCharsets.UTF_8))
+                        messageBody(content, clientRequestId), StandardCharsets.UTF_8))
+                .build();
+    }
+
+    /** 走当前测试对话，用于校验失败等不需要复用请求对象的场景。 */
+    private HttpResponse<String> postRaw(String body) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + "/api/conversations/" + conversationId + "/messages"))
+                .timeout(Duration.ofSeconds(30))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "text/event-stream")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
                 .build();
         return http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    }
+
+    private String messageBody(String content, String clientRequestId) {
+        try {
+            return objectMapper.writeValueAsString(
+                    Map.of("content", content, "clientRequestId", clientRequestId));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("failed to serialize test message body", e);
+        }
+    }
+
+    private static String newClientRequestId() {
+        return UUID.randomUUID().toString();
     }
 
     private List<JsonNode> listMessages() throws Exception {
@@ -672,10 +987,33 @@ class ChatSseIntegrationTest {
 
         private volatile Mode mode = Mode.NORMAL;
         private volatile List<AgentCitation> citations = List.of();
+        /** blockStream=true 时，生成线程停在这里，模拟「请求仍在处理中」。 */
+        private volatile boolean blockStream;
+        private volatile CountDownLatch streamEntered = new CountDownLatch(1);
+        private volatile CountDownLatch streamRelease = new CountDownLatch(1);
 
-        void reset() {
+        synchronized void reset() {
             mode = Mode.NORMAL;
             citations = List.of();
+            blockStream = false;
+            streamRelease.countDown();
+            streamEntered = new CountDownLatch(1);
+            streamRelease = new CountDownLatch(1);
+        }
+
+        synchronized void blockStream() {
+            blockStream = true;
+            streamEntered = new CountDownLatch(1);
+            streamRelease = new CountDownLatch(1);
+        }
+
+        boolean awaitStreamEntered(long timeout, TimeUnit unit) throws InterruptedException {
+            return streamEntered.await(timeout, unit);
+        }
+
+        synchronized void releaseStream() {
+            blockStream = false;
+            streamRelease.countDown();
         }
 
         void emptyStream() {
@@ -697,6 +1035,17 @@ class ChatSseIntegrationTest {
 
         @Override
         public void streamReply(ChatAgentRequest request, AgentStreamHandler handler) {
+            if (blockStream) {
+                streamEntered.countDown();
+                try {
+                    if (!streamRelease.await(30, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("test did not release agent stream in time");
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
             switch (mode) {
                 case EMPTY_STREAM -> handler.onError(502,
                         "模型返回空流（reason=empty_stream, status=200, attempts=2）");
