@@ -1,10 +1,13 @@
 package com.ails.backend.controller;
 
 import com.ails.backend.common.ApiResponse;
+import com.ails.backend.dto.concept.ConceptRelationResponse;
 import com.ails.backend.dto.concept.ConceptRequest;
 import com.ails.backend.dto.concept.ConceptResponse;
 import com.ails.backend.dto.space.LearningSpaceRequest;
 import com.ails.backend.dto.space.LearningSpaceResponse;
+import com.ails.backend.enums.RelationType;
+import com.ails.backend.service.ConceptRelationService;
 import com.ails.backend.service.ConceptService;
 import com.ails.backend.service.LearningSpaceService;
 import com.ails.backend.utils.SecurityUtil;
@@ -17,6 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -33,6 +37,7 @@ public class SpaceController {
 
     private final LearningSpaceService spaceService;
     private final ConceptService conceptService;
+    private final ConceptRelationService conceptRelationService;
 
     @GetMapping
     public ApiResponse<List<LearningSpaceResponse>> listMine() {
@@ -70,5 +75,23 @@ public class SpaceController {
     public ApiResponse<ConceptResponse> createConcept(@PathVariable Long id,
                                                       @Valid @RequestBody ConceptRequest request) {
         return ApiResponse.ok("创建成功", conceptService.createInSpace(SecurityUtil.currentUserId(), id, request));
+    }
+
+    /**
+     * 某概念的一跳相关概念，供 Agent 的 Evidence 受控扩展使用。
+     * <p>
+     * 只读；当前用户必须拥有该空间，被查询概念必须属于该空间。
+     * {@code types} 默认 PREREQUISITE,RELATED；{@code limit} 服务端上限
+     * {@link ConceptRelationService#MAX_LIMIT}。返回的 {@code direction}
+     * 相对被查询概念（INCOMING / OUTGOING）。
+     */
+    @GetMapping("/{id}/concepts/{conceptId}/relations")
+    public ApiResponse<List<ConceptRelationResponse>> listConceptRelations(
+            @PathVariable Long id,
+            @PathVariable Long conceptId,
+            @RequestParam(required = false) List<RelationType> types,
+            @RequestParam(required = false) Integer limit) {
+        return ApiResponse.ok(conceptRelationService.listRelated(
+                SecurityUtil.currentUserId(), id, conceptId, types, limit));
     }
 }

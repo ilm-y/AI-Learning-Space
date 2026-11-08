@@ -38,6 +38,8 @@ import httpx
 from app.retriever.base import (
     KnowledgeQuery,
     KnowledgeResult,
+    RelatedConceptResult,
+    RelatedConceptStatus,
     RetrievalError,
 )
 from app.retriever.knowledge import AllowedDocument, KnowledgeSearchService
@@ -46,6 +48,7 @@ from app.schemas import (
     Concept,
     EvidenceItem,
     MemoryItem,
+    RelatedConcept,
     Understanding,
     UnderstandingRevision,
 )
@@ -224,6 +227,93 @@ class HttpBackendRetriever:
             reverse=True,
         )
         return results[:limit]
+
+    async def get_related_concepts(
+        self,
+        user_id: int,
+        space_id: int,
+        concept_ids: list[int],
+        *,
+        relation_types: tuple[str, ...] = ("PREREQUISITE", "RELATED"),
+        limit: int = 3,
+    ) -> RelatedConceptResult:
+        """查询一轮识别概念的一跳相关概念。
+
+        只在 Evidence 检索被触发时由 Runtime 调用。每个概念一次请求，客户端去重；
+        任一请求失败都会体现在 status / warning 上，**不会**退化成“没有关系”。
+        后端接口本身按登录用户 + 空间校验，Agent 不自行推断权限。
+        """
+        if limit <= 0 or not concept_ids:
+            return RelatedConceptResult(status=RelatedConceptStatus.EMPTY)
+
+        types = [item for item in relation_types if item]
+        if not types:
+            return RelatedConceptResult(status=RelatedConceptStatus.EMPTY)
+
+        params: dict[str, Any] = {
+            "types": ",".join(types),
+            "limit": limit,
+        }
+        items: list[RelatedConcept] = []
+        failures: list[int] = []
+        successes = 0
+        seen: set[int] = set()
+
+        for concept_id in concept_ids:
+            path = f"/api/spaces/{space_id}/concepts/{concept_id}/relations"
+            try:
+                data = await self._get(path, params=params, fatal=False)
+            except RetrievalError as exc:
+                # _get 对 401 始终抛错，即使 fatal=False。这里必须自己兜住：
+                # 相关概念查询失败不能影响原始概念的 Evidence 检索。
+                log.warning(
+                    "相关概念查询失败：space=%s concept=%s error=%s",
+                    space_id, concept_id, exc,
+                )
+                failures.append(concept_id)
+                continue
+
+            if data is None or not isinstance(data, list):
+                # _get 已在 HTTP / 业务错误时打过日志；这里补一条带上下文的 warning。
+                log.warning(
+                    "相关概念查询失败或响应格式异常：space=%s concept=%s",
+                    space_id, concept_id,
+                )
+                failures.append(concept_id)
+                continue
+
+            successes += 1
+            for raw in data:
+                item = _parse_one(raw, RelatedConcept)
+                if item is None:
+                    continue
+                if item.concept_id <= 0 or item.concept_id == concept_id:
+                    continue
+                if item.relation_type not in types:
+                    continue
+                if item.concept_id in seen:
+                    continue
+                seen.add(item.concept_id)
+                items.append(item.model_copy(update={"source_concept_id": concept_id}))
+
+        if failures and successes == 0:
+            status = RelatedConceptStatus.FAILED
+        elif failures:
+            status = RelatedConceptStatus.PARTIAL
+        elif items:
+            status = RelatedConceptStatus.OK
+        else:
+            status = RelatedConceptStatus.EMPTY
+
+        warning = None
+        if failures:
+            warning = (
+                f"相关概念查询失败（space={space_id}, conceptIds={failures}），"
+                "本次未做跨概念 Evidence 扩展。"
+            )
+            log.warning(warning)
+
+        return RelatedConceptResult(items=items, status=status, warning=warning)
 
     async def get_revisions(
         self, user_id: int, concept_ids: list[int]

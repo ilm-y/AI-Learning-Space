@@ -68,6 +68,9 @@ PRIORITY_MEMORY = 50
 PRIORITY_KNOWLEDGE_STATUS = 45
 PRIORITY_KNOWLEDGE = 40
 PRIORITY_EVIDENCE = 20
+# 跨概念扩展证据优先级更低：它是「相关概念的历史参考」，永远不能挤掉
+# 当前概念自己的判定依据。
+PRIORITY_RELATED_EVIDENCE = 18
 
 # 渲染进 System Instruction 时的区块顺序（与优先级无关：优先级决定谁被丢，
 # 顺序决定人读起来顺不顺）。session 放最前：它是后面一切内容的框架。
@@ -79,6 +82,7 @@ RENDER_ORDER = (
     "knowledge_status",
     "knowledge",
     "evidence",
+    "related_evidence",
 )
 
 # 检索层状态描述「检索发生了什么」；预算裁剪后的状态描述「模型最终看到了什么」。
@@ -488,6 +492,20 @@ class ContextBuilder:
             # 复盘轨迹已经把关联证据按时间渲染过；再走通用 evidence 区块会重复注入。
             if evidence.id in trajectory_evidence_ids:
                 continue
+            if evidence.is_cross_concept:
+                # 受控一跳扩展来的证据单独成块：它是其他概念的历史证据，
+                # 只能作为参考，不能用来改写当前概念的 Understanding。
+                sections.append(
+                    ContextSection(
+                        name=f"related_evidence:{evidence.id}",
+                        title="相关概念判定依据（历史参考）",
+                        content=_render_related_evidence(evidence),
+                        priority=PRIORITY_RELATED_EVIDENCE,
+                        source_ids=[f"evidence:{evidence.id}"],
+                        dedupe_key=f"related_evidence:{evidence.id}",
+                    )
+                )
+                continue
             sections.append(
                 ContextSection(
                     name=f"evidence:{evidence.id}",
@@ -662,6 +680,10 @@ class ContextBuilder:
         # 这里只负责把它带进 context preview 与 meta，不把失败伪装成「没有资料」。
         if state.knowledge_warning:
             warnings.append(state.knowledge_warning)
+        # 相关概念查询失败必须与「没有相关概念」区分开：前者是依赖失败，
+        # 后者是正常的空结果。这里只把检索层给出的失败原因带出来。
+        if state.related_concepts_warning:
+            warnings.append(state.related_concepts_warning)
         pending = [section.name for section in sections if section.dropped]
         if pending:
             warnings.append(f"以下片段因超出 Token 预算被丢弃：{', '.join(pending)}")
@@ -714,6 +736,13 @@ _BLOCK_HEADINGS = {
     "evidence": (
         "判定依据",
         "> 只在这些依据被问起（「为什么你认为我理解了」）或需要复盘时使用，不要主动罗列。",
+    ),
+    "related_evidence": (
+        "相关概念判定依据（历史参考）",
+        "> 这些证据来自与本轮概念存在 PREREQUISITE / RELATED 关系的其他概念，"
+        "通过受控一跳扩展得到，仅作历史参考。它们属于各自标注的概念，"
+        "不能改写、推断或覆盖「学习者的当前认知」中当前概念的 Understanding；"
+        "不要把它们说成当前概念自己的掌握证据，也不要主动罗列。",
     ),
 }
 
@@ -1034,3 +1063,27 @@ def _render_evidence(evidence) -> str:
     when = _format_time(evidence.created_at)
     prefix = f"{when} ｜ " if when else ""
     return f"- [{label}/{evidence_type}] {prefix}{evidence.observation}"
+
+
+def _render_related_evidence(evidence) -> str:
+    """渲染跨概念证据：明确标注扩展依据、发起概念与真实归属。
+
+    `related_via` / `source_concept_id` / `is_cross_concept` 是 Agent 侧标记，
+    `concept_id` 始终是这条证据的真实归属，不能被改写。
+    """
+    label = _CORRECTNESS_LABEL.get(evidence.correctness, evidence.correctness.value)
+    evidence_type = _EVIDENCE_TYPE_LABEL.get(
+        evidence.evidence_type, evidence.evidence_type.value
+    )
+    when = _format_time(evidence.created_at)
+    prefix = f"{when} ｜ " if when else ""
+    via = evidence.related_via or "RELATED"
+    source = (
+        f"（经概念 #{evidence.source_concept_id} 关联）"
+        if evidence.source_concept_id is not None
+        else ""
+    )
+    return (
+        f"- [{label}/{evidence_type}] 关联依据：{via}{source}"
+        f" ｜ 证据归属概念：#{evidence.concept_id} ｜ {prefix}{evidence.observation}"
+    )

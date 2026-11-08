@@ -29,6 +29,7 @@ from app.schemas import (
     EvidenceItem,
     KnowledgeChunk,
     MemoryItem,
+    RelatedConcept,
     Understanding,
     UnderstandingRevision,
 )
@@ -92,6 +93,32 @@ class KnowledgeResult:
         return cls(status=KnowledgeStatus.DEGRADED, warning=warning)
 
 
+class RelatedConceptStatus(str, Enum):
+    """一次相关概念查询的结果状态。
+
+    **不能把 FAILED 当成 EMPTY**：接口失败时如果只返回空列表，上层就会把
+    “没查到关系”和“关系查询坏了”混为一谈，用户得到的是一次静默的弱化召回。
+    """
+
+    OK = "OK"
+    EMPTY = "EMPTY"
+    PARTIAL = "PARTIAL"
+    FAILED = "FAILED"
+
+
+@dataclass(slots=True)
+class RelatedConceptResult:
+    """相关概念查询结果。
+
+    items 是“另一端概念”的候选；status 说明查询本身是否完整。
+    warning 在 FAILED / PARTIAL 时给出可观测的原因，会进 trace 与 meta warnings。
+    """
+
+    items: list[RelatedConcept] = field(default_factory=list)
+    status: RelatedConceptStatus = RelatedConceptStatus.EMPTY
+    warning: str | None = None
+
+
 @runtime_checkable
 class Retriever(Protocol):
     @property
@@ -129,6 +156,23 @@ class Retriever(Protocol):
         self, user_id: int, concept_ids: list[int], limit: int
     ) -> list[EvidenceItem]:
         """判定依据。按需召回，默认条数很小 —— 不是每次回答都需要它。"""
+        ...
+
+    async def get_related_concepts(
+        self,
+        user_id: int,
+        space_id: int,
+        concept_ids: list[int],
+        *,
+        relation_types: tuple[str, ...] = ("PREREQUISITE", "RELATED"),
+        limit: int = 3,
+    ) -> RelatedConceptResult:
+        """查询识别概念的一跳相关概念，供 Evidence 受控扩展使用。
+
+        只在 Evidence 检索被触发时调用；失败必须返回 FAILED / PARTIAL 与 warning，
+        不能伪装成“没有相关概念”。结果中的 `source_concept_id` 由具体实现补上，
+        表示这一跳是从哪个原概念出发的。
+        """
         ...
 
     async def get_revisions(

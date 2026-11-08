@@ -4,6 +4,8 @@ from app.retriever.base import (
     KnowledgeQuery,
     KnowledgeResult,
     KnowledgeStatus,
+    RelatedConceptResult,
+    RelatedConceptStatus,
     RetrievalError,
     Retriever,
 )
@@ -22,6 +24,8 @@ __all__ = [
     "KnowledgeResult",
     "KnowledgeSearchService",
     "KnowledgeStatus",
+    "RelatedConceptResult",
+    "RelatedConceptStatus",
     "RetrievalError",
     "Retriever",
     "build_retriever",

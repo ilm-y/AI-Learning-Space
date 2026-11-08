@@ -16,7 +16,13 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from app.retriever.base import KnowledgeQuery, KnowledgeResult, KnowledgeStatus
+from app.retriever.base import (
+    KnowledgeQuery,
+    KnowledgeResult,
+    KnowledgeStatus,
+    RelatedConceptResult,
+    RelatedConceptStatus,
+)
 from app.schemas import (
     Concept,
     EvidenceItem,
@@ -110,6 +116,21 @@ class FixtureRetriever:
         wanted = set(concept_ids)
         items = [item for item in self._evidences if item.concept_id in wanted]
         return items[-limit:] if limit > 0 else []
+
+    async def get_related_concepts(
+        self,
+        user_id: int,
+        space_id: int,
+        concept_ids: list[int],
+        *,
+        relation_types: tuple[str, ...] = ("PREREQUISITE", "RELATED"),
+        limit: int = 3,
+    ) -> RelatedConceptResult:
+        """Fixture 没有关系数据；返回 EMPTY 而不是伪造一组跨概念关系。
+
+        这是“样例数据本来就没有关系”，不是“查询失败”，所以不能用 FAILED。
+        """
+        return RelatedConceptResult(status=RelatedConceptStatus.EMPTY)
 
     async def get_revisions(
         self, user_id: int, concept_ids: list[int]

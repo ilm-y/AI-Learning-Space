@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     # 一次知识检索（白名单 + 查询向量 + Qdrant）的总时限；超时按依赖错误降级为空知识。
     knowledge_timeout_seconds: float = 15.0
     evidence_top_k: int = 3
+    # 受控一跳跨概念扩展：最多附加几个“相关概念”，以及为它们单独保留的
+    # Evidence 条数预算。设为 0 即关闭扩展。它们只在 Evidence 检索被触发时生效。
+    evidence_related_concepts_limit: int = 3
+    evidence_related_evidence_limit: int = 2
 
     # ---------- 上下文预算 ----------
     recent_history_limit: int = 12
@@ -186,6 +190,10 @@ class Settings(BaseSettings):
             raise ValueError("knowledge_min_score 必须在 [-1, 1] 之间")
         if self.knowledge_timeout_seconds <= 0:
             raise ValueError("knowledge_timeout_seconds 必须为正数")
+        if self.evidence_related_concepts_limit < 0:
+            raise ValueError("evidence_related_concepts_limit 不能为负数")
+        if self.evidence_related_evidence_limit < 0:
+            raise ValueError("evidence_related_evidence_limit 不能为负数")
         if self.internal_identity_ttl_seconds <= 0:
             raise ValueError("internal_identity_ttl_seconds 必须为正数")
         if self.internal_identity_max_ttl_seconds < self.internal_identity_ttl_seconds:
@@ -226,6 +234,9 @@ class Settings(BaseSettings):
             "knowledge_top_k": self.knowledge_top_k,
             "knowledge_min_score": self.knowledge_min_score,
             "knowledge_timeout_seconds": self.knowledge_timeout_seconds,
+            "evidence_top_k": self.evidence_top_k,
+            "evidence_related_concepts_limit": self.evidence_related_concepts_limit,
+            "evidence_related_evidence_limit": self.evidence_related_evidence_limit,
             "embedding_provider": self.embedding_provider,
             "embedding_model": "hash-v1"
             if self.embedding_provider == "hash"

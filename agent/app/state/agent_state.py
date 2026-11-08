@@ -26,6 +26,7 @@ from app.schemas import (
     KnowledgeChunk,
     LearningTrajectory,
     MemoryItem,
+    RelatedConcept,
     SessionContext,
     Understanding,
 )
@@ -76,6 +77,16 @@ class AgentState:
     knowledge_status: str = "NOT_RETRIEVED"
     knowledge_warning: str | None = None
     evidences: list[EvidenceItem] = field(default_factory=list)
+    # ---------- 受控一跳跨概念扩展（仅 Evidence 检索触发时填充）----------
+    # related_concepts 是后端返回的全部候选；expanded_concepts 是最终被选中、
+    # 真正去查 Evidence 的最多 N 个概念（已排除原始识别概念并去重）。
+    related_concepts: list[RelatedConcept] = field(default_factory=list)
+    expanded_concepts: list[RelatedConcept] = field(default_factory=list)
+    # 跨概念证据也进入 evidences 供 Guard/渲染使用，但单独保留一份便于区分与观测。
+    cross_concept_evidences: list[EvidenceItem] = field(default_factory=list)
+    # NOT_RETRIEVED / OK / EMPTY / PARTIAL / FAILED。失败不能伪装成 EMPTY。
+    related_concepts_status: str = "NOT_RETRIEVED"
+    related_concepts_warning: str | None = None
     # 仅显式复盘时填充：真实 Revision 历史 + 由 trigger/reversal 关联精确找回的 Evidence。
     trajectories: list[LearningTrajectory] = field(default_factory=list)
     # 用户这句话是否是显式个人复盘（由 _is_history_review 判定，与是否检索到概念无关）。

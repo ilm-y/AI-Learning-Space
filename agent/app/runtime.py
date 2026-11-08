@@ -67,11 +67,19 @@ from app.retriever import build_retriever, detect_concepts
 from app.retriever.base import (
     KnowledgeQuery,
     KnowledgeResult,
+    RelatedConceptResult,
+    RelatedConceptStatus,
     RetrievalError,
 )
 from app.retriever.knowledge import KnowledgeSearchService
 from app.retriever.routing import FallbackRetriever
-from app.schemas import AnalyzeRequest, AnalyzeResult, ChatRequest
+from app.schemas import (
+    AnalyzeRequest,
+    AnalyzeResult,
+    ChatRequest,
+    EvidenceItem,
+    RelatedConcept,
+)
 from app.state.agent_state import AgentState, DetectedConcept
 from app.trace import RunTrace, TraceEventType
 from app.tutor import Tutor
@@ -115,6 +123,10 @@ _REVIEW_TRIGGERS = (
     "回顾",
     "学习轨迹",
 )
+
+# 受控一跳扩展只认这两类关系。PREREQUISITE 只接受 INCOMING（关联概念是前置），
+# RELATED 双向都算相关；其余类型即便后端显式返回也不扩张。
+_RELATED_EVIDENCE_TYPES = ("PREREQUISITE", "RELATED")
 
 
 @dataclass(slots=True)
@@ -691,12 +703,12 @@ class AgentRuntime:
                     retriever.get_memories(state.user_id, state.space_id, concept_ids, query),
                 ]
             )
-        if fetch_recent_evidence:
-            tasks.append(
-                retriever.get_evidences(
-                    state.user_id, concept_ids, self._settings.evidence_top_k
-                )
-            )
+        # 相关概念查询与 U / M / Knowledge 并行；它自己负责把失败变成带 warning 的
+        # FAILED 结果，绝不抛断整轮检索。
+        related_task_index: int | None = None
+        if fetch_recent_evidence and self._settings.evidence_related_concepts_limit > 0:
+            related_task_index = len(tasks)
+            tasks.append(self._safe_related_concepts(retriever, state, concept_ids))
 
         results = await asyncio.gather(*tasks)
         knowledge_result: KnowledgeResult = results[0]
@@ -707,8 +719,35 @@ class AgentRuntime:
         if concept_ids:
             state.understandings = results[1]
             state.memories = results[2]
-            if fetch_recent_evidence:
-                state.evidences = results[3]
+
+        if related_task_index is not None:
+            related_result: RelatedConceptResult = results[related_task_index]
+            state.related_concepts = related_result.items
+            state.related_concepts_status = related_result.status.value
+            state.related_concepts_warning = related_result.warning
+
+        if fetch_recent_evidence:
+            # 扩展决策发生在任何 Evidence 查询之前：先根据关系选出要扩展的概念，
+            # 再用各自的预算查询。这样「扩展」不会依赖已经取回的证据内容。
+            state.expanded_concepts = _select_expansion_concepts(
+                concept_ids,
+                state.related_concepts,
+                self._settings.evidence_related_concepts_limit,
+            )
+            # 原始概念的 Evidence 保持原有口径（evidence_top_k），不因扩展而挤占。
+            state.evidences = await retriever.get_evidences(
+                state.user_id, concept_ids, self._settings.evidence_top_k
+            )
+            # 最多一跳、最多 N 个概念、独立的小预算（evidence_related_evidence_limit）。
+            if state.expanded_concepts and self._settings.evidence_related_evidence_limit > 0:
+                expanded_ids = [item.concept_id for item in state.expanded_concepts]
+                cross = await retriever.get_evidences(
+                    state.user_id, expanded_ids, self._settings.evidence_related_evidence_limit
+                )
+                state.cross_concept_evidences = _mark_cross_concept_evidences(
+                    cross, state.expanded_concepts, set(concept_ids), state.evidences
+                )
+                state.evidences.extend(state.cross_concept_evidences)
 
         if retrieve_trajectory:
             revisions = await retriever.get_revisions(state.user_id, concept_ids)
@@ -738,7 +777,12 @@ class AgentRuntime:
             knowledgeStatus=state.knowledge_status,
             knowledgeCandidates=knowledge_result.candidates,
             evidences=len(state.evidences),
+            crossConceptEvidences=len(state.cross_concept_evidences),
             evidenceRequested=wants_evidence,
+            relatedConceptStatus=state.related_concepts_status,
+            relatedConceptCandidates=[item.concept_id for item in state.related_concepts],
+            expandedConceptIds=[item.concept_id for item in state.expanded_concepts],
+            relatedConceptWarning=state.related_concepts_warning,
             historyReviewRequested=state.history_review_requested,
             trajectoryConcepts=[item.concept_name for item in state.trajectories],
             trajectoryRevisions=sum(len(item.revisions) for item in state.trajectories),
@@ -766,8 +810,121 @@ class AgentRuntime:
             )
         return result
 
+    async def _safe_related_concepts(
+        self, retriever, state: AgentState, concept_ids: list[int]
+    ) -> RelatedConceptResult:
+        """相关概念查询的故障边界。
+
+        失败必须是 FAILED，不能是 EMPTY —— 否则上下文会把「后端挂了」
+        说成「这些概念没有关联」，误导用户。原始概念检索不受影响。
+        """
+        try:
+            result = await retriever.get_related_concepts(
+                state.user_id,
+                state.space_id,
+                concept_ids,
+                relation_types=_RELATED_EVIDENCE_TYPES,
+                limit=self._settings.evidence_related_concepts_limit,
+            )
+        except Exception as exc:  # noqa: BLE001 —— 扩展失败不得打挂 /agent/chat
+            log.warning(
+                "相关概念查询未预期失败，保持原始概念检索：user=%s space=%s concepts=%s error=%s",
+                state.user_id,
+                state.space_id,
+                concept_ids,
+                type(exc).__name__,
+            )
+            return RelatedConceptResult(
+                items=[],
+                status=RelatedConceptStatus.FAILED,
+                warning="相关概念查询失败，本次回答未做跨概念证据扩展。",
+            )
+        if not isinstance(result, RelatedConceptResult):
+            log.warning("检索源返回了非 RelatedConceptResult，按扩展失败处理")
+            return RelatedConceptResult(
+                items=[],
+                status=RelatedConceptStatus.FAILED,
+                warning="相关概念查询返回格式异常，本次回答未做跨概念证据扩展。",
+            )
+        return result
+
     async def aclose(self) -> None:
         await self._llm.aclose()
+
+
+def _select_expansion_concepts(
+    concept_ids: list[int],
+    related: list[RelatedConcept],
+    limit: int,
+) -> list[RelatedConcept]:
+    """从后端返回的候选里挑出真正要查 Evidence 的关联概念。
+
+    规则（固定，不做隐式猜测）：
+    - 排除本轮已识别概念（原始概念优先，不重复查）；
+    - 只认 PREREQUISITE / RELATED；
+    - PREREQUISITE 只接受 INCOMING（source 是 target 的前置）；
+    - RELATED 双向都算；
+    - 按 concept_id 去重，保留首次出现（后端已按 weight 降序返回）；
+    - 最多 `limit` 个。
+    """
+    if limit <= 0:
+        return []
+    original = set(concept_ids)
+    selected: list[RelatedConcept] = []
+    seen: set[int] = set()
+    for item in related:
+        if item.concept_id in original or item.concept_id in seen:
+            continue
+        relation_type = (item.relation_type or "").upper()
+        if relation_type not in _RELATED_EVIDENCE_TYPES:
+            continue
+        direction = (item.direction or "").upper()
+        if relation_type == "PREREQUISITE" and direction != "INCOMING":
+            # 当前概念的 OUTGOING 前置 = 当前概念是别人的前置，不是「它的前置」。
+            continue
+        seen.add(item.concept_id)
+        selected.append(item)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def _mark_cross_concept_evidences(
+    evidences: list[EvidenceItem],
+    expanded: list[RelatedConcept],
+    original_ids: set[int],
+    original_evidences: list[EvidenceItem],
+) -> list[EvidenceItem]:
+    """给扩展证据打上可区分的标记，同时保留其真实 `concept_id` 归属。
+
+    - 只接受属于 `expanded` 概念的证据；
+    - 排除原始概念自己的证据（防止后端越界返回被当成跨概念）；
+    - 与原始证据 / 彼此之间按 evidence id 去重；
+    - `related_via` 记录扩展依据，`source_concept_id` 记录发起这一跳的原概念。
+    """
+    if not expanded:
+        return []
+    by_id = {item.concept_id: item for item in expanded}
+    seen_ids = {item.id for item in original_evidences}
+    marked: list[EvidenceItem] = []
+    for evidence in evidences:
+        if evidence.concept_id in original_ids:
+            continue
+        related = by_id.get(evidence.concept_id)
+        if related is None or evidence.id in seen_ids:
+            continue
+        seen_ids.add(evidence.id)
+        label = related.concept_name or str(related.concept_id)
+        marked.append(
+            evidence.model_copy(
+                update={
+                    "is_cross_concept": True,
+                    "source_concept_id": related.source_concept_id,
+                    "related_via": f"{related.relation_type}:{label}",
+                }
+            )
+        )
+    return marked
 
 
 def _retriever_selection(retriever, settings: Settings) -> tuple[str, bool, str | None]:

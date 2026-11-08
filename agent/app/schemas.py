@@ -393,6 +393,34 @@ class EvidenceItem(CamelModel):
     created_at: datetime | None = None
     sources: list[EvidenceSourceItem] = Field(default_factory=list)
 
+    # ---------- 跨概念扩展标记（仅 Agent 侧填充）----------
+    # 后端 Evidence 响应没有这三个字段；它们只在 Runtime 做受控一跳扩展时写入。
+    # `concept_id` 始终是这条证据的**真实归属**，不会因为扩展而被改写。
+    # `is_cross_concept=True` 表示它是“通过 concept_relation 关联到的其他概念的历史证据”，
+    # 只能作为参考，不能用来改写当前概念的 Understanding。
+    is_cross_concept: bool = False
+    # 通过哪个当前识别概念扩展过来的（即发起这一跳的原概念 id）
+    source_concept_id: int | None = None
+    # 扩展依据，例如 "PREREQUISITE:极限"；用于上下文中的可追溯标记
+    related_via: str | None = None
+
+
+class RelatedConcept(CamelModel):
+    """后端 `/api/spaces/{spaceId}/concepts/{conceptId}/relations` 的一条结果。
+
+    `direction` 相对被查询概念：`INCOMING` 表示关联概念是 source、
+    被查询概念是 target；`OUTGOING` 反之。对 PREREQUISITE 而言，
+    只有 `INCOMING` 才是“当前概念的前置”（source -> target 表示 source 是 target 的前置）。
+    """
+
+    concept_id: int
+    concept_name: str | None = None
+    relation_type: str = "RELATED"
+    weight: float | None = None
+    direction: str = "UNKNOWN"
+    # 客户端在逐概念查询时补上，表示这一跳是从哪个原概念出发的
+    source_concept_id: int | None = None
+
 
 class UnderstandingRevision(CamelModel):
     """理解快照的一次不可变版本。

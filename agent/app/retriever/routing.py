@@ -22,6 +22,8 @@ from app.config import Settings
 from app.retriever.base import (
     KnowledgeQuery,
     KnowledgeResult,
+    RelatedConceptResult,
+    RelatedConceptStatus,
     RetrievalError,
     Retriever,
 )
@@ -158,6 +160,38 @@ class FallbackRetriever:
         self, user_id: int, concept_ids: list[int], limit: int
     ) -> list[EvidenceItem]:
         return await self._call("get_evidences", user_id=user_id, concept_ids=concept_ids, limit=limit)
+
+    async def get_related_concepts(
+        self,
+        user_id: int,
+        space_id: int,
+        concept_ids: list[int],
+        *,
+        relation_types: tuple[str, ...] = ("PREREQUISITE", "RELATED"),
+        limit: int = 3,
+    ) -> RelatedConceptResult:
+        """相关概念查询不回退 Fixture。
+
+        Fixture 里没有真实关系，若在主检索源失败时悄悄用 Fixture 的空结果顶替，
+        就等于把“关系查询坏了”伪装成“没有相关概念”。因此这里返回 FAILED + warning，
+        让 Runtime 记录可观测告警，同时原始概念 Evidence 仍按原有路径继续。
+        """
+        if self.degraded:
+            return RelatedConceptResult(
+                status=RelatedConceptStatus.FAILED,
+                warning="检索源已降级，相关概念查询未执行；本次未做跨概念 Evidence 扩展。",
+            )
+        try:
+            return await self._primary.get_related_concepts(
+                user_id, space_id, concept_ids,
+                relation_types=relation_types, limit=limit,
+            )
+        except RetrievalError as exc:
+            log.warning("相关概念查询不可用，保持原始概念检索：%s", exc)
+            return RelatedConceptResult(
+                status=RelatedConceptStatus.FAILED,
+                warning="相关概念查询不可用；本次未做跨概念 Evidence 扩展。",
+            )
 
     async def get_revisions(
         self, user_id: int, concept_ids: list[int]

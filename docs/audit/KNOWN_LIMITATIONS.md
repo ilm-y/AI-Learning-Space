@@ -589,6 +589,100 @@ Memory 向量写入采用「读取现有 payload → 比较 `memory_version` →
 
 ---
 
+## EVD-01：跨概念 Evidence 召回目前只做到“受控一跳关系扩展”
+
+| 项 | 内容 |
+| --- | --- |
+| 严重度 | 中（影响证据覆盖范围，不改变 Evidence 的归属与写入语义） |
+| 状态 | 部分缓解（E1），**未完全修复** |
+| 代码位置 | `agent/app/runtime.py`（`_retrieve` / `_select_expansion_concepts` / `_mark_cross_concept_evidences`）、`agent/app/retriever/http_backend.py`（`get_related_concepts`）、`agent/app/context/builder.py`（`related_evidence` 区块）、`backend/backend/src/main/java/com/ails/backend/service/ConceptRelationService.java`、`ConceptRelationMapper.java` |
+
+### 问题描述
+
+改造前，Evidence 检索只按当前消息识别出的 `conceptId` 查询。当用户只提到
+「导数」时，作为前置的「极限」上已有的历史证据不会进入上下文，跨概念证据完全缺失。
+
+E1 增加了**受控一跳扩展**：
+
+- 只在 Evidence 检索被触发时（`_wants_evidence`）执行，不改变普通聊天路径；
+- 使用现有 `concept_relation` 表，不新建图谱表、不替换关系模型、不引入 Qdrant
+  Evidence 向量索引；
+- 只接受 `PREREQUISITE`（且必须是从当前概念看来的 `INCOMING`）与 `RELATED`
+  （双向）；
+- 最多扩展 `evidence_related_concepts_limit`（默认 3）个概念，扩展概念按
+  `conceptId` 去重并排除本轮已识别概念；
+- 跨概念 Evidence 使用独立预算 `evidence_related_evidence_limit`（默认 2），
+  不挤占原始概念的 `evidence_top_k`；
+- 跨概念 Evidence 在 Agent 侧标记 `is_cross_concept` / `source_concept_id` /
+  `related_via`，上下文单独渲染为「相关概念判定依据（历史参考）」，并明确禁止
+  用它改写当前概念的 Understanding；`concept_id` 始终是证据的真实归属。
+
+仍未解决的问题：
+
+1. **关系数据本身可能为空**：仓库内没有 `concept_relation` 的写入路径、Service
+   或种子数据；E1 只提供读取与扩展链路。若表里没有关系，扩展不会发生。
+2. **只支持一跳**：不会沿「极限 -> 导数 -> 微分」继续传递；多跳、权重衰减、
+   环路处理都未实现。
+3. **方向语义是假设而非数据库约束**：DDL 只声明 `source_concept_id` /
+   `target_concept_id`，没有方向说明。E1 采用的假设是
+   `PREREQUISITE(source=A, target=B)` 表示 A 是 B 的前置，并已用后端与 Agent
+   测试钉住；它不是由表结构强制保证的。
+4. **Concept Resolver（E2）未实现**：概念识别仍是规则版名称 / 别名匹配。
+   如果当前消息没有识别出正确概念，或识别错概念，后续扩展的起点就是错的；
+   E1 不能弥补这一问题。
+5. **检索状态与批量 Sources（E3）未实现**：跨概念扩展仍按概念逐个调用现有
+   Evidence 接口，只做小预算裁剪，没有统一的检索状态聚合、分页或批量 Sources；
+   证据数量较多时无法完整回看。
+6. **失败语义已区分，但未重试**：关系查询失败返回 `FAILED` + warning，原始概念
+   Evidence 继续；没有重试、熔断或跨请求缓存。
+
+### 影响范围
+
+- 有正确关系数据时，能补充「当前概念的前置 / 相关概念」的历史证据，降低
+  「只看见当前概念、看不见基础概念」的盲区；
+- 没有关系数据、关系方向填反、或概念识别失败时，效果与改造前一致；
+- 跨概念证据只作为历史参考进入上下文，不能改变 Evidence 的 `conceptId` 归属，
+  也不能改写当前概念的 Understanding；
+- 不涉及写入链路，不改变后端 Evidence / Understanding 的持久化语义。
+
+### 当前权衡（为什么只做这一批）
+
+- 需求明确限定 E0 + E1：先建立回归测试并打通受控一跳读取，E2 Concept Resolver
+  与 E3 检索状态 / 分页批量 Sources 不在本批范围；
+- 引入 Qdrant Evidence 向量索引、Graphiti / Mem0 / 新图数据库都会扩大存储与
+  一致性边界，且会绕过现有 `concept_relation` 的唯一真相；
+- 多跳扩展需要权重、环路、时效与预算模型，当前没有真实关系数据支撑校准，
+  贸然实现只会制造不可解释的召回。
+
+### 后续方向
+
+- E2：把规则版 Concept Resolver 替换 / 增强为可评估的语义识别，并补概念识别
+  失败的可观测性；
+- 为 `concept_relation` 建立受控写入路径（人工维护或分析链路提议 + 审核），
+  明确方向语义并补数据校验；
+- E3：统一 Evidence 检索状态，支持分页 / 批量 Sources，避免小预算裁剪导致
+  历史证据不可回看；
+- 在上述基础上再评估多跳扩展与是否需要独立的 Evidence 向量索引。
+
+### 测试覆盖
+
+- `agent/tests/test_evidence_related_concepts.py`：
+  仅识别「导数」时扩展到前置「极限」；多概念时原始检索不变；无关系数据不扩展；
+  查询按请求 user / space 发出；扩展数量上限、去重、原始概念优先；Evidence
+  未触发时不查询关系；关系查询失败时原始 Evidence 继续且 warning 可见；
+  `PREREQUISITE` 方向假设被显式测试钉住；跨概念证据单独渲染并带标记；
+  HTTP 客户端参数 / 解析 / PARTIAL / FAILED 语义；`limit=0` 关闭扩展；
+- `backend/.../ConceptRelationServiceTest.java`：方向、跨 Space 排除、跨用户
+  404、默认类型与 limit 裁剪、显式类型过滤、非法类型 400、软删概念跳过；
+- `backend/.../ConceptRelationMapperSqlTest.java`：静态校验 SQL 同时约束两端
+  `learning_space_id`、软删、类型过滤、limit 与方向 CASE；
+- `backend/.../SpaceControllerConceptRelationTest.java`：HTTP 字段契约与跨用户
+  404；
+- 未覆盖：真实 `concept_relation` 数据写入 / 多跳 / 概念识别错误 / 分页批量
+  Sources —— 这些属于 E2 / E3 或后续数据治理范围。
+
+---
+
 ## 汇总
 
 | ID | 严重度 | 是否影响正确性 | 测试覆盖 | 本轮处理 |
@@ -604,6 +698,7 @@ Memory 向量写入采用「读取现有 payload → 比较 `memory_version` →
 | DOC-01 | 中 | 不影响检索 / 权限，存在磁盘残留 | 部分（正常删除；IO 异常无覆盖） | 记录 |
 | DDL-01 | 中 | 不影响查询，升级 / 部署有风险 | 无迁移框架测试 | 记录 |
 | DIST-01 | 中 | 单实例安全，多实例可能版本回退 | 单进程充分、多实例无覆盖 | 记录 |
+| EVD-01 | 中 | 跨概念证据覆盖有限，不改变归属 | 受控一跳充分；多跳 / 真实关系数据无覆盖 | 部分缓解（E1），E2 / E3 待做 |
 
 以上均为**已知限制**，不是“已修复但未写文档”的项。后续修复时应同时补对应测试，
 不能只改代码。
