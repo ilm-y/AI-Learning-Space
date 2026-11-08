@@ -5,21 +5,25 @@
 
 **交付快照：** 2026-10-29（阶段 9，证据边界收口；功能冻结）；
 **文档更新：** 2026-10-30（5.3 真实模型复验 + 服务端 E2E；5.4 MQ / 文档引用 /
-重复采样 / 并发压测）
+重复采样 / 并发压测）；**封版对齐：** 2026-11-08（P0/P1/P2 修复、Vue 3 Web 客户端、
+Memory 混合检索）
 
 **状态：** 可本地复现的开发基线；**已完成真实模型 Agent 运行时复验（5 场景）**、
 **Spring SSE → Agent → `deepseek-flash` 的真实服务端 E2E（3 轮 / 47 检查）**，
 并在 5.4 补跑了 **MQ 真实模型（19 / 0）**、**Qdrant 文档引用（28 / 0）**、
 **连续 3 轮重复采样（47 / 0 × 3）** 和 **单机并发基线（6/12、12/24、24/24，均 10 / 0）**。
-但**不是**完整产品验收：无 Flutter 业务前端、无人工评分 / 留存指标、无多实例与持续压测；
-5.4 的 MQ 轮还保留了真实模型 `ConnectError` + 非法 JSON 的失败样本。
+但**不是**完整产品验收：Flutter 客户端仍未实现（Vue 3 Web 客户端已闭环）、
+无人工评分 / 留存指标、无多实例与持续压测；5.4 的 MQ 轮还保留了真实模型
+`ConnectError` + 非法 JSON 的失败样本。
 总报告见
 [docs/testing/phase54-real-model-20261030.md](docs/testing/phase54-real-model-20261030.md)，
 5.3 证据见
 [docs/testing/phase53-real-model-20261030.md](docs/testing/phase53-real-model-20261030.md)、
 [docs/testing/phase53-spring-e2e-20261030.md](docs/testing/phase53-spring-e2e-20261030.md)。
 
-**当前客户端：** Postman / curl。`flutter/` 仍是脚手架，见第 10 节。
+**推荐客户端：** [`web/`](web/)（Vue 3 + Vite），已实现登录守卫、SSE 对话、文档管理、
+记忆管理与学习状态查看。Postman / curl 仍可用于 API 调试；`flutter/` 仍是脚手架。
+启动方式见 [docs/design/LOCAL_DEMO_GUIDE.md](docs/design/LOCAL_DEMO_GUIDE.md)。
 
 ---
 
@@ -52,15 +56,15 @@ Understanding 是当前快照，Revision 是不可变历史，三者不能互相
 
 ```mermaid
 flowchart LR
-    C["Postman / curl<br/>（Flutter 仅脚手架）"] -->|"REST + SSE"| S["Spring Boot :8080"]
+    C["web/ Vue 3（推荐）<br/>Postman / curl（API 调试）"] -->|"REST + SSE"| S["Spring Boot :8080"]
     S -->|"/agent/chat /agent/analyze"| A["FastAPI Agent :8000"]
-    S -->|"业务流程 / 校验 / 持久化"| DB[("MySQL 8<br/>22 张表")]
+    S -->|"业务流程 / 校验 / 持久化"| DB[("MySQL 8<br/>23 张表")]
     S -->|"inline 或 publish"| MQ[("RabbitMQ<br/>可选")]
     MQ -->|"analysis.request"| W["Python Worker"]
     W -->|"内部检索 / 分析"| S
     W -->|"analysis.result"| S
-    A -->|"HTTP 回查理解 / 证据 / 文档"| S
-    A -->|"Embedding + 检索"| Q[("Qdrant<br/>文档切片")]
+    A -->|"HTTP 回查理解 / 证据 / 记忆 / 文档"| S
+    A -->|"Embedding + 检索"| Q[("Qdrant<br/>文档切片 / Memory 向量")]
     A -->|"OpenAI-compatible"| L["LLM<br/>Mock 或真实模型"]
 ```
 
@@ -78,8 +82,8 @@ Spring 做校验、去重和事务写入；数据库唯一约束是最终保证�
 | --- | --- | --- |
 | **Spring Boot** | 认证 / JWT、空间与概念、对话与 SSE、Evidence 校验与去重、Understanding 演进、Revision、LearningState 投影、Memory 生命周期、文档上传与索引编排、inline/MQ 分派、内部检索接口 | 不生成教学内容，不做语义判断 |
 | **FastAPI Agent** | 概念识别、检索（Fixture/HTTP）、上下文组装与预算、Tutor 回答、学习分析候选、引用校验、检索失败兜底、历史回答校验、文档解析/切片/Embedding、MQ Worker | 不直接持久化业务表，不决定权限 |
-| **MySQL 8** | 22 张业务表；原始记录、append-only Evidence、当前 Understanding、不可变 Revision、LearningState 投影、Memory | 不做向量检索（Memory 当前是关键词 `LIKE`） |
-| **Qdrant** | 文档切片向量；collection 名为 `<prefix>_<model>_<dimension>` | 不存学习状态、不存 Memory |
+| **MySQL 8** | 23 张业务表；原始记录、append-only Evidence、当前 Understanding、不可变 Revision、LearningState 投影、Memory 元数据，以及 Memory 的 ngram FULLTEXT 词法索引 | 不承担向量相似度计算（Memory 向量路由 Qdrant） |
+| **Qdrant** | 文档切片向量与 Memory 向量；collection 名为 `<prefix>_<model>_<dimension>` | 不存学习状态、不存 Memory 元数据；检索结果必须回 MySQL 复核 |
 | **RabbitMQ** | 可选异步分析：request / result / retry TTL / DLQ | 不是默认链路；inline 模式不需要它 |
 | **LLM** | Tutor 回答、学习分析候选 | 不是事实来源；没有 Key 时用 Mock |
 
@@ -115,12 +119,13 @@ Flutter 目录目前只有 `flutter create` 的计数器模板，没有登录、
 
 ## 5. 文档检索与学习状态如何分别进入上下文
 
-`AgentRuntime.prepare()` 先识别概念，再分别取两类信息：
+`AgentRuntime.prepare()` 先识别概念，再分别取三类信息：
 
 ```text
 用户问题
   ├── 文档检索（Qdrant）→ knowledge chunks + knowledge_status
-  └── 学习状态（Spring 回查）→ Understanding / Memory / Evidence
+  ├── 记忆检索（MySQL FULLTEXT + Qdrant + RRF）→ memory + memory_status
+  └── 学习状态（Spring 回查）→ Understanding / Evidence
 ```
 
 `ContextBuilder` 按优先级组装，预算不足时从低优先级开始丢弃：
@@ -136,6 +141,25 @@ Flutter 目录目前只有 `flutter create` 的计数器模板，没有登录、
 | 45 | `knowledge_status` | 检索成功 / 无文档 / 未命中 / 被阈值过滤 / 降级 |
 | 40 | `knowledge:*` | 文档切片 |
 | 20 | `evidence:*` | 判定依据；复盘时关联证据已在轨迹中，不重复注入 |
+
+### 5.1 Memory 混合检索
+
+长期记忆不再使用 `LIKE` 关键词匹配。Agent 调用
+`GET /api/memories/search/hybrid`，链路为：
+
+```text
+keyword
+  ├── MySQL FULLTEXT（ngram）──┐
+  └── Qdrant 向量召回 ─────────┤→ RRF 融合 → MySQL 回源复核 → items + status
+```
+
+- 任一路失败会降级为单路，返回 `DEGRADED_VECTOR` / `DEGRADED_KEYWORD`；
+- 两路都失败返回 `UNAVAILABLE`，绝不把「检索不可用」伪装成「没有记忆」；
+- 空关键词返回 `BLANK_QUERY` 与可见列表；
+- 回源复核再次施加 `user_id`、`status = ACTIVE` 与作用域可见性过滤，
+  Qdrant 中的陈旧/越权数据不会直接进入 prompt；
+- 旧 `GET /api/memories/search` 保留返回 `List` 的兼容契约，但**不携带降级状态**，
+  新调用方应使用 `/search/hybrid`。
 
 两条容易混淆的规则：
 
@@ -212,6 +236,7 @@ Spring ChatService
 | --- | --- | --- |
 | JDK | 17+ | 是 |
 | Python | 3.10+ | 是 |
+| Node.js | 20.19+ 或 22.12+（Vite 8 要求） | 仅 Web 前端 |
 | MySQL | 8.x，`127.0.0.1:3306` | 是 |
 | Qdrant | `http://127.0.0.1:6333` | 仅文档 RAG |
 | RabbitMQ | `127.0.0.1:5672` / `15672` | 仅 MQ 模式 |
@@ -237,7 +262,17 @@ cd backend/backend
 # application-local.yml 写 ails.agent.gateway: http（默认 stub 不调用 Agent）
 ./mvnw spring-boot:run
 # http://127.0.0.1:8080
+
+# 4) Web 前端（新终端，推荐客户端）
+cd web
+npm install
+npm run dev
+# http://localhost:5173
 ```
+
+前端默认连接 `http://localhost:8080`，可通过 `web/.env.development` 的
+`VITE_API_BASE_URL` 覆盖。完整的注册 / 登录 / 上传 / 对话 / 记忆验收流程见
+[docs/design/LOCAL_DEMO_GUIDE.md](docs/design/LOCAL_DEMO_GUIDE.md)。
 
 Agent 关键环境变量：
 
@@ -264,22 +299,37 @@ Agent 关键环境变量：
 
 ### 7.3 建表与迁移
 
-- 正常启动：`spring.sql.init` 每次执行 `schema.sql`，全部 `CREATE TABLE IF NOT EXISTS`，幂等；
-- **已有库升级**：`CREATE TABLE IF NOT EXISTS` 不会给旧表加列，必须按版本手工执行：
-  1. `schema-migration-document-rag.sql`（文档 RAG 相关表 / 列）；
-  2. `schema-migration-phase7-truncation.sql`（`message.truncated` 与
-     `agent_run.status=TRUNCATED`；可重复执行，末尾带只读核对查询）；
-  3. `schema-migration-phase54-message-seq.sql`（`conversation.last_message_seq`，
-     并按已有消息回填；可重复执行，末尾带只读核对查询）；
+- 正常启动：`spring.sql.init` 每次执行 `schema.sql`。主体为
+  `CREATE TABLE IF NOT EXISTS`，另有 `agent_run.status` 枚举的幂等 `ALTER`，
+  可重复执行；但它不会为已有表补列 / 加索引，旧库升级仍必须手工迁移；
+- **已有库升级**：`CREATE TABLE IF NOT EXISTS` 不会给旧表加列，必须按以下顺序手工执行
+  （脚本均为幂等过程，可重复执行；建议先备份并停止后端）：
+  1. `schema-migration-document-rag.sql` —— 文档 RAG 基础表 / 列；
+  2. `schema-migration-rag-reliability.sql` —— 文档索引版本、Embedding 指纹、
+     删除 / 巡检列（依赖上一步的 `document` / `document_chunk` 结构）；
+  3. `schema-migration-memory-fulltext.sql` —— `memory.content` 的 ngram FULLTEXT
+     索引与 `outbox_event` 表（Memory 词法检索与向量同步）；
+  4. `schema-migration-phase7-truncation.sql` —— `message.truncated` 与
+     `agent_run.status=TRUNCATED`；
+  5. `schema-migration-phase3-citations.sql` —— `message.citations`
+     （使用 `AFTER truncated`，必须在第 4 步之后，否则旧库会报 1054）；
+  6. `schema-migration-phase54-message-seq.sql` —— `conversation.last_message_seq`，
+     并按已有消息回填；
+- **顺序依赖**：`phase3-citations` 依赖 `phase7-truncation`；
+  `rag-reliability` 依赖 `document-rag`；`memory-fulltext` 与
+  `phase54-message-seq` 与上述两组互不依赖；
 - 执行示例（密码不要写进命令历史时改用 `MYSQL_PWD` 或本地配置文件）：
 
   ```bash
   mysql -h 127.0.0.1 -u root -p < backend/backend/src/main/resources/schema-migration-phase7-truncation.sql
   ```
 
-  漏跑第二个脚本时，新版 MyBatis 查询 `message.truncated` 会报
-  `Unknown column 'truncated' in 'field list'`；漏跑第三个脚本时，消息序号分配会报
-  `Unknown column 'last_message_seq'`；
+  漏跑第 3 步时，Memory 关键词检索会因缺少 `ft_memory_content` FULLTEXT 索引失败，
+  请求降级为向量路并返回 `DEGRADED_KEYWORD`；
+  漏跑第 4 步时，新版 MyBatis 查询 `message.truncated` 会报
+  `Unknown column 'truncated' in 'field list'`；漏跑第 5 步时，助手消息写入
+  `message.citations` 会报 `Unknown column 'citations'`；漏跑第 6 步时，
+  消息序号分配会报 `Unknown column 'last_message_seq'`；
 - 清库重建：`schema-dev-reset.sql`（只 DROP）→ `schema.sql`，只能用于开发库；
 - 没有 Flyway / Liquibase；迁移脚本不会被 Spring 自动执行。
 
@@ -307,14 +357,14 @@ AILS_INTERNAL_TOKEN=<token> python -m app.worker
 **不要把不同时间、不同评分规则、不同测试语义的通过率相加。**
 
 ```bash
-# Agent 单元 / 集成（当前 383 passed, 5 skipped, 1 xfailed）
+# Agent 单元 / 集成（2026-11-08：437 passed, 9 skipped, 1 xfailed）
 cd agent && python -m pytest -q
 
 # 来源过滤定向回归
 cd agent && python -m pytest tests/test_citation_filter.py \
   tests/test_runtime_budget_contract.py tests/test_runtime_citations.py -q
 
-# Spring 单元 / 集成（当前 255 条：182 执行通过 / 73 跳过 / 0 失败）
+# Spring 单元 / 集成（2026-11-08：388 运行 / 300 执行通过 / 88 跳过 / 0 失败）
 cd backend/backend && ./mvnw test
 
 # Spring MQ Testcontainers 集成（需要 Docker；本轮未执行）
@@ -363,8 +413,8 @@ bash scripts/phase6-demo.sh
 
 | 层级 | 最近结果 | 性质 |
 | --- | --- | --- |
-| Agent | 383 passed / 5 skipped / 1 xfailed | Mock + 单元；5 个 skip 是环境门控；1 个 xfail 是已记录的自然语言误述风险 |
-| Spring | 255 条（182 执行通过 / 73 跳过 / 0 失败） | Surefire 的 `Tests run` 含 skip，不能写成 255 passed；73 个 skip 需要真实 MySQL / Docker |
+| Agent（2026-11-08） | 437 passed / 9 skipped / 1 xfailed | Mock + 单元；skip 是环境门控；1 个 xfail 是已记录的自然语言误述风险 |
+| Spring（2026-11-08） | 388 条（300 执行通过 / 88 跳过 / 0 失败） | Surefire 的 `Tests run` 含 skip，不能写成 388 passed；skip 需要真实 MySQL / Docker |
 | 5.1 inline E2E | 101 / 0 / 0 | Mock |
 | 5.1 MQ E2E | 27 / 0 / 0 | Mock LLM + 真 RabbitMQ + 真 Worker |
 | 5.2 学习轨迹 E2E | 94 / 0 / 0 | Mock |
@@ -451,12 +501,16 @@ Worker 首次 `ConnectError`、重试返回非法 JSON，run 落 `FAILED` 并由
   C-only 已出现「不能反过来断言你以前没有这个错误」被误判为 `no_history_denial`
   的真实误报，导致一次多余重生成并最终 fallback；
   显式复盘首字延迟被推迟到完整回答生成后，触发重生成时约等于两次生成；
-- **Flutter 前端未实现**：仍是计数器脚手架；
+- **Web 前端已闭环，但不是完整产品前端**：`web/` 已实现登录守卫、SSE 对话、
+  文档管理、记忆管理与学习状态查看；注册与学习空间管理仍需调用 API（MVP），
+  Flutter 仍是计数器脚手架；
 - **业务缺口**：导出 / 导入 / 学习计划返回 501；测试判分是长度 + 概念名启发式；
-  Memory 检索是关键词 `LIKE`，没有向量召回；`run_type=MEMORY` 没有调用方；
-  inline 分析与聊天共用线程池；复习调度是硬编码状态映射；
-- **检索限制**：`top_k=5`、`min_score=0.35`，没有 Reranker / Hybrid Search；
-  引用校验是格式 + 词面启发式，不是事实正确性证明；
+  `run_type=MEMORY` 没有调用方；inline 分析与聊天共用线程池；
+  复习调度是硬编码状态映射；
+- **检索限制**：文档 RAG 仍是 `top_k=5`、`min_score=0.35`，没有 Reranker /
+  文档侧 Hybrid Search；Memory 使用 MySQL FULLTEXT + Qdrant 向量 + RRF 融合，
+  但向量路依赖 Agent / Qdrant，不可用时降级为词法路；引用校验是格式 + 词面启发式，
+  不是事实正确性证明；
 - **来源交付边界已收口，但语义误述仍开放**：越界引用在流式阶段被丢弃，
   被裁剪片段不能作为有效来源；但「检索成功、片段被裁掉」时模型仍可能用自然语言
   说「没有检索到资料」。Runtime 只能保证确定性的检索 / 注入状态与引用 ID，
@@ -464,8 +518,13 @@ Worker 首次 `ConnectError`、重试返回非法 JSON，run 落 `FAILED` 并由
   **不声称已修复**；
 - **流式过滤的代价**：越界标注被丢弃后，标注前的空白不会被回撤（已发送的文本
   无法撤回），可能出现「字 空格。」这类轻微排版痕迹；标注本身不会泄漏；
-- **数据库 / 部署**：没有迁移框架；已有库必须手工执行
-  `schema-migration-phase54-message-seq.sql`；单进程假设；RabbitMQ 只有本地 compose；
+- **数据库 / 部署**：没有 Flyway / Liquibase，`schema.sql` 随应用启动执行
+  （开发便利，生产应关闭启动 DDL）；已有库必须按 7.3 的顺序手工执行迁移；
+  单进程假设；RabbitMQ 只有本地 compose；
+- **运维边界**：文档删除若遇到本地 IO 异常，数据库已标记删除但物理文件可能残留，
+  目前依赖人工巡检；Agent 的 Memory 版本防回退使用进程内锁，多实例部署需改为
+  分布式锁。详见
+  [docs/audit/KNOWN_LIMITATIONS.md](docs/audit/KNOWN_LIMITATIONS.md)；
 - **测试限制**：序号分配与 Session 首次归属目前由 E2E / 并发脚本覆盖，没有专门的
   单元回归；GitHub Actions CI 本轮未触发；`--mode all` 与
   `scripts/regress-closed-loop.sh` 本轮未重跑；Flutter 测试未执行。
@@ -480,8 +539,10 @@ Worker 首次 `ConnectError`、重试返回非法 JSON，run 落 `FAILED` 并由
 | [docs/delivery/LEARNING_LIFECYCLE.md](docs/delivery/LEARNING_LIFECYCLE.md) | 学习状态生命周期、存储语义、误区解除 |
 | [docs/delivery/DEMO.md](docs/delivery/DEMO.md) | TLB 七步可重复演示（明确标注 Mock） |
 | [docs/delivery/ENVIRONMENT.md](docs/delivery/ENVIRONMENT.md) | 依赖、启动顺序、环境变量、建表 / 迁移 |
+| [docs/design/LOCAL_DEMO_GUIDE.md](docs/design/LOCAL_DEMO_GUIDE.md) | Web + Spring 本地启动与端到端联调（注册 / 上传 / 对话 / 记忆） |
 | [docs/delivery/TEST_MATRIX.md](docs/delivery/TEST_MATRIX.md) | 测试 / 质量矩阵与报告索引 |
 | [docs/delivery/KNOWN_LIMITATIONS.md](docs/delivery/KNOWN_LIMITATIONS.md) | 已知限制、未完成验收、不要做的事 |
+| [docs/audit/KNOWN_LIMITATIONS.md](docs/audit/KNOWN_LIMITATIONS.md) | 三阶段审查 + 封版前确认的残余风险与部署边界 |
 | [docs/testing/phase54-real-model-20261030.md](docs/testing/phase54-real-model-20261030.md) | Phase 5.4：MQ 真实模型、文档引用、重复采样、并发压测与死锁修复 |
 | [docs/testing/phase9-evidence-boundary.md](docs/testing/phase9-evidence-boundary.md) | Phase 9：来源过滤、知识状态边界、测试与契约清单 |
 | [docs/delivery/GIT_WORKSPACE.md](docs/delivery/GIT_WORKSPACE.md) | 文件分类、工作区风险、提交建议（不自动提交） |

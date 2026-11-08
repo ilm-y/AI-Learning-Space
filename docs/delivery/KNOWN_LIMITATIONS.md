@@ -114,7 +114,9 @@ Embedding + `deepseek-flash`）、MQ 真实模型 **19 / 0**、同一服务端�
 - `pubspec.yaml` 没有业务依赖；
 - 不能把「Flutter 前端」写进已完成能力。
 
-当前可用客户端是 Postman / curl；演示脚本也走 HTTP API。
+**封版更新（2026-11-08）：** `web/` 的 Vue 3 客户端已闭环，是官方推荐客户端
+（登录守卫、SSE 对话、文档 / 记忆 / 学习状态管理）。它仍未实现注册页与学习空间
+管理页，这两步暂用 API 完成。Postman / curl 仅用于 API 调试；`flutter/` 保持脚手架。
 
 ## 4. 业务能力缺口
 
@@ -122,7 +124,7 @@ Embedding + `deepseek-flash`）、MQ 真实模型 **19 / 0**、同一服务端�
 | --- | --- | --- |
 | 文档导出 / 导入 / 学习计划 | Controller 返回 501 | 表结构存在，但没有可用接口 |
 | 测试作答判分 | 长度 + 是否点到概念名的启发式 | 不是语义判分，可能误判 |
-| Memory 向量检索 | 关键词 `LIKE` | 召回质量有限；`memory.embedding_ref` 未接向量库 |
+| Memory 检索 | MySQL FULLTEXT + Qdrant 向量 + RRF 融合 + 回源复核 | 向量路依赖 Agent / Qdrant，不可用时降级为词法路并返回 `DEGRADED_*` |
 | Memory 收敛 | `run_type=MEMORY` 枚举存在但无调用方 | 长期记忆不会自动收敛 |
 | 分析异步化 | inline 与聊天共用 `chat-stream-*` 线程池 | 突发分析会挤占回答线程 |
 | Session 归属 | 文本命中近似 | 不是「与 Session 内 Evidence 的 Concept 交集」 |
@@ -130,7 +132,9 @@ Embedding + `deepseek-flash`）、MQ 真实模型 **19 / 0**、同一服务端�
 
 ## 5. 检索与引用限制
 
-- 检索基线是 `top_k=5`、`min_score=0.35`，没有 Reranker、没有 Hybrid Search；
+- 文档 RAG 检索基线是 `top_k=5`、`min_score=0.35`，没有 Reranker、没有文档侧
+  Hybrid Search；Memory 检索已使用 FULLTEXT + 向量 + RRF（见第 4 节），两者的
+  限制不能互相套用；
 - Embedding 默认 `hash` 只能用于开发；真实语义检索必须显式用 `openai`；
 - 引用校验是格式 + 上下文标签 + 词面来源支持，不是事实正确性证明；
 - 来源支持度是同义改写敏感的词面启发式，会误报；
@@ -148,10 +152,12 @@ Embedding + `deepseek-flash`）、MQ 真实模型 **19 / 0**、同一服务端�
 ## 6. 数据库与部署限制
 
 - 表结构用 `schema.sql` 手工维护，没有 Flyway / Liquibase；
-- `CREATE TABLE IF NOT EXISTS` 不会给已有表加列；升级必须按版本手工执行
-  `schema-migration-document-rag.sql`、`schema-migration-phase7-truncation.sql`
-  与 `schema-migration-phase54-message-seq.sql`，或清库重建；漏跑 Phase 7 脚本会报
-  `Unknown column 'truncated'`，漏跑 5.4 脚本会报 `Unknown column 'last_message_seq'`；
+- `CREATE TABLE IF NOT EXISTS` 不会给已有表加列；升级必须按顺序手工执行
+  `schema-migration-document-rag.sql` → `schema-migration-rag-reliability.sql` →
+  `schema-migration-memory-fulltext.sql` → `schema-migration-phase7-truncation.sql` →
+  `schema-migration-phase3-citations.sql` → `schema-migration-phase54-message-seq.sql`，
+  或清库重建。漏跑前置脚本分别在对应列 / 表上报 `Unknown column` 或 `Unknown table`；
+  `phase3-citations` 必须晚于 `phase7-truncation`（它使用 `AFTER truncated`）；
 - `schema-dev-reset.sql` 会 DROP 数据，只能在开发库使用；
 - `application-local.yml` 与 `agent/.env` 含本机凭证，绝不能提交；
 - 当前没有多实例部署的分布式协调；SSE 连接、分析线程池都是单进程假设；
@@ -159,12 +165,15 @@ Embedding + `deepseek-flash`）、MQ 真实模型 **19 / 0**、同一服务端�
 
 ## 7. 测试口径限制
 
-- 当前 Agent 383 passed / 5 skipped / 1 xfailed；Spring 255 条（182 执行通过 /
-  73 跳过）；E2E 101 / MQ E2E 27 / E2E 94 / Demo 23 是 2026-10-27 的 Mock 结果；
+- 2026-11-08 全量：Agent **437 passed / 9 skipped / 1 xfailed**；Spring **388 条
+  （300 执行通过 / 88 跳过 / 0 失败）**。跳过项是真实 MySQL / Docker / 外部服务的
+  环境门控，不等于用例通过。更早的 E2E 101 / MQ E2E 27 / E2E 94 / Demo 23
+  是 2026-10-27 的 Mock 结果；
   Spring 服务端 E2E 47/0、重复采样 3 × 47/0 是 2026-10-30 的真实模型结果；
   5.4 另有文档引用 28/0、MQ 19/0（及 15/4 失败样本）、并发 3 × 10/0；
 - 1 个 xfail 是语义误述风险，不是通过，也不是普通跳过；
-- 真实 Qdrant、真实 broker、真实 MySQL 集成测试有 5 + 73 个环境门控 skip；
+- 真实 Qdrant、真实 broker、真实 MySQL 集成测试的环境门控 skip 计入上述
+  9 + 88 条；
   5.4 的文档引用 / MQ E2E 是另起真实服务验证，**不改变这些 skip 的状态**；
 - `AnalysisMqIntegrationTest` 默认 0 个用例执行；5.4 MQ E2E 另起真实 broker + Worker
   验证，但它不等于 Testcontainers 集成测试，也没有接进 CI；

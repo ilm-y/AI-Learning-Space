@@ -1,9 +1,9 @@
 # 已知限制与残余风险
 
-- 整理日期：2026-11-07
-- 仓库版本：`13cec31`
-- 范围：三阶段改造（Memory 状态机、RAG 索引可靠性、Citation 引用闭环）后仍然存在、
-  但本轮**不修**的已知问题。
+- 整理日期：2026-11-07；封版追加：2026-11-08
+- 仓库版本：审查基线 `13cec31`；封版追加基于 `6f6e940`（P0/P1/P2 修复已合入）
+- 范围：三阶段改造（Memory 状态机、RAG 索引可靠性、Citation 引用闭环）以及
+  Web 客户端 / 混合检索封版后仍然存在、但本轮**不修**的已知问题。
 - 相关报告：[`THREE_PHASE_FINAL_REVIEW.md`](THREE_PHASE_FINAL_REVIEW.md)、
   [`PHASE2_RAG_RELIABILITY.md`](PHASE2_RAG_RELIABILITY.md)、
   [`PHASE3_CITATION_CLOSURE.md`](PHASE3_CITATION_CLOSURE.md)、
@@ -387,7 +387,9 @@ ALTER TABLE `message`
 1. 在迁移开头检查 `message.truncated` 是否存在；不存在时 `SIGNAL` 明确提示
    “先执行 `schema-migration-phase7-truncation.sql`”。
 2. 或直接去掉 `AFTER truncated`，让 MySQL 追加到末尾，避免顺序依赖。
-3. 提供统一的迁移编排脚本/文档，固定 Phase 7 → Phase 3 → RAG reliability 的顺序。
+3. 提供统一的迁移编排脚本/文档，固定根 `README.md` 第 7.3 节的六步顺序
+   （`document-rag` → `rag-reliability` → `memory-fulltext` → `phase7-truncation` →
+   `phase3-citations` → `phase54-message-seq`）。
 4. 增加“Pre-Phase7 schema”迁移测试库。
 
 ### 测试覆盖
@@ -396,6 +398,194 @@ ALTER TABLE `message`
   “当前 schema 去掉 `message.citations`”升级，9/9 通过且幂等；该库有 `truncated`。
 - **无覆盖**：没有“没有 `truncated` 的 Phase 7 之前旧库”升级测试。
 - 结论：当前库形态覆盖，旧库顺序依赖未覆盖。
+
+---
+
+## WEB-01：前端未实现注册页与学习空间管理页
+
+| 项 | 内容 |
+| --- | --- |
+| 严重度 | 低（上手成本 / 可用性；不影响后端能力） |
+| 状态 | 未修复（MVP 范围） |
+| 代码位置 | `web/src/router/index.ts`（无 `/register` 路由）；`web/src/views/LoginView.vue:124`（提示调用 `POST /api/auth/register`）；`web/src/views/PlaceholderView.vue`（`/spaces` 占位）；`web/src/api/auth.ts`（仅封装登录） |
+
+### 问题描述
+
+`web/` 已实现登录、SSE 对话、文档管理、记忆管理与学习状态查看，但没有注册页，
+也没有学习空间的创建 / 编辑页面。新用户必须先通过 `POST /api/auth/register`
+注册，再通过 `POST /api/spaces` 创建空间，之后才能在页面里完成登录和后续操作。
+`LOCAL_DEMO_GUIDE.md` 第 4 节因此保留了 PowerShell / curl 的一次性初始化步骤。
+
+### 影响范围
+
+- 新用户无法在 UI 内完成自助注册与空间初始化，需要开发者或运维介入；
+- 不影响已注册用户的登录、对话、文档、记忆与学习状态功能；
+- 不影响后端 API 的完整性；注册与空间 CRUD 接口均已存在。
+
+### 当前权衡（为什么现在不修）
+
+- 当前定位是可本地复现的 MVP / 演示基线，优先保证登录后的主链路闭环；
+- 注册页涉及用户名 / 密码 / 邮箱校验、错误码映射与风控策略，空间管理页还涉及
+  成员、可见性与概念管理，均超出本轮“文档对齐、代码冻结”的范围；
+- 用 API 完成一次性初始化成本低，且 `LOCAL_DEMO_GUIDE.md` 已提供可直接复制的命令。
+
+### 后续方向
+
+1. 增加 `/register` 页面，复用后端 `POST /api/auth/register` 的校验与 409 语义；
+2. 增加学习空间管理页（列表 / 创建 / 编辑 / 删除），替换 `/spaces` 占位页；
+3. 注册成功后自动登录并引导创建首个空间；
+4. 补充前端表单校验与后端错误码的映射测试。
+
+### 测试覆盖
+
+- **无前端自动化覆盖**：仓库没有 Vue 组件 / E2E 测试；
+- 登录守卫、退出登录、401 跳转由 `LOCAL_DEMO_GUIDE.md` 第 5 节手测清单验收；
+- 注册与空间创建目前由 `LOCAL_DEMO_GUIDE.md` 第 4 节的 API 命令与
+  `scripts/phase6-demo.sh` 覆盖，不是 UI 验收。
+
+---
+
+## DOC-01：文档删除时本地文件 IO 异常可能残留磁盘孤儿
+
+| 项 | 内容 |
+| --- | --- |
+| 严重度 | 中（存储 / 隐私残留；不影响检索与权限） |
+| 状态 | 未修复（依赖人工巡检） |
+| 代码位置 | `backend/backend/src/main/java/com/ails/backend/service/DocumentDeletionService.java`（`cleanup` 第 3 步）；`DocumentStorageService.java:243-273`（`deleteQuietly`）；`DocumentService.java:138`、`:146`（上传失败清理） |
+
+### 问题描述
+
+文档删除采用「先退出检索、再异步清理」：`DocumentDeletionService.cleanup`
+依次删除 Qdrant 向量、MySQL chunk 和本地文件，最后把文档标记为 `DELETED`。
+文件删除走 `DocumentStorageService.deleteQuietly`，该方法**吞掉 `IOException`**，
+只记录一条 `log.warn`，不会让整个清理失败或让文档停留在 `DELETING`。
+
+因此，如果本地磁盘在删除瞬间不可写、文件被外部进程占用、权限变化或文件系统
+异常，数据库记录会正常软删，但物理文件仍留在存储根目录。上传失败后的
+`deleteQuietly` 也是同样的 best-effort 语义。
+
+### 影响范围
+
+- 磁盘空间泄漏；被删除文档的原文可能继续留在服务器上；
+- 不造成检索召回：数据库 `deleted_at` 与 `status=DELETED` 已使其退出白名单；
+- 不造成跨用户越权：文件路径仍受存储根目录约束，且没有对应元数据入口；
+- 在多租户或合规场景下，属于需要定期审计的残留风险。
+
+### 当前权衡（为什么现在不修）
+
+- 数据库是事实源；如果因为文件删除失败就让文档永久停留在 `DELETING`，
+  会让用户看到无法完成的删除，并反复触发清理；
+- 当前没有文件系统索引或对象存储清单，无法在删除请求内判断“哪些文件已无主”；
+- 引入定时扫描需要定义宽限期、并发安全、误删保护与告警通道，超出封版范围。
+
+### 后续方向
+
+1. 增加定时对账任务：扫描存储根目录，与 `document.storage_uri`（含软删行）比对，
+   删除超过宽限期且无元数据引用的文件；
+2. `deleteQuietly` 失败时写入待清理清单 / 指标，而不是只写日志；
+3. 对象存储场景优先使用生命周期策略与版本化删除；
+4. 为 IO 异常路径补充可注入的文件系统故障测试。
+
+### 测试覆盖
+
+- **部分覆盖**：`DocumentStorageServiceTest` 覆盖正常删除与越界路径拒绝；
+  `DocumentDeletionServiceTest` 覆盖删除流程会调用 `deleteQuietly`；
+- **无覆盖**：`IOException` / 权限不足 / 文件占用导致残留的分支没有自动化断言；
+- 没有磁盘文件与数据库记录的定期对账测试。
+
+---
+
+## DDL-01：`schema.sql` 随应用启动执行，生产环境缺少迁移框架
+
+| 项 | 内容 |
+| --- | --- |
+| 严重度 | 中（部署 / 升级风险；开发环境是有意设计） |
+| 状态 | 未修复（开发便利优先） |
+| 代码位置 | `backend/backend/src/main/resources/application.yml`（`spring.sql.init.mode: always`、`schema-locations: classpath:schema.sql`）；`backend/backend/src/main/resources/schema.sql`；`schema-migration-*.sql` |
+
+### 问题描述
+
+后端每次启动都会执行 `schema.sql`。脚本主体是 `CREATE TABLE IF NOT EXISTS`，
+另有一条针对 `agent_run.status` 枚举的幂等 `ALTER`；因此对全新库友好、可重复执行。
+但它**不会为已存在的表补列 / 加索引 / 改普通列类型**，已有库升级仍必须手工执行
+`schema-migration-*.sql`。仓库没有 Flyway / Liquibase，也没有 schema 版本表。
+
+### 影响范围
+
+- 生产部署要求应用账号具备 DDL 权限，权限面偏大；
+- 多实例同时启动时可能并发执行 DDL，增加锁等待与启动抖动；
+- 没有版本化迁移记录，无法回答“当前库执行到哪一版”，也无法自动回滚；
+- 新库与旧库可能因漏跑迁移脚本产生结构漂移，错误通常在运行期才暴露；
+- 开发 / 演示环境因此获得“零手工建库”的便利，这是当前有意保留的权衡。
+
+### 当前权衡（为什么现在不修）
+
+- 封版阶段不引入迁移框架，避免 baseline、历史脚本重写与 CI 流程改造；
+- 现有手工迁移脚本已按 `information_schema` 做幂等检查，可在小规模部署中工作；
+- 迁移框架需要与现有 `schema.sql`、测试库初始化和多环境配置统一，属于独立工程任务。
+
+### 后续方向
+
+1. 引入 Flyway 或 Liquibase，以当前 `schema.sql` 作为 baseline，后续变更走版本化脚本；
+2. 生产 profile 设置 `spring.sql.init.mode=never`，开发 profile 保留启动建表；
+3. 应用账号与迁移账号分离，运行时账号收回 DDL 权限；
+4. 在 CI 中增加“空库 → 全量迁移 → 结构比对”的流水线。
+
+### 测试覆盖
+
+- **无迁移框架测试**：`DocumentSchemaConsistencyTest` 只静态检查
+  `schema-migration-document-rag.sql` 与当前 schema 的部分一致性；
+- 各迁移脚本的幂等性由审计报告中的手工验证记录覆盖（如 Phase 3 的 9/9），
+  但没有纳入自动化回归；
+- 没有多实例并发启动执行 DDL 的测试。
+
+---
+
+## DIST-01：Agent 的 Memory 版本防回退使用进程内锁
+
+| 项 | 内容 |
+| --- | --- |
+| 严重度 | 中（多实例下的数据一致性风险；单实例安全） |
+| 状态 | 未修复（当前单进程部署） |
+| 代码位置 | `agent/app/vectorstore/memory_store.py:458`（`_memory_lock`）；`upsert_memory` / `delete_memory` 内的 `async with self._memory_lock(memory_id)` |
+
+### 问题描述
+
+Memory 向量写入采用「读取现有 payload → 比较 `memory_version` → 写入 / 墓碑」
+的读改写流程，并用按 `memory_id` 分配的 `asyncio.Lock` 串行化同一进程内的并发。
+该锁是**进程内锁**：只对同一个 Python 进程 / 事件循环生效。
+
+如果 Agent 以多实例部署，两个实例可能同时处理同一 `memory_id` 的不同版本事件：
+两边都读到旧版本、都通过版本比较，后写入者会覆盖先写入者。当前写入路径没有
+“按 payload 版本条件写入”的原子 CAS，因此进程内锁无法跨实例提供排序保证。
+
+### 影响范围
+
+- 单实例部署：正确性由锁 + 版本比较 + 墓碑保证；
+- 多实例部署：乱序事件可能导致旧版本覆盖新版本，或墓碑被迟到写入绕过；
+- 不影响权限与 MySQL 事实源；回源复核仍会以 MySQL 为准，但向量排名可能短暂失真；
+- 当前部署模型是单进程，因此该风险尚未在生产路径暴露。
+
+### 当前权衡（为什么现在不修）
+
+- 引入 Redis 分布式锁会增加一个强依赖及其可用性、超时、续租与故障转移问题；
+- 锁的粒度、TTL、fencing token 与重试语义需要与 Outbox 的至少一次投递模型一起设计；
+- 当前单实例演示 / 本地基线没有多实例需求，封版阶段不扩大基础设施范围。
+
+### 后续方向
+
+1. 使用 Redis（或数据库 advisory lock）实现按 `memory_id` 的分布式互斥，
+   锁内完成读取、版本比较与写入，并设置合理 TTL 与续租；
+2. 在锁值中加入 fencing token，写入前校验 token，防止过期持有者继续写；
+3. 或改造存储层为支持条件更新的后端（例如带版本条件的 CAS / 事务）；
+4. 增加多进程 / 多实例并发写入同一 `memory_id` 的集成测试。
+
+### 测试覆盖
+
+- **单进程覆盖充分**：`agent/tests/test_memory_store_versioning.py` 覆盖
+  V2 后到 V1 丢弃、墓碑阻止复活、删除先于首次写入、旧 DELETE 不降低墓碑版本；
+- **无多实例覆盖**：没有跨进程 / 跨实例的并发写入测试；
+- 结论：单实例行为已验证，多实例一致性未被测试证明。
 
 ---
 
@@ -410,6 +600,14 @@ ALTER TABLE `message`
 | CIT-01 | 低-中 | 实时/历史展示不一致 | 部分（历史路径） | 记录 |
 | CIT-02 | 中 | 历史引用指向非活跃来源 | 部分（软删） | 记录 |
 | MIG-01 | 中 | 旧库升级失败 | 部分（当前库形态） | 记录 |
+| WEB-01 | 低 | 不影响后端能力，增加上手成本 | 无（前端无自动化测试） | 记录 |
+| DOC-01 | 中 | 不影响检索 / 权限，存在磁盘残留 | 部分（正常删除；IO 异常无覆盖） | 记录 |
+| DDL-01 | 中 | 不影响查询，升级 / 部署有风险 | 无迁移框架测试 | 记录 |
+| DIST-01 | 中 | 单实例安全，多实例可能版本回退 | 单进程充分、多实例无覆盖 | 记录 |
 
 以上均为**已知限制**，不是“已修复但未写文档”的项。后续修复时应同时补对应测试，
 不能只改代码。
+
+> 说明：RAG / MEM / CIT / MIG 系列来自三阶段改造的内部审查；WEB / DOC / DDL / DIST
+> 为本轮封版评审确认、并明确**不在本轮修复**的边界。它们不构成本次交付的阻塞项，
+> 但任何一类在进入生产前都应按各节的“后续方向”完成收敛。
