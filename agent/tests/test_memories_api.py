@@ -70,11 +70,21 @@ class FakeStore:
             raise MemoryVectorStoreUnavailable("qdrant unavailable")
         self.upserts.append(kwargs)
 
-    async def delete_memory(self, *, collection_name: str, memory_id: int) -> None:
+    async def delete_memory(
+        self,
+        *,
+        collection_name: str,
+        memory_id: int,
+        memory_version: int | None = None,
+    ) -> None:
         if self.fail:
             raise MemoryVectorStoreUnavailable("qdrant unavailable")
         self.deleted.append(
-            {"collection": collection_name, "memoryId": memory_id}
+            {
+                "collection": collection_name,
+                "memoryId": memory_id,
+                "memoryVersion": memory_version,
+            }
         )
 
     async def search(self, **kwargs):
@@ -243,7 +253,11 @@ def test_sync_delete_does_not_create_collection_or_embed() -> None:
     assert data["pointId"] is None
     assert data["collection"] == "test_hash-v1_8"
     assert store.deleted == [
-        {"collection": "test_hash-v1_8", "memoryId": 42}
+        {
+            "collection": "test_hash-v1_8",
+            "memoryId": 42,
+            "memoryVersion": None,
+        }
     ]
     # DELETE 不应该为了清理旧数据而创建空 collection。
     assert store.ensured is None

@@ -47,12 +47,15 @@ class MemoryIndexer:
             dimension=self._provider.dimension,
         )
         await self._store.delete_memory(
-            collection_name=collection, memory_id=request.memory_id
+            collection_name=collection,
+            memory_id=request.memory_id,
+            memory_version=request.memory_version,
         )
         log.info(
-            "Memory vector deleted memoryId=%s userId=%s eventId=%s",
+            "Memory vector tombstoned memoryId=%s userId=%s version=%s eventId=%s",
             request.memory_id,
             request.user_id,
+            request.memory_version,
             request.event_id,
         )
         return {"pointId": None, "collection": collection, "skipped": False}

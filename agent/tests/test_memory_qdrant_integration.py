@@ -40,6 +40,7 @@ def _payload(
     user_id: int,
     content_hash: str,
     fingerprint: str,
+    memory_version: int = 1,
     status: str = "ACTIVE",
     scope_type: str = "GLOBAL",
     space_id: int | None = None,
@@ -55,7 +56,7 @@ def _payload(
         "memory_type": "LEARNING",
         "importance": 0.5,
         "content_hash": content_hash,
-        "memory_version": 1,
+        "memory_version": memory_version,
         "embedding_fingerprint": fingerprint,
     }
 
@@ -199,6 +200,7 @@ async def test_real_memory_upsert_search_delete_and_isolation() -> None:
                 user_id=7,
                 content_hash="h101-v2",
                 fingerprint=provider.fingerprint,
+                memory_version=1,
             ),
         )
         payload = await store.retrieve_payload(
@@ -219,15 +221,122 @@ async def test_real_memory_upsert_search_delete_and_isolation() -> None:
         )
         assert count.count == 1
 
-        # 删除按 memory_id，重复删除幂等。
-        await store.delete_memory(collection_name=collection, memory_id=101)
-        await store.delete_memory(collection_name=collection, memory_id=101)
-        assert (
-            await store.retrieve_payload(
-                collection_name=collection, point_id=point_id_for_memory(101)
-            )
-            is None
+        # 乱序：V2 先写入，晚到的 V1 被丢弃，最终保留 V2。
+        await store.upsert_memory(
+            collection_name=collection,
+            point_id=point_id_for_memory(105),
+            vector=vectors[0],
+            payload=_payload(
+                memory_id=105,
+                user_id=7,
+                content_hash="h105-v2",
+                fingerprint=provider.fingerprint,
+                memory_version=2,
+            ),
         )
+        await store.upsert_memory(
+            collection_name=collection,
+            point_id=point_id_for_memory(105),
+            vector=vectors[2],
+            payload=_payload(
+                memory_id=105,
+                user_id=7,
+                content_hash="h105-v1",
+                fingerprint=provider.fingerprint,
+                memory_version=1,
+            ),
+        )
+        payload = await store.retrieve_payload(
+            collection_name=collection, point_id=point_id_for_memory(105)
+        )
+        assert payload is not None
+        assert payload["content_hash"] == "h105-v2"
+        assert payload["memory_version"] == 2
+
+        # Delete 不物理删除，而是写墓碑；晚到的旧 UPSERT 不能复活数据。
+        await store.delete_memory(
+            collection_name=collection, memory_id=105, memory_version=3
+        )
+        await store.upsert_memory(
+            collection_name=collection,
+            point_id=point_id_for_memory(105),
+            vector=vectors[0],
+            payload=_payload(
+                memory_id=105,
+                user_id=7,
+                content_hash="h105-v2-late",
+                fingerprint=provider.fingerprint,
+                memory_version=2,
+            ),
+        )
+        payload = await store.retrieve_payload(
+            collection_name=collection, point_id=point_id_for_memory(105)
+        )
+        assert payload is not None
+        assert payload["deleted"] is True
+        assert payload["status"] == "DELETED"
+        assert payload["memory_version"] == 3
+        # 墓碑只改状态/版本，不覆盖原有 payload。
+        assert payload["content_hash"] == "h105-v2"
+        hits, _ = await store.search(
+            query_vector=vectors[0],
+            user_id=7,
+            space_id=None,
+            concept_id=None,
+            top_k=10,
+            model=provider.model,
+            dimension=provider.dimension,
+        )
+        assert 105 not in {hit.memory_id for hit in hits}
+
+        # 删除先于任何 UPSERT 到达：墓碑占位点同样挡住旧事件。
+        await store.delete_memory(
+            collection_name=collection, memory_id=106, memory_version=5
+        )
+        await store.upsert_memory(
+            collection_name=collection,
+            point_id=point_id_for_memory(106),
+            vector=vectors[0],
+            payload=_payload(
+                memory_id=106,
+                user_id=7,
+                content_hash="h106-v4",
+                fingerprint=provider.fingerprint,
+                memory_version=4,
+            ),
+        )
+        payload_106 = await store.retrieve_payload(
+            collection_name=collection, point_id=point_id_for_memory(106)
+        )
+        assert payload_106 is not None
+        assert payload_106["deleted"] is True
+        assert payload_106["memory_version"] == 5
+
+        # 重复删除幂等：墓碑保留，物理 point 数仍为 1。
+        await store.delete_memory(
+            collection_name=collection, memory_id=101, memory_version=2
+        )
+        await store.delete_memory(
+            collection_name=collection, memory_id=101, memory_version=2
+        )
+        payload = await store.retrieve_payload(
+            collection_name=collection, point_id=point_id_for_memory(101)
+        )
+        assert payload is not None
+        assert payload["deleted"] is True
+        assert payload["status"] == "DELETED"
+        count = await store._client.count(
+            collection_name=collection,
+            count_filter=qm.Filter(
+                must=[
+                    qm.FieldCondition(
+                        key="memory_id", match=qm.MatchValue(value=101)
+                    )
+                ]
+            ),
+            exact=True,
+        )
+        assert count.count == 1
     finally:
         try:
             await store._client.delete_collection(collection)
