@@ -28,7 +28,8 @@ import java.util.concurrent.ThreadLocalRandom;
  *
  * <h3>抢占与租约</h3>
  * 候选查询之后用条件 {@code UPDATE ... WHERE status='PENDING'} 领取；多实例部署时
- * 只有一个实例能成功。租约超时的事件会回到 PENDING，{@code attempt_count} 不重置。
+ * 只有一个实例能成功。租约超时的事件在重试未耗尽时回到 PENDING，
+ * {@code attempt_count} 不重置；已耗尽的直接进入 DEAD，避免无限重试。
  *
  * <h3>失败分类</h3>
  * {@link AgentMemoryException#isPermanent()} 为真（4xx，408/429 除外，以及契约漂移）
@@ -42,6 +43,8 @@ public class OutboxRelayWorker {
     static final String AGGREGATE_TYPE = "MEMORY";
     private static final int ERROR_MAX_LENGTH = 500;
     private static final int CLEANUP_RETENTION_DAYS = 7;
+    private static final String LEASE_EXPIRED_DEAD_REASON =
+            "租约过期且重试次数已耗尽（Worker 可能在异常回写前崩溃）";
 
     private final OutboxEventMapper outboxEventMapper;
     private final AgentMemoryClient agentMemoryClient;
@@ -186,6 +189,16 @@ public class OutboxRelayWorker {
 
     private void recoverExpiredLeases(LocalDateTime now) {
         LocalDateTime cutoff = now.minusSeconds(properties.leaseSeconds());
+
+        // 先处理重试已耗尽的事件：它们在异常回写之前崩溃，租约过期后不能回到
+        // PENDING，否则会「领取 → 崩溃 → 回收 → 再领取」无限循环。
+        int deadLettered = outboxEventMapper.deadLetterExpiredLeases(
+                cutoff, now, LEASE_EXPIRED_DEAD_REASON);
+        if (deadLettered > 0) {
+            log.error("memory.outbox.lease-dead count={} cutoff={} reason={}",
+                    deadLettered, cutoff, LEASE_EXPIRED_DEAD_REASON);
+        }
+
         int recovered = outboxEventMapper.recoverExpiredLeases(cutoff, now);
         if (recovered > 0) {
             log.warn("memory.outbox.lease-recovered count={} cutoff={}", recovered, cutoff);

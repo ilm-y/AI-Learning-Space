@@ -154,6 +154,22 @@ class MemoryControllerTest {
                 .andExpect(jsonPath("$.data.warnings[0]").value("向量检索失败：Agent 不可用"));
     }
 
+    @Test
+    @DisplayName("混合检索端点：UNAVAILABLE 带 warnings 返回，空结果不被伪装成正常")
+    void hybridEndpointExposesUnavailableInsteadOfBareEmptyList() throws Exception {
+        when(hybridSearchService.search(any(), any(), any(), any(), any()))
+                .thenReturn(new HybridMemorySearchResponse(
+                        MemoryHybridStatus.UNAVAILABLE, List.of(),
+                        List.of("词法检索失败：DB down", "向量检索失败：Agent down"), 5L));
+
+        mockMvc.perform(get("/api/memories/search/hybrid").param("keyword", "递归"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("UNAVAILABLE"))
+                .andExpect(jsonPath("$.data.items").isEmpty())
+                .andExpect(jsonPath("$.data.warnings.length()").value(2));
+    }
+
     private static Memory memory(MemoryStatus status) {
         Memory memory = new Memory();
         memory.setId(42L);

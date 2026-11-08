@@ -169,6 +169,51 @@ class OutboxRelayWorkerTest {
     }
 
     @Test
+    @DisplayName("租约连续过期且重试耗尽：最终进入 DEAD，而不是无限回到 PENDING")
+    void consecutiveLeaseExpiryEventuallyDeadLetters() {
+        int maxAttempts = 2;
+        OutboxEvent event = event(MemoryEventType.MEMORY_UPSERT, 0, maxAttempts);
+        event.setStatus(OutboxEventStatus.PROCESSING);
+
+        // 内存 fake 复现两条回收 SQL 的互补条件（attempt_count 与 max_attempts）。
+        when(outboxEventMapper.selectClaimable(any(), eq(BATCH_SIZE)))
+                .thenAnswer(invocation -> event.getStatus() == OutboxEventStatus.PENDING
+                        ? List.of(event) : List.of());
+        when(outboxEventMapper.claim(anyLong(), anyString(), any()))
+                .thenAnswer(invocation -> {
+                    if (event.getStatus() != OutboxEventStatus.PENDING) {
+                        return 0;
+                    }
+                    event.setStatus(OutboxEventStatus.PROCESSING);
+                    event.setLockedAt(invocation.getArgument(2));
+                    event.setAttemptCount(event.getAttemptCount() + 1);
+                    return 1;
+                });
+        // Worker 在处理中崩溃：Error 绕过 process() 的 RuntimeException 分支，
+        // 因此不会执行 markPending/markDead，事件停留在 PROCESSING 等租约过期。
+        when(agentMemoryClient.sync(any())).thenThrow(new SimulatedWorkerCrash());
+        when(outboxEventMapper.recoverExpiredLeases(any(), any()))
+                .thenAnswer(invocation -> recoverExpired(invocation.getArgument(0), event));
+        when(outboxEventMapper.deadLetterExpiredLeases(any(), any(), anyString()))
+                .thenAnswer(invocation -> deadLetterExpired(invocation.getArgument(0), event));
+
+        for (int tick = 0; tick < 10 && event.getStatus() != OutboxEventStatus.DEAD; tick++) {
+            // 每轮开始都让上一轮的租约处于过期状态。
+            event.setLockedAt(LocalDateTime.now().minusSeconds(600));
+            try {
+                worker.relayTick();
+            } catch (SimulatedWorkerCrash expected) {
+                // 处理中崩溃；状态保持 PROCESSING，等待下一轮回收。
+            }
+        }
+
+        assertThat(event.getStatus()).isEqualTo(OutboxEventStatus.DEAD);
+        assertThat(event.getAttemptCount()).isEqualTo(maxAttempts);
+        verify(outboxEventMapper, never()).markPending(anyLong(), anyString(), any(), any());
+        verify(outboxEventMapper, never()).markDead(anyLong(), anyString(), any(), any());
+    }
+
+    @Test
     @DisplayName("租约已被别的实例抢走：claim 返回 0 时跳过，不调用 Agent")
     void lostClaimIsSkipped() {
         when(outboxEventMapper.selectClaimable(any(), eq(BATCH_SIZE)))
@@ -235,6 +280,37 @@ class OutboxRelayWorkerTest {
     }
 
     // ===================== helpers =====================
+
+    /** 模拟 Worker 在回写状态之前进程崩溃：绕过 process() 的 RuntimeException 分支。 */
+    private static final class SimulatedWorkerCrash extends Error {
+        SimulatedWorkerCrash() {
+            super("simulated worker crash");
+        }
+    }
+
+    private static int recoverExpired(LocalDateTime cutoff, OutboxEvent event) {
+        if (event.getStatus() != OutboxEventStatus.PROCESSING
+                || event.getLockedAt() == null
+                || !event.getLockedAt().isBefore(cutoff)
+                || event.getAttemptCount() >= event.getMaxAttempts()) {
+            return 0;
+        }
+        event.setStatus(OutboxEventStatus.PENDING);
+        event.setLockedAt(null);
+        return 1;
+    }
+
+    private static int deadLetterExpired(LocalDateTime cutoff, OutboxEvent event) {
+        if (event.getStatus() != OutboxEventStatus.PROCESSING
+                || event.getLockedAt() == null
+                || !event.getLockedAt().isBefore(cutoff)
+                || event.getAttemptCount() < event.getMaxAttempts()) {
+            return 0;
+        }
+        event.setStatus(OutboxEventStatus.DEAD);
+        event.setLockedAt(null);
+        return 1;
+    }
 
     private static OutboxEvent event(MemoryEventType type, int attemptCount, int maxAttempts) {
         MemoryEventPayload payload = new MemoryEventPayload(

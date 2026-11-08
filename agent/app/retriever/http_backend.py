@@ -6,7 +6,7 @@
 | --- | --- |
 | Concept | `GET /api/spaces/{spaceId}/concepts` |
 | Understanding | `GET /api/understandings/{conceptId}` |
-| Memory | `GET /api/memories/search?spaceId=&conceptId=&keyword=` |
+| Memory | `GET /api/memories/search/hybrid?spaceId=&conceptId=&keyword=` |
 | Evidence | `GET /api/understandings/{conceptId}/evidence` |
 | Knowledge 白名单 | `GET /api/spaces/{spaceId}/documents/ready-ids?embeddingModel=` |
 | Knowledge 向量 | 现有 Embedding Provider + Qdrant（`KnowledgeSearchService`） |
@@ -121,25 +121,40 @@ class HttpBackendRetriever:
     ) -> list[MemoryItem]:
         # 后端已按 status = ACTIVE 过滤，CANDIDATE 不会流进来。
         #
-        # keyword 传的是用户原话（截前 60 字），这没问题 —— 后端的 /api/memories/search
-        # 不是把整串当作一个子串去 LIKE，而是先按空白/标点切词、中文再补字符二元组，
-        # 命中任意一个词就算候选。所以「一句话」正是它期待的输入形态。
-        # 反过来，如果哪天后端改回「整串当子串」，这里传原话就会永远返回空列表，
-        # 而空列表和不报错长得一模一样 —— 排查时先看后端 search 的实现。
+        # 走 /search/hybrid 而不是旧 /search：旧端点只返回 List，检索整条链路
+        # 不可用时和「确实没有相关记忆」都是空列表，Agent 无从区分。混合检索端点
+        # 带 status（OK / DEGRADED_* / UNAVAILABLE / BLANK_QUERY），必须在这里
+        # 显式识别并告警，绝不能把「检索失败」静默当成「没有记忆」。
+        #
+        # keyword 传的是用户原话（截前 60 字），这没问题 —— 后端不是把整串当作
+        # 一个子串去 LIKE，而是先按空白/标点切词、中文再补字符二元组，命中任意
+        # 一个词就算候选。所以「一句话」正是它期待的输入形态。
         #
         # conceptId 传本轮命中的第一个概念：后端的可见性规则里，CONCEPT 级记忆只有在
         # 「spaceId 与 conceptId 同时给对」时才可见。不传的话它们会被静默排除 ——
         # 结果依然是个正常返回的空列表，看不出任何异常。取第一个而不是全部，是因为
         # 后端一个请求只认一个 conceptId；本轮的首要话题就是第一个命中的概念。
-        params: dict[str, Any] = {"spaceId": space_id, "keyword": query[:60]}
+        params: dict[str, Any] = {
+            "spaceId": space_id,
+            "keyword": query[:60],
+            "limit": self._memory_top_k,
+        }
         if concept_ids:
             params["conceptId"] = concept_ids[0]
         data = await self._get(
-            "/api/memories/search",
+            "/api/memories/search/hybrid",
             params=params,
             fatal=False,
         )
-        return _parse_list(data, MemoryItem)[: self._memory_top_k]
+        status, memories, warnings = _parse_memory_search(data)
+        joined = "；".join(warnings)
+        if status == "UNAVAILABLE":
+            # 空列表在这里是「检索不可用」，不是「没有记忆」。必须留下明确痕迹。
+            log.warning("记忆检索不可用（status=UNAVAILABLE）：%s", joined or "无附加信息")
+            return []
+        if status in {"DEGRADED_VECTOR", "DEGRADED_KEYWORD"}:
+            log.warning("记忆检索降级（status=%s）：%s", status, joined or "无附加信息")
+        return memories[: self._memory_top_k]
 
     async def get_knowledge(self, query: KnowledgeQuery) -> KnowledgeResult:
         # 第一步必须是后端授权白名单。拿不到就 fail closed；绝不先查 Qdrant 再过滤，
@@ -294,6 +309,52 @@ class HttpBackendRetriever:
             log.warning("后端业务错误，跳过：%s code=%s", path, envelope.code)
             return None
         return envelope.data
+
+
+def _parse_memory_search(
+    data: Any,
+) -> tuple[str | None, list[MemoryItem], list[str]]:
+    """解析混合检索响应：``{status, items:[{memory:...}], warnings}``。
+
+    返回 ``(status, memories, warnings)``。响应结构异常时返回空结果并记录日志，
+    而不是抛出打断整轮对话；但只要后端给了 ``status``，调用方就必须据此决定
+    是继续使用结果、告警降级，还是把「不可用」与「没有结果」区分开。
+    """
+    if data is None:
+        # _get 已经为 HTTP/业务失败打过日志；这里只表示「本次没有数据」。
+        return None, [], []
+    if isinstance(data, list):
+        # 旧后端（或反向代理缓存）仍返回裸列表：没有 status，无法判断降级状态。
+        log.warning("记忆检索响应缺少 status（旧格式），无法判断是否降级")
+        return None, _parse_list(data, MemoryItem), []
+    if not isinstance(data, dict):
+        log.warning("记忆检索响应格式异常：%s", str(data)[:200])
+        return None, [], []
+
+    raw_status = data.get("status")
+    status = raw_status if isinstance(raw_status, str) else None
+    if status is None:
+        log.warning("记忆检索响应缺少 status，无法判断是否降级")
+
+    memories: list[MemoryItem] = []
+    raw_items = data.get("items")
+    if isinstance(raw_items, list):
+        for hit in raw_items:
+            memory = hit.get("memory") if isinstance(hit, dict) else None
+            if memory is None:
+                log.warning("跳过缺少 memory 的混合检索结果：%s", str(hit)[:200])
+                continue
+            item = _parse_one(memory, MemoryItem)
+            if item is not None:
+                memories.append(item)
+
+    raw_warnings = data.get("warnings")
+    warnings = (
+        [warning for warning in raw_warnings if isinstance(warning, str)]
+        if isinstance(raw_warnings, list)
+        else []
+    )
+    return status, memories, warnings
 
 
 def _parse_list(data: Any, model: type) -> list:

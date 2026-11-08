@@ -120,9 +120,11 @@ public interface OutboxEventMapper extends BaseMapper<OutboxEvent> {
                  @Param("lastError") String lastError);
 
     /**
-     * 回收过期租约：PROCESSING 超时 → PENDING。
+     * 回收过期租约：重试次数尚未耗尽的 PROCESSING 超时事件 → PENDING。
      *
-     * <p>{@code attempt_count} 保持已累加值，避免「崩溃 → 立即重试 → 再崩溃」无限循环。</p>
+     * <p>{@code attempt_count} 保持已累加值，避免「崩溃 → 立即重试 → 再崩溃」无限循环。
+     * 已达到 {@code max_attempts} 的事件不在这里回收，而是由
+     * {@link #deadLetterExpiredLeases} 直接转入 DEAD。</p>
      */
     @Update("""
             UPDATE outbox_event
@@ -132,9 +134,33 @@ public interface OutboxEventMapper extends BaseMapper<OutboxEvent> {
                 next_attempt_at = #{now}
             WHERE status = 'PROCESSING'
               AND locked_at < #{cutoff}
+              AND attempt_count < max_attempts
             """)
     int recoverExpiredLeases(@Param("cutoff") LocalDateTime cutoff,
                              @Param("now") LocalDateTime now);
+
+    /**
+     * 回收过期租约：重试次数已耗尽的 PROCESSING 超时事件 → DEAD。
+     *
+     * <p>Worker 在异常处理回写之前崩溃时，租约只能靠这里回收。如果只把事件改回
+     * PENDING，它会再次被领取、再次崩溃（{@code attempt_count} 虽然累加，却永远不会
+     * 被判定为耗尽），形成无限重试。与 {@link #recoverExpiredLeases} 的
+     * {@code attempt_count < max_attempts} 条件互补，两条 SQL 互斥。</p>
+     */
+    @Update("""
+            UPDATE outbox_event
+            SET status = 'DEAD',
+                locked_by = NULL,
+                locked_at = NULL,
+                completed_at = #{now},
+                last_error = #{lastError}
+            WHERE status = 'PROCESSING'
+              AND locked_at < #{cutoff}
+              AND attempt_count >= max_attempts
+            """)
+    int deadLetterExpiredLeases(@Param("cutoff") LocalDateTime cutoff,
+                                @Param("now") LocalDateTime now,
+                                @Param("lastError") String lastError);
 
     /** 清理 7 天前完成的事件；按批执行，避免长事务。 */
     @Update("""
