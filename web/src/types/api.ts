@@ -179,8 +179,13 @@ export interface CitationResponse {
   chunkId: number
   chunkIndex: number | null
   sourceTitle: string
-  /** 当前是否仍可打开（文档删除 / 重建后会变成 false） */
+  /** 当前是否仍属于活跃 READY 版本（文档删除 / 重建后会变成 false） */
   available: boolean
+  /**
+   * 引用是否产生于更早的索引版本。
+   * available=false 时用来区分「历史版本」与「来源已删除」。
+   */
+  isHistorical: boolean
 }
 
 export interface MessageRequest {

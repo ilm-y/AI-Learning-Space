@@ -15,6 +15,8 @@ import com.ails.backend.entity.Message;
 import com.ails.backend.enums.AgentRunStatus;
 import com.ails.backend.enums.ConversationStatus;
 import com.ails.backend.mapper.AgentRunMapper;
+import com.ails.backend.mapper.DocumentChunkMapper;
+import com.ails.backend.mapper.DocumentMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -68,6 +70,7 @@ class ChatServiceTest {
 
     private ConversationService conversationService;
     private MessageService messageService;
+    private CitationService citationService;
     private AgentGateway agentGateway;
     private AgentRunMapper agentRunMapper;
     private ChatTurnService chatTurnService;
@@ -83,7 +86,18 @@ class ChatServiceTest {
     void setUp() {
         conversationService = mock(ConversationService.class);
         messageService = mock(MessageService.class);
+        citationService = mock(CitationService.class);
         agentGateway = mock(AgentGateway.class);
+        // 默认：盖章保持原列表；resolver 按「当前可用、非历史」返回。个别测试再覆盖。
+        when(citationService.stampIndexVersions(anyList()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(citationService.resolve(eq(USER_ID), anyList()))
+                .thenAnswer(invocation -> {
+                    List<CitationMetadata> citations = invocation.getArgument(1);
+                    return citations.stream()
+                            .map(citation -> CitationResponse.from(citation, true, false))
+                            .toList();
+                });
         agentRunMapper = mock(AgentRunMapper.class);
         chatTurnService = mock(ChatTurnService.class);
         analysisDispatchService = mock(AnalysisDispatchService.class);
@@ -252,10 +266,91 @@ class ChatServiceTest {
         assertThat(stored.getValue())
                 .containsExactly(new CitationMetadata(10L, 1L, 0, "zenframe.md"));
 
-        // ② 同一份引用出现在 message.end，实时链路不需要另查一次
+        // ② 同一份引用出现在 message.end，实时链路不再硬编码 true，而是走同一个 resolver
         Map<String, Object> end = emitter.payloadOf("message.end");
         assertThat(end.get("citations"))
-                .isEqualTo(List.of(new CitationResponse(10L, 1L, 0, "zenframe.md", true)));
+                .isEqualTo(List.of(new CitationResponse(10L, 1L, 0, "zenframe.md", true, false)));
+        verify(citationService).resolve(eq(USER_ID), anyList());
+    }
+
+    @Test
+    @DisplayName("实时引用走 resolver：resolver 返回 false 时 message.end 也是 false")
+    @SuppressWarnings("unchecked")
+    void realtimeCitationUsesResolverResult() {
+        when(messageService.appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList()))
+                .thenReturn(assistantMessage());
+        when(citationService.resolve(eq(USER_ID), anyList()))
+                .thenReturn(List.of(new CitationResponse(10L, 1L, 0, "zenframe.md", false, false)));
+        AgentCitation citation = new AgentCitation(10L, 1L, 0, "zenframe.md");
+        doAnswer(invocation -> {
+            AgentStreamHandler handler = invocation.getArgument(1);
+            handler.onDelta(ANSWER);
+            handler.onComplete(new StreamCompletion(null, false, List.of(citation)));
+            return null;
+        }).when(agentGateway).streamReply(any(ChatAgentRequest.class), any(AgentStreamHandler.class));
+
+        TestEmitter emitter = new TestEmitter(false, false);
+        chatService = serviceWith(emitter);
+
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token");
+
+        Map<String, Object> end = emitter.payloadOf("message.end");
+        assertThat(end.get("citations"))
+                .isEqualTo(List.of(new CitationResponse(10L, 1L, 0, "zenframe.md", false, false)));
+    }
+
+    @Test
+    @DisplayName("resolver 异常：降级为 available=true，回答仍然落库并发出 message.end")
+    @SuppressWarnings("unchecked")
+    void resolverFailureFallsBackToAvailableTrue() {
+        when(messageService.appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList()))
+                .thenReturn(assistantMessage());
+        when(citationService.resolve(eq(USER_ID), anyList()))
+                .thenThrow(new IllegalStateException("availability lookup failed"));
+        AgentCitation citation = new AgentCitation(10L, 1L, 0, "zenframe.md");
+        doAnswer(invocation -> {
+            AgentStreamHandler handler = invocation.getArgument(1);
+            handler.onDelta(ANSWER);
+            handler.onComplete(new StreamCompletion(null, false, List.of(citation)));
+            return null;
+        }).when(agentGateway).streamReply(any(ChatAgentRequest.class), any(AgentStreamHandler.class));
+
+        TestEmitter emitter = new TestEmitter(false, false);
+        chatService = serviceWith(emitter);
+
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token");
+
+        Map<String, Object> end = emitter.payloadOf("message.end");
+        assertThat(end).isNotNull();
+        assertThat(end.get("citations"))
+                .isEqualTo(List.of(new CitationResponse(10L, 1L, 0, "zenframe.md", true, false)));
+        verify(messageService).appendAssistantMessage(
+                eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList());
+    }
+
+    @Test
+    @DisplayName("没有引用时不查询文档 / chunk")
+    void noCitationsSkipsAvailabilityQueries() {
+        DocumentMapper documentMapper = mock(DocumentMapper.class);
+        DocumentChunkMapper chunkMapper = mock(DocumentChunkMapper.class);
+        citationService = new CitationService(documentMapper, chunkMapper);
+        when(messageService.appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList()))
+                .thenReturn(assistantMessage());
+        doAnswer(invocation -> {
+            AgentStreamHandler handler = invocation.getArgument(1);
+            handler.onDelta(ANSWER);
+            handler.onComplete(StreamCompletion.normal());
+            return null;
+        }).when(agentGateway).streamReply(any(ChatAgentRequest.class), any(AgentStreamHandler.class));
+
+        TestEmitter emitter = new TestEmitter(false, false);
+        chatService = serviceWith(emitter);
+
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token");
+
+        Map<String, Object> end = emitter.payloadOf("message.end");
+        assertThat((List<?>) end.get("citations")).isEmpty();
+        verifyNoInteractions(documentMapper, chunkMapper);
     }
 
     @Test
@@ -318,7 +413,7 @@ class ChatServiceTest {
 
     private ChatService serviceWith(SseEmitter emitter) {
         TaskExecutor inline = Runnable::run;
-        return new ChatService(conversationService, messageService, agentGateway,
+        return new ChatService(conversationService, messageService, citationService, agentGateway,
                 agentRunMapper, chatTurnService, analysisDispatchService, inline) {
             @Override
             protected SseEmitter createEmitter() {

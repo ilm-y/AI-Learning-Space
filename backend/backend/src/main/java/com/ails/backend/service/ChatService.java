@@ -110,6 +110,11 @@ public class ChatService {
 
     private final ConversationService conversationService;
     private final MessageService messageService;
+    /**
+     * 引用版本快照与可用性判定。实时 SSE 与历史读取共用同一套 resolver，
+     * 避免两条链路对同一条引用给出不同结论。
+     */
+    private final CitationService citationService;
     private final AgentGateway agentGateway;
     private final AgentRunMapper agentRunMapper;
     /**
@@ -319,10 +324,19 @@ public class ChatService {
                                 .map(CitationMetadata::fromAgent)
                                 .filter(Objects::nonNull)
                                 .toList();
+                        // 版本快照只服务历史标签（isHistorical）。盖章失败不能让整轮回答失败：
+                        // 引用仍可按身份落库，历史读取时还能用现存 chunk 版本兜底。
+                        List<CitationMetadata> persistedCitations;
+                        try {
+                            persistedCitations = citationService.stampIndexVersions(citations);
+                        } catch (Exception e) {
+                            log.warn("引用版本快照盖章失败，按无版本快照落库: runId={}", run.getId(), e);
+                            persistedCitations = citations;
+                        }
                         // 把 buffer 里的全文存成一条助手消息 —— 从这一刻起 GET /messages 才能看到 AI 回复。
                         // 截断时保留已经生成的部分内容，但持久化层同时记下「不完整」。
                         assistantMessage = messageService.appendAssistantMessage(
-                                conversation.getId(), buffer.toString(), truncated, citations);
+                                conversation.getId(), buffer.toString(), truncated, persistedCitations);
                         // 把助手消息 id 记到 run 上：重放要凭它找回「这一轮的回复」，
                         // 而不是拿 conversation 最新一条助手消息去猜（并发轮次会猜错）。
                         run.setAssistantMessageId(assistantMessage.getId());
@@ -331,11 +345,22 @@ public class ChatService {
                         Map<String, Object> end = new LinkedHashMap<>();
                         end.put("messageId", assistantMessage.getId());
                         end.put("runId", run.getId());
-                        // SSE 是实时链路：这些来源刚刚通过检索白名单，因此 available=true。
-                        // 历史读取（GET /messages）会按届时的文档状态重新计算可用性。
-                        end.put("citations", citations.stream()
-                                .map(citation -> CitationResponse.from(citation, true))
-                                .toList());
+                        // 实时与历史共用同一套可用性判定：文档 READY 且 chunk 属于活跃
+                        // indexVersion 才是 available=true；旧版本用 isHistorical 标记。
+                        // 查询失败时降级为 available=true —— 回答已经成功生成，不能因为
+                        // 展示层的一次可用性查询失败就让客户端看不到引用或整轮失败。
+                        List<CitationResponse> citationResponses;
+                        try {
+                            citationResponses = citationService.resolve(
+                                    run.getUserId(), persistedCitations);
+                        } catch (Exception e) {
+                            log.warn("实时引用可用性计算失败，降级为 available=true: runId={}",
+                                    run.getId(), e);
+                            citationResponses = persistedCitations.stream()
+                                    .map(citation -> CitationResponse.from(citation, true, false))
+                                    .toList();
+                        }
+                        end.put("citations", citationResponses);
                         if (truncated) {
                             end.put("truncated", true);
                             end.put("finishReason", terminal.finishReason());

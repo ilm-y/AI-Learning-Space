@@ -68,6 +68,29 @@ function renderMarkdown(content: string): string {
   return DOMPurify.sanitize(html as string)
 }
 
+function citationTagType(citation: CitationResponse): 'primary' | 'info' | 'danger' {
+  if (citation.available) {
+    return 'info'
+  }
+  return citation.isHistorical ? 'primary' : 'danger'
+}
+
+function citationSuffix(citation: CitationResponse): string {
+  if (citation.available) {
+    return ''
+  }
+  return citation.isHistorical ? '（历史版本）' : '（来源已删除）'
+}
+
+function citationTooltip(citation: CitationResponse): string {
+  if (citation.available) {
+    return ''
+  }
+  return citation.isHistorical
+    ? '该引用基于旧版本索引，当前内容可能已更新'
+    : '引用的文档或片段已不可用'
+}
+
 function bubbleStyle(role: MessageRole): CSSProperties {
   return {
     padding: '10px 14px',
@@ -509,19 +532,25 @@ onBeforeUnmount(() => {
             >
               <el-text size="small" type="info">引用来源</el-text>
               <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px">
-                <el-tag
+                <el-tooltip
                   v-for="(citation, index) in message.citations"
                   :key="`${message.key}-cite-${index}`"
-                  size="small"
-                  effect="plain"
-                  :type="citation.available ? 'info' : 'danger'"
+                  :content="citationTooltip(citation)"
+                  :disabled="citation.available"
+                  placement="top"
                 >
-                  {{ citation.sourceTitle || '未命名文档' }}
-                  <template v-if="citation.chunkIndex !== null">
-                    · 片段 {{ citation.chunkIndex + 1 }}
-                  </template>
-                  <template v-if="!citation.available">（已失效）</template>
-                </el-tag>
+                  <el-tag
+                    size="small"
+                    effect="plain"
+                    :type="citationTagType(citation)"
+                  >
+                    {{ citation.sourceTitle || '未命名文档' }}
+                    <template v-if="citation.chunkIndex !== null">
+                      · 片段 {{ citation.chunkIndex + 1 }}
+                    </template>
+                    {{ citationSuffix(citation) }}
+                  </el-tag>
+                </el-tooltip>
               </div>
             </div>
           </div>

@@ -317,6 +317,8 @@ function normalizeCitations(value: unknown): CitationResponse[] {
       chunkIndex: typeof raw.chunkIndex === 'number' ? raw.chunkIndex : null,
       sourceTitle: typeof raw.sourceTitle === 'string' ? raw.sourceTitle : '',
       available: raw.available !== false,
+      // 旧后端不返回该字段时按非历史处理，保持向前兼容
+      isHistorical: raw.isHistorical === true,
     })
   }
   return citations

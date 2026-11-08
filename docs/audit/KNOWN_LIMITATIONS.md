@@ -279,52 +279,77 @@ SELECT，没有锁住目标身份：
 
 ---
 
-## CIT-01：SSE `message.end` 的引用可用性硬编码为 `true`
+## CIT-01：SSE `message.end` 的引用可用性与历史读取不一致
 
 | 项 | 内容 |
 | --- | --- |
-| 严重度 | 低-中（实时/历史不一致；不泄露权限） |
-| 状态 | 未修复 |
-| 代码位置 | `backend/backend/src/main/java/com/ails/backend/service/ChatService.java:288-292` |
+| 严重度 | 低-中（实时/历史展示不一致；不泄露权限） |
+| 状态 | 已修复（方案 C：统一为「当前活跃版本可用」+ `isHistorical` 三态） |
+| 代码位置 | `ChatService.java` 实时 `message.end`（约 331、357-361 行）；`CitationService.java` 版本盖章 / 批量 resolver；`CitationMetadata.java`、`CitationResponse.java`；`web/src/views/chat/ChatView.vue` |
 
-### 问题描述
+### 原问题
 
 SSE 结束时，`ChatService` 对本次检索得到的每条引用统一调用
-`CitationResponse.from(citation, true)`，即实时事件里的 `available` 永远是 `true`。
-历史读取 `GET /messages` 才通过 `CitationService.isAvailable` 重新计算。
+`CitationResponse.from(citation, true)`，实时事件里的 `available` 永远是 `true`；
+历史读取才重新判断。文档在「检索完成」和「发送 `message.end`」之间被删除、
+转为非 READY、或 chunk 被重建清理时，实时与历史会给出不同结论。
 
-如果文档在“检索完成”和“发送 `message.end`”之间被删除、转为非 READY、或 chunk 被
-重建清理，实时事件仍告诉客户端“来源可用”；刷新历史后才变成 `false`。同一份引用
-在两条链路上可能出现不同结论。
+### 修复内容
 
-### 影响范围
+1. **统一 resolver**：`CitationService.resolve(userId, citations)` 成为实时与历史
+   共用的判定入口。实时 `message.end` 不再硬编码 `true`；
+   `resolveForMessages` 复用同一套 `loadLookups` / `toResponses`。
+2. **批量查询**：一次 `selectBatchIds` 查文档、一次查 chunk，与引用条数无关；
+   历史读取也是所有消息合并成两次批量查询，不产生 N+1。
+3. **可用性收紧**：`available=true` 当且仅当引用身份合法、文档存在且属于当前用户、
+   `document.status == READY`、chunk 存在且 `chunk.documentId == citation.documentId`、
+   `chunk.indexVersion == document.indexVersion`。
+4. **实时降级**：实时 resolver 抛异常时记录 warning 并降级为
+   `available=true / isHistorical=false`，避免整条回答因引用查询失败而丢失。
+   这是有意的可用性优先取舍，已记录在下方「已知边界」。
+5. **版本快照**：写入前在 Spring 侧从 MySQL chunk 盖章 `indexVersion`；
+   Agent / Python 跨语言契约不变，不要求 Agent 返回版本。
+6. **前端三态**：`available / isHistorical` 组合渲染为当前、历史版本、来源已删除，
+   不提供点击跳转。
 
-- 客户端可能短暂显示一个实际不可用的来源链接。
-- 不造成越权：引用身份仍来自当前用户检索白名单；历史读取还会校验归属。
-- 影响范围限于实时 SSE 与历史读取的一致性，属于展示层/体验问题。
+### 最终语义
 
-### 当前权衡（为什么现在不修）
+| 状态 | `available` | `isHistorical` | 前端展示 |
+| --- | --- | --- | --- |
+| 当前活跃版本 | `true` | `false` | 普通来源标签 |
+| 历史版本（引用后重建过） | `false` | `true` | 灰色/蓝色标签 +「历史版本」 |
+| 已删除 / 已清理 / 无法判断 | `false` | `false` | 红色标签 +「来源已删除」 |
 
-- 设计假设是“这些来源刚刚通过检索白名单”，实时链路不再做一次逐条数据库校验，
-  以避免在流式结束路径增加 N 次查询、拉长尾延迟。
-- 文档删除/重建与流式结束撞车的窗口很小；历史读取会纠正，且不会产生权限绕过。
-- 本轮 Citation 目标是“结构化身份 + 历史可判定”，未把实时链路的强一致可用性
-  作为必须项。
+`available=false, isHistorical=true` 只表达「当时确实引用过更早版本」，
+**不表示旧 chunk 仍被保留或可打开**。
 
-### 后续方向
+### 已知边界
 
-1. 在发送 `message.end` 前批量调用 `CitationService` 计算可用性（一次批量查文档/chunk），
-   而不是硬编码 `true`。
-2. 或实时事件只返回身份，不返回 `available`，由客户端在需要时走历史/单条查询。
-3. 增加“检索后、end 前删除文档”的确定性测试。
+- **不保留旧 chunk**：未引入 `retired_at` / `vector_cleaned_at` 等 DDL，
+  未修改 `DocumentIndexService` / `DocumentIndexCleanupService` 的清理策略，
+  因此不与 RAG-02 的存储残留问题冲突。
+- **无 citation 表**：引用仍以 `message.citations` JSON 快照存储。
+- **不可逆信息损失**：功能上线前的旧记录没有版本快照；若其 chunk 已被清理，
+  无法区分「历史版本」与「来源已删除」，只能返回 `false/false`。
+  这是方案 C 明确接受的代价。
+- **窄竞态**：实时判定与历史读取之间仍可能因文档状态变化而不同；
+  两端都只输出布尔值/派生标签，前端按布尔值渲染，不会出现协议错误。
+- **滚动升级**：新 `CitationMetadata` 已加 `@JsonIgnoreProperties(ignoreUnknown = true)`；
+  尚未升级的旧实例读取含 `indexVersion` 的 JSON 时仍可能因未知字段失败，
+  但 `parse` 会降级为空引用，不影响消息列表整体可用。
+- **完整方案 B 的路径仍保留**：若未来要求「历史版本内容可回看」，再引入
+  版本化 chunk 保留与引用版本解析；本批不做。
 
 ### 测试覆盖
 
-- **部分覆盖**：`ChatSseIntegrationTest.citationsRoundTripAndReflectDocumentAvailability`
-  验证 SSE 下发 → 落库 → 历史恢复 → 软删后历史 `available=false`。
-- **无覆盖**：没有在 `message.end` 之前删除文档/改状态，断言实时事件应立即 `false`；
-  也没有测试实时事件中的跨用户/非法引用。
-- 结论：历史路径覆盖，实时路径的硬编码行为未被测试挑战。
+- **单元**：`CitationServiceTest` 覆盖 READY / PROCESSING / DELETING、
+  版本一致 / 不一致 / null、旧版本 chunk 仍在、旧记录无快照（chunk 已清理 /
+  仍存在兜底）、READY 重建失败、批量查询次数、旧 JSON 兼容。
+- **ChatService**：`ChatServiceTest` 覆盖实时使用 resolver 结果、resolver
+  异常降级、无引用不查库。
+- **集成**：`ChatSseIntegrationTest`（`AILS_CHAT_SSE_IT=true` + 真实 MySQL）
+  覆盖重建后历史标签、清理旧 chunk 后仍为历史、DELETING 不可用、
+  READY 重建失败保持可用、实时与历史同数据状态一致。
 
 ---
 
@@ -333,55 +358,30 @@ SSE 结束时，`ChatService` 对本次检索得到的每条引用统一调用
 | 项 | 内容 |
 | --- | --- |
 | 严重度 | 中（历史引用可能指向非活跃/不可检索来源） |
-| 状态 | 未修复 |
-| 代码位置 | `backend/backend/src/main/java/com/ails/backend/service/CitationService.java:120-132` |
+| 状态 | 已修复（方案 C，与 CIT-01 同一套 resolver） |
+| 代码位置 | `backend/backend/src/main/java/com/ails/backend/service/CitationService.java`（`isAvailable` / `isHistorical`） |
 
-### 问题描述
+### 原问题
 
-`CitationService.isAvailable` 的判定是：
+`CitationService.isAvailable` 只校验文档存在、归属当前用户、chunk 归属匹配，
+没有要求 `document.status == READY` 与
+`chunk.indexVersion == document.indexVersion`。重建、FAILED、DELETING 窗口内，
+历史引用可能仍被判定为 `available=true`。
 
-1. 文档存在（`@TableLogic` 已排除软删）且属于当前用户；
-2. chunk 存在且 `chunk.documentId == citation.documentId`。
+### 修复内容
 
-它**没有**要求：
+- 增加 `document.status == READY` 校验；
+- 增加 `chunk.indexVersion == document.indexVersion` 校验；
+- `vector_ref` 不重复校验：READY 文档的活跃版本由索引流程保证所有 chunk
+  都有向量引用，检索白名单也已用 `chunk_count` 做过同一约束；
+- 版本不一致的旧 chunk 不再算「可用」，但若快照证明它属于更早版本，
+  返回 `isHistorical=true`，由前端显示「历史版本」而不是「已删除」。
 
-- `document.status == READY`；
-- `chunk.index_version == document.index_version`（当前活跃版本）；
-- `chunk.vector_ref` 非空/可检索。
+### 剩余边界
 
-因此，在文档重建（PROCESSING + 旧版本仍服务）、索引失败（FAILED）、删除中
-（DELETING）等窗口，历史引用可能被判定为 `available=true`，但该 chunk 已不是
-当前活跃版本，或文档已不可检索。用户点击后可能看到旧内容/空结果。
-
-### 影响范围
-
-- 历史消息中的引用可能显示为“可用”，但指向非活跃版本或非 READY 文档。
-- 不造成跨用户泄露；文档归属与 chunk 归属仍校验。
-- 与 CIT-01 不同：CIT-02 是历史读取路径的判定过宽，不是硬编码。
-
-### 当前权衡（为什么现在不修）
-
-- 当前语义是“来源身份仍存在且属于你”，而不是“来源当前一定可检索”；实现成本低，
-  避免在消息列表读取时额外 join 文档状态/版本。
-- 软删已由 `@TableLogic` 覆盖，最常见的“文档被删”会正确返回 `false`。
-- 重建窗口通常较短，旧版本在清理前仍可能存在；本轮优先保证引用身份与权限，
-  未把“活跃版本一致性”纳入判定。
-
-### 后续方向
-
-1. 在 `isAvailable` 中增加 `document.status == READY` 与
-   `chunk.indexVersion == document.indexVersion` 的校验。
-2. 如需区分“文档存在但当前不可检索”，可在响应中增加原因字段，而不是只有布尔值。
-3. 对重建中的文档，明确产品语义：引用旧版本算可用还是不可用。
-4. 增加非 READY、旧 index_version、DELETING 三种状态的单元/集成测试。
-
-### 测试覆盖
-
-- **部分覆盖**：`CitationServiceTest` 覆盖文档软删、chunk 缺失、chunk 属于另一文档、
-  跨用户；`ChatSseIntegrationTest` 覆盖软删后历史 `false`。
-- **无覆盖**：没有 `status != READY`、`chunk.index_version != document.index_version`、
-  `DELETING` 状态的测试。
-- 结论：最常见删除路径覆盖，版本/状态窗口未覆盖。
+- 旧记录无快照且 chunk 已清理时，无法判断是否历史版本，返回 `false/false`。
+- 没有引入原因枚举；客户端只能依赖 `available` + `isHistorical` 两个布尔值。
+- 完整保留旧版本的方案 B 不在本批范围，见 CIT-01「已知边界」。
 
 ---
 
@@ -986,8 +986,8 @@ ANALYSIS run 不受影响。
 | RAG-03 | 中 | 可能静默丢失召回 | 无 | 记录 |
 | RAG-04 | 中 | 可能降低召回质量 | 行为覆盖、风险未覆盖 | 记录 |
 | MEM-01 | 低-中 | 错误码曾为 500，不丢数据 | 真实 MySQL 并发 + 异常分类单测充分；MySQL 版本升级需回归 | 已修复（方案 A）；依赖异常 message 中的约束名 |
-| CIT-01 | 低-中 | 实时/历史展示不一致 | 部分（历史路径） | 记录 |
-| CIT-02 | 中 | 历史引用指向非活跃来源 | 部分（软删） | 记录 |
+| CIT-01 | 低-中 | 实时/历史展示不一致 | 单测 + 真实 MySQL 集成覆盖实时/历史一致性与降级 | 已修复（方案 C：统一活跃版本语义 + `isHistorical` 三态；旧记录无快照场景不可区分） |
+| CIT-02 | 中 | 历史引用指向非活跃来源 | 单测覆盖 READY / 版本 / DELETING | 已修复（方案 C：READY + 活跃版本校验） |
 | MIG-01 | 中 | 旧库升级失败 | 部分（当前库形态） | 记录 |
 | WEB-01 | 低 | 不影响后端能力，增加上手成本 | 无（前端无自动化测试） | 记录 |
 | DOC-01 | 中 | 不影响检索 / 权限，存在磁盘残留 | 部分（正常删除；IO 异常无覆盖） | 记录 |

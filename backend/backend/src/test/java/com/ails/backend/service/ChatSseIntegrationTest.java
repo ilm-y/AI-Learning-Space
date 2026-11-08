@@ -382,23 +382,23 @@ class ChatSseIntegrationTest {
     // ===================== 4.2 来源引用闭环 =====================
 
     @Test
-    @DisplayName("结构化引用：SSE 下发 → 落库 → 历史恢复；文档删除后 available=false，跨用户不可读")
+    @DisplayName("结构化引用：SSE 下发 → 落库（含版本快照）→ 历史恢复；文档删除后 available=false，跨用户不可读")
     void citationsRoundTripAndReflectDocumentAvailability() throws Exception {
         Long documentId = insertDocument(userId, spaceId, "zenframe.md");
-        Long chunkId = insertChunk(documentId, 0, "TLB 缓存的是页表项。");
+        Long chunkId = insertChunk(documentId, 0, 0, "TLB 缓存的是页表项。");
         agentGateway.withCitations(
                 List.of(new AgentCitation(documentId, chunkId, 0, "zenframe.md")));
 
-        // ① 实时链路：引用随 message.end 下发
+        // ① 实时链路：引用随 message.end 下发，当前可用、非历史
         try (SseStream stream = openStream(conversationId, token, QUESTION)) {
             SseEvent end = readUntil(stream, "message.end");
             assertThat(end).isNotNull();
             JsonNode live = objectMapper.readTree(end.data()).get("citations");
             assertThat(live).hasSize(1);
-            assertCitation(live.get(0), documentId, chunkId, "zenframe.md", true);
+            assertCitation(live.get(0), documentId, chunkId, "zenframe.md", true, false);
         }
 
-        // ② 落库的是身份快照，不含读取时才计算的 available
+        // ② 落库的是身份快照 + 引用时的 chunk 版本；不含读取时才计算的 available
         String storedJson = jdbc.queryForObject(
                 "SELECT citations FROM message WHERE role = 'ASSISTANT'", String.class);
         JsonNode stored = objectMapper.readTree(storedJson);
@@ -406,26 +406,110 @@ class ChatSseIntegrationTest {
         assertThat(stored.get(0).get("documentId").asLong()).isEqualTo(documentId);
         assertThat(stored.get(0).get("chunkId").asLong()).isEqualTo(chunkId);
         assertThat(stored.get(0).get("sourceTitle").asText()).isEqualTo("zenframe.md");
+        assertThat(stored.get(0).get("indexVersion").asInt())
+                .as("版本快照由后端从 MySQL chunk 盖章，不依赖 Agent 跨语言契约")
+                .isZero();
         assertThat(stored.get(0).has("available"))
                 .as("available 由读取时按当前文档状态计算，不应固化进快照")
+                .isFalse();
+        assertThat(stored.get(0).has("isHistorical"))
+                .as("isHistorical 同样是读取时计算的派生值")
                 .isFalse();
 
         // ③ 重新加载历史消息：引用可恢复且当前可用
         JsonNode history = assistantMessage(listMessages());
         assertThat(history.get("citations")).hasSize(1);
-        assertCitation(history.get("citations").get(0), documentId, chunkId, "zenframe.md", true);
+        assertCitation(history.get("citations").get(0),
+                documentId, chunkId, "zenframe.md", true, false);
 
         // ④ 文档软删后：历史引用明确不可用，不留下会 404 的有效链接
         jdbc.update("UPDATE document SET deleted_at = NOW() WHERE id = ?", documentId);
         JsonNode afterDeletion = assistantMessage(listMessages());
         assertThat(afterDeletion.get("citations")).hasSize(1);
         assertCitation(afterDeletion.get("citations").get(0),
-                documentId, chunkId, "zenframe.md", false);
+                documentId, chunkId, "zenframe.md", false, false);
 
         // ⑤ 其他用户连这条对话都读不到，引用不构成绕过文档权限的入口
         HttpResponse<String> denied = getMessages(conversationId,
                 jwtUtil.generateToken(otherUserId, "chat_sse_it_other"));
         assertThat(denied.statusCode()).isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("重建 v2 并清理 v1：旧引用 available=false + isHistorical=true；DELETING 时不可用")
+    void historicalCitationSurvivesVersionSwitchAndChunkCleanup() throws Exception {
+        Long documentId = insertDocument(userId, spaceId, "zenframe.md");
+        Long oldChunkId = insertChunk(documentId, 0, 0, "旧版本的页表项说明。");
+        agentGateway.withCitations(
+                List.of(new AgentCitation(documentId, oldChunkId, 0, "zenframe.md")));
+
+        try (SseStream stream = openStream(conversationId, token, QUESTION)) {
+            SseEvent end = readUntil(stream, "message.end");
+            assertThat(end).isNotNull();
+            assertCitation(objectMapper.readTree(end.data()).get("citations").get(0),
+                    documentId, oldChunkId, "zenframe.md", true, false);
+        }
+
+        // 重建：活跃版本切到 1，新 chunk 就位；旧 chunk 暂时还在（清理前）。
+        jdbc.update("UPDATE document SET index_version = 1 WHERE id = ?", documentId);
+        insertChunk(documentId, 1, 0, "新版本的页表项说明。");
+
+        JsonNode oldChunkStillPresent = assistantMessage(listMessages());
+        assertCitation(oldChunkStillPresent.get("citations").get(0),
+                documentId, oldChunkId, "zenframe.md", false, true);
+
+        // 清理旧版本后：快照仍能证明引用的是历史版本，不误报「来源已删除」。
+        jdbc.update("DELETE FROM document_chunk WHERE id = ?", oldChunkId);
+        JsonNode afterCleanup = assistantMessage(listMessages());
+        assertCitation(afterCleanup.get("citations").get(0),
+                documentId, oldChunkId, "zenframe.md", false, true);
+
+        // 删除中的文档：即使 chunk 还未清理，也不能当作可打开来源。
+        jdbc.update("UPDATE document SET status = 'DELETING' WHERE id = ?", documentId);
+        JsonNode deleting = assistantMessage(listMessages());
+        assertThat(deleting.get("citations").get(0).get("available").asBoolean()).isFalse();
+    }
+
+    @Test
+    @DisplayName("READY 重建失败、活跃版本未切换：实时与历史对同一数据状态给出一致结论")
+    void failedReadyRebuildKeepsActiveVersionCitationAvailable() throws Exception {
+        Long documentId = insertDocument(userId, spaceId, "zenframe.md");
+        jdbc.update("UPDATE document SET index_version = 1 WHERE id = ?", documentId);
+        Long activeChunkId = insertChunk(documentId, 1, 0, "重建后仍然生效的内容。");
+        agentGateway.withCitations(
+                List.of(new AgentCitation(documentId, activeChunkId, 0, "zenframe.md")));
+
+        try (SseStream stream = openStream(conversationId, token, QUESTION)) {
+            SseEvent end = readUntil(stream, "message.end");
+            assertThat(end).isNotNull();
+            assertCitation(objectMapper.readTree(end.data()).get("citations").get(0),
+                    documentId, activeChunkId, "zenframe.md", true, false);
+        }
+
+        // 模拟一次失败的 READY 重建：新版本 chunk 已落库，但 document.index_version 未切换。
+        insertChunk(documentId, 2, 0, "失败重建留下的暂存内容。");
+
+        JsonNode history = assistantMessage(listMessages());
+        assertCitation(history.get("citations").get(0),
+                documentId, activeChunkId, "zenframe.md", true, false);
+
+        // 同一数据状态下再问一轮：实时链路必须与历史读取给出相同结论。
+        agentGateway.withCitations(
+                List.of(new AgentCitation(documentId, activeChunkId, 0, "zenframe.md")));
+        try (SseStream stream = openStream(conversationId, token, QUESTION)) {
+            SseEvent end = readUntil(stream, "message.end");
+            assertThat(end).isNotNull();
+            assertCitation(objectMapper.readTree(end.data()).get("citations").get(0),
+                    documentId, activeChunkId, "zenframe.md", true, false);
+        }
+
+        List<JsonNode> messages = listMessages().stream()
+                .filter(node -> "ASSISTANT".equals(node.get("role").asText()))
+                .toList();
+        assertThat(messages).hasSize(2);
+        assertThat(messages).allSatisfy(node ->
+                assertCitation(node.get("citations").get(0),
+                        documentId, activeChunkId, "zenframe.md", true, false));
     }
 
     // ===================== 5. 幂等（clientRequestId） =====================
@@ -858,11 +942,20 @@ class ChatSseIntegrationTest {
 
     private static void assertCitation(JsonNode citation, Long documentId, Long chunkId,
                                        String sourceTitle, boolean available) {
+        assertCitation(citation, documentId, chunkId, sourceTitle, available, false);
+    }
+
+    private static void assertCitation(JsonNode citation, Long documentId, Long chunkId,
+                                       String sourceTitle, boolean available,
+                                       boolean isHistorical) {
         assertThat(citation.get("documentId").asLong()).isEqualTo(documentId);
         assertThat(citation.get("chunkId").asLong()).isEqualTo(chunkId);
         assertThat(citation.get("chunkIndex").asInt()).isZero();
         assertThat(citation.get("sourceTitle").asText()).isEqualTo(sourceTitle);
         assertThat(citation.get("available").asBoolean()).isEqualTo(available);
+        assertThat(citation.get("isHistorical").asBoolean())
+                .as("isHistorical 必须显式下发，客户端据此区分历史版本与来源已删除")
+                .isEqualTo(isHistorical);
     }
 
     private String baseUrl() {
@@ -913,13 +1006,17 @@ class ChatSseIntegrationTest {
     }
 
     private Long insertChunk(Long documentId, int chunkIndex, String content) {
+        return insertChunk(documentId, 0, chunkIndex, content);
+    }
+
+    private Long insertChunk(Long documentId, int indexVersion, int chunkIndex, String content) {
         jdbc.update("INSERT INTO document_chunk (document_id, index_version, chunk_index, content) "
-                        + "VALUES (?, 0, ?, ?)",
-                documentId, chunkIndex, content);
+                        + "VALUES (?, ?, ?, ?)",
+                documentId, indexVersion, chunkIndex, content);
         return jdbc.queryForObject(
-                "SELECT id FROM document_chunk WHERE document_id = ? AND chunk_index = ? "
-                        + "ORDER BY id DESC LIMIT 1",
-                Long.class, documentId, chunkIndex);
+                "SELECT id FROM document_chunk WHERE document_id = ? AND index_version = ? "
+                        + "AND chunk_index = ? ORDER BY id DESC LIMIT 1",
+                Long.class, documentId, indexVersion, chunkIndex);
     }
 
     private Long insertUser(String username) {
