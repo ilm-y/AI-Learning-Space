@@ -30,6 +30,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * 学习闭环的编排者：把一次观察（消息 / 批注 / 测试回答）跑成完整链路。
@@ -397,9 +398,40 @@ public class LearningAnalysisService {
                 .eq(Concept::getLearningSpaceId, spaceId)
                 .orderByAsc(Concept::getId));
         return concepts.stream()
-                .filter(c -> text.contains(c.getCanonicalName())
-                        || (StringUtils.hasText(c.getDisplayName()) && text.contains(c.getDisplayName())))
+                .filter(c -> containsConceptName(text, c.getCanonicalName())
+                        || (StringUtils.hasText(c.getDisplayName())
+                                && containsConceptName(text, c.getDisplayName())))
                 .toList();
+    }
+
+    /**
+     * 名称匹配语义与 Agent 侧 `concept_detector._contains` 对齐：
+     * <ul>
+     *   <li>纯 ASCII 字母数字（允许名称内部有空格，如 {@code Page Table}）按词边界、
+     *       忽略大小写匹配 —— 这样 {@code tlb miss} 能命中 {@code TLB}，而
+     *       {@code TLBSize} 不会；</li>
+     *   <li>中文等非 ASCII 名称仍按子串匹配（中文没有词边界）。</li>
+     * </ul>
+     * 只改识别口径，不改变 Evidence / Understanding 的写入锚点。
+     */
+    static boolean containsConceptName(String text, String name) {
+        if (!StringUtils.hasText(text) || !StringUtils.hasText(name)) {
+            return false;
+        }
+        String term = name.trim();
+        if (term.isEmpty()) {
+            return false;
+        }
+        boolean ascii = term.chars().allMatch(c -> c < 128);
+        boolean alnum = term.replace(" ", "").chars()
+                .allMatch(c -> Character.isLetterOrDigit(c));
+        if (ascii && alnum) {
+            Pattern pattern = Pattern.compile(
+                    "(?<![A-Za-z0-9])" + Pattern.quote(term) + "(?![A-Za-z0-9])",
+                    Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+            return pattern.matcher(text).find();
+        }
+        return text.contains(term);
     }
 
     private String sentenceContaining(String content, String keyword) {
