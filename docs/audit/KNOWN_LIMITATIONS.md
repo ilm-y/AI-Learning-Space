@@ -1,9 +1,10 @@
 # 已知限制与残余风险
 
 - 整理日期：2026-11-07；封版追加：2026-11-08；E2 追加：2026-11-08；
-  Chat 幂等 / 事务边界追加：2026-11-08
+  Chat 幂等 / 事务边界追加：2026-11-08；MEM-01 修复追加：2026-11-08
 - 仓库版本：审查基线 `13cec31`；封版追加基于 `6f6e940`（P0/P1/P2 修复已合入）；
-  E2 基于 `d7a8384`（E1 + E3 已合入）；CHAT-01/02 基于 `dc8a495`
+  E2 基于 `d7a8384`（E1 + E3 已合入）；CHAT-01/02 基于 `dc8a495`；
+  MEM-01 基于 `2d1f6a4`
 - 范围：三阶段改造（Memory 状态机、RAG 索引可靠性、Citation 引用闭环）以及
   Web 客户端 / 混合检索封版后仍然存在、但本轮**不修**的已知问题。
 - 相关报告：[`THREE_PHASE_FINAL_REVIEW.md`](THREE_PHASE_FINAL_REVIEW.md)、
@@ -184,58 +185,97 @@ Embedding 指纹包含 provider、model、dimension、endpoint 等信息，但
 
 ---
 
-## MEM-01：Memory 身份唯一键并发冲突返回 500
+## MEM-01：Memory 身份唯一键并发冲突返回 500（本批已修复）
 
 | 项 | 内容 |
 | --- | --- |
-| 严重度 | 中（错误码/可用性；不丢数据） |
-| 状态 | 未修复 |
-| 代码位置 | `backend/backend/src/main/java/com/ails/backend/service/MemoryService.java:395-423`（`update`）；`:416`（`requireIdentityFree`）；`:422`（`updateById`）；schema `memory.uk_memory_identity` |
+| 严重度 | 低-中（错误码 / 可用性；不丢数据） |
+| 状态 | 已修复（方案 A：按唯一键名捕获并翻译为 409；修复基线 `2d1f6a4`） |
+| 代码位置 | `backend/backend/src/main/java/com/ails/backend/service/MemoryService.java`（`update` 的 `updateById` 外层、`translateIdentityConflict`）；schema `memory.uk_memory_identity` |
 
-### 问题描述
+### 问题描述（修复前）
 
 `MemoryService.update` 先调用 `requireIdentityFree(userId, scope, memoryKey, memoryId)`
-做应用层查重，再 `memoryMapper.updateById(memory)`。查重与更新之间没有锁/事务级
-唯一性保护之外的原子操作：
+做应用层查重，再 `memoryMapper.updateById(memory)`。查重与更新之间只有一次普通
+SELECT，没有锁住目标身份：
 
 - 两个并发 PATCH 同时把不同记忆改成同一 `(user_id, scope_key, memory_key)`；
 - 两边都通过 `requireIdentityFree`；
 - 其中一个 `updateById` 命中 `uk_memory_identity`，抛出 `DuplicateKeyException`；
-- `update` 没有捕获该异常，最终以 500 返回。
+- `update` 没有捕获该异常，全局处理器把它兜底成 500。
 
 数据不会重复（唯一键兜底），但调用方看到的是服务器错误，而不是可识别的 409/冲突。
 
+### 修复方案：方案 A（按唯一键名捕获）
+
+在 `update()` 的 `updateById` 外层捕获 `DuplicateKeyException`，读取
+`getMostSpecificCause().getMessage()`，**仅当 message 包含 `uk_memory_identity` 时**
+翻译为 `BusinessException.conflict(...)`；其余情况原样抛出。最终响应复用仓库既有
+的统一业务异常路径（`BusinessException` → `GlobalExceptionHandler` → `ApiResponse`），
+没有新增异常类型或错误码枚举。
+
+**为什么选择方案 A 而不是方案 B（`SELECT ... FOR UPDATE`）：**
+
+- 目标身份尚不存在时，`SELECT ... FOR UPDATE` 只能拿到索引上的 gap 锁；gap 锁之间
+  不互斥，两个并发事务仍会都通过预查，冲突最终还是会在 `UPDATE` 时以 1062 出现。
+  因此方案 B 省不掉 `DuplicateKeyException` 兜底，反而增加锁等待与死锁风险。
+- 方案 A 以数据库唯一索引作为最终裁判，只在异常翻译层区分约束，改动最小，
+  与 `persist` / `insertCandidate` 已有“靠唯一键兜底”的语义一致。
+- 失败安全：若 message 不含约束名，异常原样抛出，行为回退为原有 500；
+  宁可 500 也不把外键 / 其他唯一键冲突误报成 409。
+
+### 捕获范围
+
+- **只识别** message 中含 `uk_memory_identity` 的冲突；其他唯一键、外键或无法识别
+  约束名的完整性错误全部原样抛出，维持原有语义。
+- MySQL 5.7 风格 `for key 'uk_memory_identity'` 与 MySQL 8.0 风格
+  `for key 'memory.uk_memory_identity'` 都能命中（按索引名包含判断）。
+- 当前 `memory` 表除主键外只有 `uk_memory_identity`；主键在更新时不会冲突，
+  外键错误由 Spring 映射为其他 `DataIntegrityViolationException` 子类而不是
+  `DuplicateKeyException`。未来新增唯一键时，只要键名不同就不会被误捕获。
+- **风险：依赖异常 message 中的 constraint 名称，MySQL 版本升级需回归。**
+  若升级后措辞变化导致识别失败，行为回退为 500（不会误报 409），
+  因此升级流水线必须重跑本节的真实 MySQL 并发测试。
+
 ### 影响范围
 
-- 并发编辑/Agent 写入与用户 PATCH 竞争时，用户可能收到 500。
-- 不影响状态机正确性；不会写入非法状态或重复行。
-- 重试可能成功，但错误语义不清晰，前端难以提示“标识已被占用”。
-
-### 当前权衡（为什么现在不修）
-
-- 应用层预查 + 数据库唯一键已经保证**不产生重复数据**；500 是错误映射问题，
-  不是数据一致性问题。
-- 捕获 `DuplicateKeyException` 需要区分“身份唯一键冲突”和“其他唯一键/外键冲突”，
-  否则会把真正的基础设施错误误报成 409；当前 `MemoryService.persist` /
-  `insertCandidate` 已有针对插入路径的捕获，更新路径尚未统一。
-- 本轮范围是状态机最小修复，未扩大错误码改造。
+- 并发编辑 / Agent 写入与用户 PATCH 竞争时，输掉的一方现在收到 409，而不是 500。
+- 不改变状态机、不改变写入结果；唯一索引仍然保证不会产生重复身份。
+- 响应体带可定位的 `scope_key` 与 `memory_key`，不包含任何用户 id。
 
 ### 后续方向
 
-1. 在 `update` 的 `updateById` 外层捕获 `DuplicateKeyException`，仅当约束为
-   `uk_memory_identity` 时映射为 409（或领域冲突），其他约束继续抛出。
-2. 或把“查重 + 更新”改为数据库原子 upsert/条件更新，减少竞争窗口。
-3. 统一 Memory 创建/更新/Agent reconcile 三条路径的冲突语义。
-4. 增加并发 PATCH 同一身份的真实 MySQL 测试。
+1. 若未来新增 memory 相关唯一键，复核 `translateIdentityConflict` 的捕获范围；
+2. 评估把“查重 + 更新”改为数据库原子条件更新，进一步缩小竞争窗口（非必须）；
+3. MySQL 大版本升级时把本节 IT 纳入回归清单。
 
 ### 测试覆盖
 
-- **部分覆盖**：`MemoryStateMachineConcurrencyIT` 4 条覆盖状态迁移并发（CANDIDATE→ACTIVE、
-  ARCHIVED 等），不覆盖“两个不同 memory 改成同一 identity”的更新冲突。
-- `MemorySourceConcurrencyTest` 覆盖的是 source 插入的 `DuplicateKeyException` 吞掉/区分，
-  不是 `MemoryService.update`。
-- **无覆盖**：update 身份冲突返回 500 的路径没有测试。
-- 结论：不能把 Memory 并发 IT 4/4 当作 MEM-01 已覆盖。
+**真实 MySQL（MySQL 8.0.37，独立库 `ails_memory_it`，`AILS_MEMORY_IT=true`）**：
+`MemoryStateMachineConcurrencyIT` 7/7 通过，其中 MEM-01 新增 3 条：
+
+- `concurrentPatchToSameIdentityAllowsExactlyOne`：两个并发 PATCH 把不同 Memory 改成
+  同一身份 → 恰好 `200 + 409`；数据库最终只有 1 行目标身份；输家保留原
+  `memory_key` / `content` / `version`，不存在“scope 改了、key 没改”的半更新；
+  409 响应体包含 `scope_key` 与 `memory_key`；
+- `singlePatchToOccupiedIdentityReturns409`：单线程 PATCH 到已被占用身份 → 409 且不写库；
+- `singlePatchToFreeIdentitySucceeds`：单线程 PATCH 到空闲身份 → 200 并正常落库。
+
+**单元测试**：`MemoryUpdateIdentityConflictTest` 6/6 通过：
+
+- 命中 `uk_memory_identity` → 409，message 含 `scope_key` / `memory_key`；
+- 命中其他唯一键 → `DuplicateKeyException` 原样抛出（不转 409）；
+- 其他完整性错误（无索引名 / 外键）→ 原样抛出；
+- MySQL 5.7 风格 message 同样识别为 409；
+- 空闲身份更新成功（正常路径未被误伤）；
+- `create` / `persist` 创建路径仍映射为 409（未被破坏）。
+
+**未覆盖**：MySQL 版本升级后 message 措辞变化的回归（需在升级时重跑上述 IT）；
+其他数据库（本项目只支持 MySQL）。
+
+**非身份唯一键冲突的并发场景**：当前 `memory` 表除主键外只有 `uk_memory_identity`，
+`update` 路径没有其他会触发 `DuplicateKeyException` 的约束，因此没有伪造数据库
+唯一键来构造并发用例；该场景以单元测试固定异常分类逻辑（见上）。
 
 ---
 
@@ -945,7 +985,7 @@ ANALYSIS run 不受影响。
 | RAG-02 | 中 | 存储残留，不影响召回 | 部分（同 collection） | 记录 |
 | RAG-03 | 中 | 可能静默丢失召回 | 无 | 记录 |
 | RAG-04 | 中 | 可能降低召回质量 | 行为覆盖、风险未覆盖 | 记录 |
-| MEM-01 | 中 | 错误码 500，不丢数据 | 部分（状态并发） | 记录 |
+| MEM-01 | 低-中 | 错误码曾为 500，不丢数据 | 真实 MySQL 并发 + 异常分类单测充分；MySQL 版本升级需回归 | 已修复（方案 A）；依赖异常 message 中的约束名 |
 | CIT-01 | 低-中 | 实时/历史展示不一致 | 部分（历史路径） | 记录 |
 | CIT-02 | 中 | 历史引用指向非活跃来源 | 部分（软删） | 记录 |
 | MIG-01 | 中 | 旧库升级失败 | 部分（当前库形态） | 记录 |
@@ -957,8 +997,9 @@ ANALYSIS run 不受影响。
 | CHAT-01 | 中 | 重复请求曾会重复落库 / 重复生成 | 幂等 A/B/C、并发、唯一键、校验 400、回放单测均覆盖 | 已修复；崩溃遗留 RUNNING run 与 Web 入口限流仍待做 |
 | CHAT-02 | 中 | run 创建失败曾留下 USER 孤儿 | 注入 run 插入失败断言全量回滚 | 已修复（方案 1：预创建事务） |
 
-以上均为**已知限制**，不是“已修复但未写文档”的项。后续修复时应同时补对应测试，
-不能只改代码。
+以上为**当前已知限制与残余风险清单**；标注“已修复”的项（CHAT-01、CHAT-02、
+MEM-01）保留的是修复后仍未覆盖的残余风险，不再是未修复缺陷。后续修复其余项时
+应同时补对应测试，不能只改代码。
 
 > 说明：RAG / MEM / CIT / MIG 系列来自三阶段改造的内部审查；WEB / DOC / DDL / DIST
 > 为本轮封版评审确认、并明确**不在本轮修复**的边界。它们不构成本次交付的阻塞项，

@@ -70,6 +70,15 @@ public class MemoryService {
      */
     private static final int MAX_SEARCH_RESULTS = 200;
 
+    /**
+     * Memory 身份唯一键名，见 {@code schema.sql} 的 {@code uk_memory_identity}。
+     * <p>
+     * 更新路径在捕获 {@link DuplicateKeyException} 后用它区分「身份被并发占用」与
+     * 其他完整性错误。核对的是异常 message 中的索引名，而不是异常类型本身 ——
+     * {@code DuplicateKeyException} 对表上所有唯一键都会抛，不能一律翻译成 409。
+     */
+    private static final String MEMORY_IDENTITY_UNIQUE_KEY = "uk_memory_identity";
+
     private final MemoryMapper memoryMapper;
     private final MemorySourceMapper memorySourceMapper;
     private final LearningSpaceService spaceService;
@@ -370,7 +379,15 @@ public class MemoryService {
         memory.setMemoryType(request.memoryType());
         memory.setContent(request.content().trim());
         memory.setImportance(request.importance());
-        requireUpdated(memoryMapper.updateById(memory), "记忆已被其他请求修改，请刷新后重试");
+        try {
+            requireUpdated(memoryMapper.updateById(memory), "记忆已被其他请求修改，请刷新后重试");
+        } catch (DuplicateKeyException e) {
+            // requireIdentityFree 与 updateById 之间存在竞争窗口：两个并发 PATCH 可以都通过
+            // 预查，然后其中一方在唯一索引上输掉。这里把「身份唯一键」的冲突翻译成与串行
+            // 路径一致的 409；其他唯一键 / 完整性错误原样抛出，不能被误报成 409。
+            // 输掉的 UPDATE 整体未生效（行级原子性），不会留下 scope 改了而 key 没改的半更新。
+            throw translateIdentityConflict(e, scope, memoryKey);
+        }
         // 必须在 updateById 成功之后发事件：乐观锁失败会抛 409 并回滚事务，
         // 事件随之回滚，不会残留一条指向未生效状态的事件。
         publishIndexChange(before, memory);
@@ -561,6 +578,33 @@ public class MemoryService {
     private static BusinessException identityTaken(Scope scope, String memoryKey) {
         return BusinessException.conflict(
                 "同一作用域下已存在标识为「" + memoryKey + "」的记忆（" + scope.scopeKey() + "）");
+    }
+
+    /**
+     * 把更新路径上的唯一键冲突翻译成业务语义。
+     * <p>
+     * <b>只认 {@value #MEMORY_IDENTITY_UNIQUE_KEY}。</b>同一个 {@link DuplicateKeyException}
+     * 也可能来自表上的其他唯一键，或未来新增的约束；这类错误必须保持原来的语义
+     * （继续向上抛，最终由全局处理器兜底），不能被伪装成「记忆标识已被占用」。
+     * <p>
+     * <b>为什么检查 message 而不是直接用异常类型：</b>{@link DuplicateKeyException}
+     * 是 Spring 对 MySQL 1062（Duplicate entry）的统一映射，本身不含约束名；
+     * MySQL 的 message 会带上 key 名（8.0 形如 {@code for key 'memory.uk_memory_identity'}，
+     * 5.7 形如 {@code for key 'uk_memory_identity'}），因此用「包含索引名」即可区分。
+     * 如果 message 不含索引名（例如数据库版本改变措辞），这里会保持原有行为向上抛，
+     * 不会误把其他完整性错误翻译成 409 —— 宁可 500 也不误报。
+     */
+    private static BusinessException translateIdentityConflict(DuplicateKeyException e,
+                                                               Scope scope, String memoryKey) {
+        Throwable cause = e.getMostSpecificCause();
+        String message = cause == null ? null : cause.getMessage();
+        if (message == null || !message.contains(MEMORY_IDENTITY_UNIQUE_KEY)) {
+            // 外键 / 其他唯一键等完整性错误：保持原有语义，不吞掉、不误报 409。
+            throw e;
+        }
+        log.debug("Memory 更新并发命中身份唯一键, scope={}, key={}", scope.scopeKey(), memoryKey);
+        return BusinessException.conflict(
+                "目标记忆身份已被并发请求占用：" + scope.scopeKey() + " / " + memoryKey);
     }
 
     /**

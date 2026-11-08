@@ -253,7 +253,121 @@ class MemoryStateMachineConcurrencyIT {
         }
     }
 
+    // ===================== MEM-01 更新路径身份唯一键冲突 =====================
+
+    @Test
+    @DisplayName("MEM-01 真实 MySQL：两个并发 PATCH 改成同一身份，恰好一个成功、另一个 409，且无半更新")
+    void concurrentPatchToSameIdentityAllowsExactlyOne() throws Exception {
+        Long first = memoryService.create(userId, spaceRequest("it/mem-a", "A")).id();
+        Long second = memoryService.create(userId, spaceRequest("it/mem-b", "B")).id();
+
+        List<PatchOutcome> outcomes = runConcurrently(
+                () -> patchIdentity(first, "it/shared", "A2"),
+                () -> patchIdentity(second, "it/shared", "B2"));
+
+        // 恰好一个成功、一个因身份唯一键冲突返回 409；不允许 500。
+        assertThat(outcomes).extracting(PatchOutcome::status)
+                .containsExactlyInAnyOrder(200, 409);
+        PatchOutcome conflict = outcomes.stream()
+                .filter(outcome -> outcome.status() == 409).findFirst().orElseThrow();
+        assertThat(conflict.body())
+                .contains("\"code\":409")
+                .contains("it/shared")
+                .contains("SPACE:" + spaceId)
+                .doesNotContain("\"code\":500");
+
+        // 数据库最终只有一条目标身份，没有重复。
+        Integer claimed = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM memory WHERE user_id = ? AND scope_key = ? AND memory_key = ?",
+                Integer.class, userId, "SPACE:" + spaceId, "it/shared");
+        assertThat(claimed).isEqualTo(1);
+
+        // 输掉的一方必须保持原身份 / 原内容 / 原版本：不存在 scope 改了而 key 没改的半更新。
+        Map<String, Object> firstRow = memoryRow(first);
+        Map<String, Object> secondRow = memoryRow(second);
+        boolean firstWon = "it/shared".equals(firstRow.get("memory_key"));
+        boolean secondWon = "it/shared".equals(secondRow.get("memory_key"));
+        assertThat(firstWon ^ secondWon).isTrue();
+
+        assertThat(firstRow.get("memory_key")).isEqualTo(firstWon ? "it/shared" : "it/mem-a");
+        assertThat(firstRow.get("content")).isEqualTo(firstWon ? "A2" : "A");
+        assertThat(((Number) firstRow.get("version")).intValue()).isEqualTo(firstWon ? 1 : 0);
+        assertThat(secondRow.get("memory_key")).isEqualTo(secondWon ? "it/shared" : "it/mem-b");
+        assertThat(secondRow.get("content")).isEqualTo(secondWon ? "B2" : "B");
+        assertThat(((Number) secondRow.get("version")).intValue()).isEqualTo(secondWon ? 1 : 0);
+
+        // 无论谁赢，两行的作用域都仍然是同一个 SPACE，没有被拆成别的 scope。
+        for (Map<String, Object> row : List.of(firstRow, secondRow)) {
+            assertThat(row.get("scope_type")).isEqualTo("SPACE");
+            assertThat(row.get("scope_key")).isEqualTo("SPACE:" + spaceId);
+            assertThat(((Number) row.get("learning_space_id")).longValue()).isEqualTo(spaceId);
+        }
+    }
+
+    @Test
+    @DisplayName("MEM-01 真实 MySQL：单线程 PATCH 到已被占用的身份，409 且不写库")
+    void singlePatchToOccupiedIdentityReturns409() throws Exception {
+        authenticate();
+        memoryService.create(userId, spaceRequest("it/holder", "holder"));
+        Long other = memoryService.create(userId, spaceRequest("it/other", "other")).id();
+        int versionBefore = version(other);
+
+        PatchOutcome outcome = patchIdentity(other, "it/holder", "overwrite");
+
+        assertThat(outcome.status()).isEqualTo(409);
+        assertThat(outcome.body())
+                .contains("\"code\":409")
+                .contains("it/holder")
+                .contains("SPACE:" + spaceId);
+        Map<String, Object> row = memoryRow(other);
+        assertThat(row.get("memory_key")).isEqualTo("it/other");
+        assertThat(row.get("content")).isEqualTo("other");
+        assertThat(((Number) row.get("version")).intValue()).isEqualTo(versionBefore);
+    }
+
+    @Test
+    @DisplayName("MEM-01 真实 MySQL：单线程 PATCH 到空闲身份，正常 200 并落库")
+    void singlePatchToFreeIdentitySucceeds() throws Exception {
+        authenticate();
+        Long memoryId = memoryService.create(userId, spaceRequest("it/free-before", "before")).id();
+
+        PatchOutcome outcome = patchIdentity(memoryId, "it/free-after", "after");
+
+        assertThat(outcome.status()).isEqualTo(200);
+        Map<String, Object> row = memoryRow(memoryId);
+        assertThat(row.get("memory_key")).isEqualTo("it/free-after");
+        assertThat(row.get("content")).isEqualTo("after");
+    }
+
     // ===================== helpers =====================
+
+    /** 一次 PATCH 的 HTTP 结果；并发断言需要同时拿到状态码与响应体。 */
+    private record PatchOutcome(int status, String body) {
+    }
+
+    private PatchOutcome patchIdentity(Long memoryId, String memoryKey, String content)
+            throws Exception {
+        String body = """
+                {"learningSpaceId":%d,"memoryKey":"%s","memoryType":"LEARNING","content":"%s"}
+                """.formatted(spaceId, memoryKey, content);
+        MvcResult result = mockMvc.perform(patch("/api/memories/{id}", memoryId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body)).andReturn();
+        return new PatchOutcome(
+                result.getResponse().getStatus(), result.getResponse().getContentAsString());
+    }
+
+    private Map<String, Object> memoryRow(Long memoryId) {
+        return jdbc.queryForMap("""
+                SELECT memory_key, content, scope_type, scope_key,
+                       learning_space_id, concept_id, status, version
+                FROM memory WHERE id = ?
+                """, memoryId);
+    }
+
+    private MemoryRequest spaceRequest(String memoryKey, String content) {
+        return new MemoryRequest(spaceId, null, MemoryType.LEARNING, memoryKey, content, 0.6f, null);
+    }
 
     private int patchStatus(Long memoryId, String memoryKey, String content, MemoryStatus status)
             throws Exception {
@@ -308,6 +422,15 @@ class MemoryStateMachineConcurrencyIT {
                 SecurityContextHolder.clearContext();
             }
         };
+    }
+
+    /** 单线程用例直接走 MockMvc 时，也需要与并发线程相同的认证上下文。 */
+    private void authenticate() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        new AuthUser(userId, "memory-it-user", "token"),
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_USER"))));
     }
 
     private Map<String, Object> row(Long memoryId) {
