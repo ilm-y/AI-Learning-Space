@@ -281,7 +281,8 @@ public class ChatService {
                     conversation.getId(),
                     conversation.getLearningSpaceId(),
                     userMessage.getContent(),
-                    messageService.history(conversation.getId(), userMessage.getId(), HISTORY_LIMIT),
+                    messageService.history(conversation.getUserId(), conversation.getId(),
+                            userMessage.getId(), HISTORY_LIMIT),
                     sessionContext(opening),
                     authToken);
 

@@ -38,21 +38,24 @@ class EvidenceMapperBatchSqlTest {
     }
 
     @Test
-    @DisplayName("证据查询：user_id + concept_id IN + 时间倒序 + SQL 内 LIMIT")
+    @DisplayName("证据查询：user_id + Space（JOIN concept）+ concept_id IN + 时间倒序 + SQL 内 LIMIT")
     void evidenceQueryIsBoundedAndUserScoped() {
         BoundSql bound = evidenceBoundSql();
         String sql = normalize(bound.getSql());
 
         assertThat(sql)
-                .contains("FROM learning_evidence")
-                .contains("user_id = ?")
-                .contains("concept_id IN")
-                .contains("ORDER BY created_at DESC, id DESC")
+                .contains("FROM learning_evidence e")
+                .contains("JOIN concept c ON c.id = e.concept_id")
+                .contains("e.user_id = ?")
+                // 空间过滤在 SQL 内自包含：learning_evidence 本身没有 space_id。
+                .contains("c.learning_space_id = ?")
+                .contains("e.concept_id IN")
+                .contains("ORDER BY e.created_at DESC, e.id DESC")
                 // LIMIT 必须下行到 SQL，而不是取回全部后由 Java 截断。
                 .contains("LIMIT ?");
 
         assertThat(properties(bound))
-                .contains("userId", "limit")
+                .contains("userId", "spaceId", "limit")
                 .anyMatch(property -> property.startsWith("__frch_conceptId_"));
     }
 
@@ -77,6 +80,7 @@ class EvidenceMapperBatchSqlTest {
     private static BoundSql evidenceBoundSql() {
         Map<String, Object> params = new HashMap<>();
         params.put("userId", 1L);
+        params.put("spaceId", 7L);
         params.put("conceptIds", List.of(10L, 20L));
         params.put("limit", 5);
         return evidenceStatement.getBoundSql(params);

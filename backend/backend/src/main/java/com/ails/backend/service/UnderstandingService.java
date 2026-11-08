@@ -1,5 +1,6 @@
 package com.ails.backend.service;
 
+import com.ails.backend.common.BusinessException;
 import com.ails.backend.dto.understanding.UnderstandingResponse;
 import com.ails.backend.dto.understanding.UnderstandingRevisionResponse;
 import com.ails.backend.entity.Concept;
@@ -409,9 +410,26 @@ public class UnderstandingService {
 
     // ================= 查询 =================
 
+    /**
+     * 不传 Space 的旧调用方式，行为保持不变。
+     */
     @Transactional(readOnly = true)
     public UnderstandingResponse get(Long userId, Long conceptId) {
+        return get(userId, conceptId, null);
+    }
+
+    /**
+     * 当前理解快照。
+     * <p>
+     * {@code spaceId} 非空时额外断言 concept 属于该 Space。{@code learning_understanding}
+     * 表本身没有 {@code space_id}，空间归属只能由 concept 推导；这个可选参数让调用方
+     * 能把「本轮 Space」带进来，避免同用户其他 Space 的 conceptId 被静默接受。
+     * 不传时保持原行为，兼容旧调用方。
+     */
+    @Transactional(readOnly = true)
+    public UnderstandingResponse get(Long userId, Long conceptId, Long spaceId) {
         Concept concept = conceptService.accessibleConcept(userId, conceptId);
+        requireConceptInSpace(concept, spaceId);
         return UnderstandingResponse.from(find(userId, conceptId), conceptName(concept));
     }
 
@@ -439,9 +457,22 @@ public class UnderstandingService {
                 .toList();
     }
 
+    /**
+     * 不传 Space 的旧调用方式，行为保持不变。
+     */
     @Transactional(readOnly = true)
     public List<UnderstandingRevisionResponse> revisions(Long userId, Long conceptId) {
-        conceptService.accessibleConcept(userId, conceptId);
+        return revisions(userId, conceptId, null);
+    }
+
+    /**
+     * 理解历史版本。{@code spaceId} 语义与 {@link #get(Long, Long, Long)} 相同：
+     * 非空时校验 concept 归属，避免跨 Space 读取。
+     */
+    @Transactional(readOnly = true)
+    public List<UnderstandingRevisionResponse> revisions(Long userId, Long conceptId, Long spaceId) {
+        Concept concept = conceptService.accessibleConcept(userId, conceptId);
+        requireConceptInSpace(concept, spaceId);
         LearningUnderstanding understanding = find(userId, conceptId);
         if (understanding == null) {
             return List.of();
@@ -545,6 +576,19 @@ public class UnderstandingService {
 
     private static String normalize(String text) {
         return text == null ? null : text.trim().replaceAll("\\s+", " ");
+    }
+
+    /**
+     * 可选 Space 断言：传了 spaceId 就要求 concept 确实属于它。
+     * <p>
+     * 复用 {@link BusinessException#notFound(String)} 而不是 403：跨 Space 的知识点
+     * 对当前调用方就应当表现为「不存在」，这与 {@code accessibleConcept} 以及
+     * Evidence 批量接口的口径一致，也避免泄露其他 Space 是否存在。
+     */
+    private static void requireConceptInSpace(Concept concept, Long spaceId) {
+        if (spaceId != null && !Objects.equals(concept.getLearningSpaceId(), spaceId)) {
+            throw BusinessException.notFound("知识点不存在");
+        }
     }
 
     private String conceptName(Concept concept) {

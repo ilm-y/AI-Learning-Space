@@ -127,7 +127,8 @@ class ChatServiceTest {
         when(chatTurnService.findExisting(CONVERSATION_ID, CLIENT_REQUEST_ID)).thenReturn(Optional.empty());
         when(chatTurnService.prepare(conversation, QUESTION, CLIENT_REQUEST_ID))
                 .thenReturn(new ChatTurnService.TurnSnapshot(userMessage, opening, runningRun, null));
-        when(messageService.history(eq(CONVERSATION_ID), eq(USER_MESSAGE_ID), anyInt())).thenReturn(List.of());
+        when(messageService.history(
+                eq(USER_ID), eq(CONVERSATION_ID), eq(USER_MESSAGE_ID), anyInt())).thenReturn(List.of());
     }
 
     @Test

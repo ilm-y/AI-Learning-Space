@@ -70,7 +70,11 @@ public class SessionService {
         if (conversation.getSessionId() != null) {
             // 已经定过归属了。这里读回来而不是返回 null —— 对绝大多数消息来说
             // 「已经归属的那个 Session」才是调用方要的东西。
-            return sessionMapper.selectById(conversation.getSessionId());
+            //
+            // 但不能只凭 id 读：conversation.session_id 只是外键，数据库不保证这个
+            // Session 与对话同用户、同 Space、且仍在有效状态。数据异常或未来新增
+            // 调用方绕过创建逻辑时，直接 selectById 会把错误的学习目标注入上下文。
+            return boundSession(conversation);
         }
         if (detectedConceptNames == null || detectedConceptNames.isEmpty()) {
             return null;
@@ -250,6 +254,38 @@ public class SessionService {
         LearningSession session = sessionMapper.selectById(sessionId);
         if (session == null || !Objects.equals(session.getUserId(), userId)) {
             throw BusinessException.notFound("学习活动不存在");
+        }
+        return session;
+    }
+
+    /**
+     * 读取对话已绑定的 Session，并校验它仍属于这条对话。
+     * <p>
+     * 只按 id 读是不够的：{@code conversation.session_id} 的外键只保证 Session 存在，
+     * 不保证它与对话同用户、同 Space，或在有效状态。这里<b>不回退到候选逻辑</b> ——
+     * 归属一旦写下就不可重新判定（见 {@link #resolveForConversation} 的幂等约定），
+     * 回退会在一次学习中途改写归属；校验失败时返回 {@code null}，宁可本轮不注入
+     * 学习目标，也不把错误目标交给 Agent。
+     */
+    private LearningSession boundSession(Conversation conversation) {
+        LearningSession session = sessionMapper.selectById(conversation.getSessionId());
+        if (session == null) {
+            return null;
+        }
+        boolean sameOwner = Objects.equals(session.getUserId(), conversation.getUserId());
+        boolean sameSpace = Objects.equals(
+                session.getLearningSpaceId(), conversation.getLearningSpaceId());
+        boolean unfinished = session.getStatus() == SessionStatus.ACTIVE
+                || session.getStatus() == SessionStatus.PAUSED;
+        if (!sameOwner || !sameSpace || !unfinished) {
+            log.warn("已绑定学习活动与对话归属不一致，拒绝注入, conversationId={}, sessionId={}, "
+                            + "conversationUserId={}, sessionUserId={}, conversationSpaceId={}, "
+                            + "sessionSpaceId={}, sessionStatus={}",
+                    conversation.getId(), conversation.getSessionId(),
+                    conversation.getUserId(), session.getUserId(),
+                    conversation.getLearningSpaceId(), session.getLearningSpaceId(),
+                    session.getStatus());
+            return null;
         }
         return session;
     }

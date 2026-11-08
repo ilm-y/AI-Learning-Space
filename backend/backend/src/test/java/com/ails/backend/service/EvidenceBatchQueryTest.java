@@ -67,7 +67,8 @@ class EvidenceBatchQueryTest {
     void loadsEvidenceWithLimitAndSourcesWithOneInQuery() {
         when(conceptMapper.selectList(any()))
                 .thenReturn(List.of(concept(CONCEPT_A, SPACE_ID), concept(CONCEPT_B, SPACE_ID)));
-        when(evidenceMapper.selectRecentByConcepts(USER_ID, List.of(CONCEPT_A, CONCEPT_B), 5))
+        when(evidenceMapper.selectRecentByConcepts(
+                USER_ID, SPACE_ID, List.of(CONCEPT_A, CONCEPT_B), 5))
                 .thenReturn(List.of(evidence(100L, CONCEPT_A), evidence(101L, CONCEPT_B)));
         when(evidenceSourceMapper.selectByEvidenceIds(List.of(100L, 101L)))
                 .thenReturn(List.of(
@@ -85,7 +86,8 @@ class EvidenceBatchQueryTest {
                 .containsExactly(EvidenceSourceType.HIGHLIGHT, EvidenceSourceType.MESSAGE);
 
         // LIMIT 下沉到 SQL，不在应用层切片。
-        verify(evidenceMapper).selectRecentByConcepts(USER_ID, List.of(CONCEPT_A, CONCEPT_B), 5);
+        verify(evidenceMapper).selectRecentByConcepts(
+                USER_ID, SPACE_ID, List.of(CONCEPT_A, CONCEPT_B), 5);
         // Sources 只批量查一次。
         verify(evidenceSourceMapper).selectByEvidenceIds(List.of(100L, 101L));
         // loadSources 走 selectList；批量路径绝不能回退到逐条查询。
@@ -97,16 +99,16 @@ class EvidenceBatchQueryTest {
     @DisplayName("limit 缺省时使用服务端默认值，超出上限时由服务端封顶")
     void normalizesLimit() {
         when(conceptMapper.selectList(any())).thenReturn(List.of(concept(CONCEPT_A, SPACE_ID)));
-        when(evidenceMapper.selectRecentByConcepts(any(), anyList(), anyInt()))
+        when(evidenceMapper.selectRecentByConcepts(any(), any(), anyList(), anyInt()))
                 .thenReturn(List.of());
 
         service.listRecentByConcepts(USER_ID, SPACE_ID, List.of(CONCEPT_A), null);
         verify(evidenceMapper).selectRecentByConcepts(
-                USER_ID, List.of(CONCEPT_A), EvidenceService.DEFAULT_RECENT_LIMIT);
+                USER_ID, SPACE_ID, List.of(CONCEPT_A), EvidenceService.DEFAULT_RECENT_LIMIT);
 
         service.listRecentByConcepts(USER_ID, SPACE_ID, List.of(CONCEPT_A), 500);
         verify(evidenceMapper).selectRecentByConcepts(
-                USER_ID, List.of(CONCEPT_A), EvidenceService.MAX_RECENT_LIMIT);
+                USER_ID, SPACE_ID, List.of(CONCEPT_A), EvidenceService.MAX_RECENT_LIMIT);
     }
 
     @Test
@@ -120,7 +122,7 @@ class EvidenceBatchQueryTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(404));
 
-        verify(evidenceMapper, never()).selectRecentByConcepts(any(), anyList(), anyInt());
+        verify(evidenceMapper, never()).selectRecentByConcepts(any(), any(), anyList(), anyInt());
     }
 
     @Test
@@ -152,14 +154,14 @@ class EvidenceBatchQueryTest {
     @DisplayName("去重 conceptIds，避免同一概念在 IN 列表中重复")
     void deduplicatesConceptIds() {
         when(conceptMapper.selectList(any())).thenReturn(List.of(concept(CONCEPT_A, SPACE_ID)));
-        when(evidenceMapper.selectRecentByConcepts(any(), anyList(), anyInt()))
+        when(evidenceMapper.selectRecentByConcepts(any(), any(), anyList(), anyInt()))
                 .thenReturn(List.of());
 
         service.listRecentByConcepts(
                 USER_ID, SPACE_ID, List.of(CONCEPT_A, CONCEPT_A), 5);
 
         verify(evidenceMapper).selectRecentByConcepts(
-                USER_ID, List.of(CONCEPT_A), 5);
+                USER_ID, SPACE_ID, List.of(CONCEPT_A), 5);
     }
 
     private static Concept concept(long id, long spaceId) {

@@ -71,7 +71,7 @@ class AnalysisTaskServiceTest {
             run.setId(RUN_ID);
             return 1;
         });
-        lenient().when(messageService.history(eq(2L), anyList(), eq(20))).thenReturn(List.of());
+        lenient().when(messageService.history(eq(1L), eq(2L), anyList(), eq(20))).thenReturn(List.of());
     }
 
     @Test

@@ -62,7 +62,8 @@ class TurnAnalysisServiceTest {
             invocation.getArgument(0, AgentRun.class).setId(42L);
             return 1;
         }).when(runMapper).insert(any(AgentRun.class));
-        when(messageService.history(anyLong(), anyCollection(), anyInt())).thenReturn(List.of());
+        when(messageService.history(anyLong(), anyLong(), anyCollection(), anyInt()))
+                .thenReturn(List.of());
 
         service = new TurnAnalysisService(gateway, writeService, learningAnalysisService, messageService, runMapper);
 

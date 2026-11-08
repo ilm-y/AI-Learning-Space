@@ -33,13 +33,28 @@ public class UnderstandingController {
         return ApiResponse.ok(understandingService.listBySpace(SecurityUtil.currentUserId(), spaceId));
     }
 
+    /**
+     * 当前理解快照。
+     * <p>
+     * {@code spaceId} 为可选参数：传入时额外断言该概念属于该学习空间，跨 Space 一律 404。
+     * 不传时保持原有行为，兼容历史调用方。
+     */
     @GetMapping("/{conceptId}")
-    public ApiResponse<UnderstandingResponse> get(@PathVariable Long conceptId) {
-        return ApiResponse.ok(understandingService.get(SecurityUtil.currentUserId(), conceptId));
+    public ApiResponse<UnderstandingResponse> get(
+            @PathVariable Long conceptId,
+            @RequestParam(required = false) Long spaceId) {
+        return ApiResponse.ok(
+                understandingService.get(SecurityUtil.currentUserId(), conceptId, spaceId));
     }
 
+    /**
+     * 理解历史版本。{@code spaceId} 语义与 {@link #get(Long, Long)} 相同，同样是可选参数。
+     */
     @GetMapping("/{conceptId}/revisions")
-    public ApiResponse<List<UnderstandingRevisionResponse>> revisions(@PathVariable Long conceptId) {
-        return ApiResponse.ok(understandingService.revisions(SecurityUtil.currentUserId(), conceptId));
+    public ApiResponse<List<UnderstandingRevisionResponse>> revisions(
+            @PathVariable Long conceptId,
+            @RequestParam(required = false) Long spaceId) {
+        return ApiResponse.ok(
+                understandingService.revisions(SecurityUtil.currentUserId(), conceptId, spaceId));
     }
 }

@@ -159,7 +159,8 @@ public class AnalysisTaskService {
                 assistantMessageId,
                 userMessage.getContent(),
                 assistantContent,
-                messageService.history(conversation.getId(), excluded, HISTORY_LIMIT),
+                messageService.history(conversation.getUserId(), conversation.getId(),
+                        excluded, HISTORY_LIMIT),
                 sessionContext(opening),
                 backendIdentity);
     }

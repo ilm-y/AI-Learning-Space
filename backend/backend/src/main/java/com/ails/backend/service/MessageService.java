@@ -169,12 +169,15 @@ public class MessageService {
      * <b>只取 TEXT。</b> TEST 消息的内容是给前端渲染的题卡 JSON，EVENT 是状态事件；
      * 把它们当自然语言塞进 prompt，模型会看到一段没人说过的 JSON。
      *
+     * @param userId           当前用户；SQL 会校验它确实是该对话的拥有者
      * @param excludeMessageId 本轮用户消息 id，可为 null（纯回放场景）
      */
     @Transactional(readOnly = true)
-    public List<ChatHistoryMessage> history(Long conversationId, Long excludeMessageId, int limit) {
-        return history(conversationId,
-                excludeMessageId == null ? List.of() : List.of(excludeMessageId), limit);
+    public List<ChatHistoryMessage> history(Long userId, Long conversationId,
+                                            Long excludeMessageId, int limit) {
+        Collection<Long> excluded = excludeMessageId == null
+                ? List.of() : List.of(excludeMessageId);
+        return history(userId, conversationId, excluded, limit);
     }
 
     /**
@@ -183,19 +186,20 @@ public class MessageService {
      * 学习分析发生在助手回复<b>落库之后</b>，本轮的用户消息与助手消息都已经在表里，
      * 而两者都通过 {@code AnalyzeAgentRequest} 的独立字段传给了 Agent。历史里再出现一次，
      * 就是在 prompt 里把同一轮对话说了两遍。
+     * <p>
+     * 归属校验下沉到 SQL：{@code message} 表没有 {@code user_id}，这里通过
+     * {@code JOIN conversation} 限定 {@code c.user_id = #{userId}}，与
+     * {@code conversation_id} 条件同时生效。这样即使未来有调用方忘了先做
+     * {@code ownedConversation}，也不会读到别人的历史。
      */
     @Transactional(readOnly = true)
-    public List<ChatHistoryMessage> history(Long conversationId, Collection<Long> excludeMessageIds, int limit) {
-        LambdaQueryWrapper<Message> query = new LambdaQueryWrapper<Message>()
-                .eq(Message::getConversationId, conversationId)
-                .eq(Message::getMessageType, MessageType.TEXT)
-                .orderByDesc(Message::getSequenceNo)
-                .orderByDesc(Message::getId)
-                .last("LIMIT " + Math.max(1, limit));
-        if (excludeMessageIds != null && !excludeMessageIds.isEmpty()) {
-            query.notIn(Message::getId, excludeMessageIds);
-        }
-        List<Message> chronological = new ArrayList<>(messageMapper.selectList(query));
+    public List<ChatHistoryMessage> history(Long userId, Long conversationId,
+                                            Collection<Long> excludeMessageIds, int limit) {
+        List<Message> chronological = new ArrayList<>(messageMapper.selectHistoryForUser(
+                userId,
+                conversationId,
+                excludeMessageIds == null ? List.of() : excludeMessageIds,
+                Math.max(1, limit)));
         // 上面按序号倒序取的「最近 limit 条」，翻正成时间正序 —— Agent 侧约定最后一个元素是最新一条
         Collections.reverse(chronological);
         return chronological.stream()

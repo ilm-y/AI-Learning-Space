@@ -223,7 +223,7 @@ public class EvidenceService {
 
         // 3) 有界 SQL：过滤 + 倒序 + LIMIT 一次完成。
         List<LearningEvidence> evidences = evidenceMapper.selectRecentByConcepts(
-                userId, ids, normalizeRecentLimit(limit));
+                userId, spaceId, ids, normalizeRecentLimit(limit));
         if (evidences.isEmpty()) {
             return List.of();
         }
