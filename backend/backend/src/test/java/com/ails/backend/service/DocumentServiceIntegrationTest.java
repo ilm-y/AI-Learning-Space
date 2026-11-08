@@ -4,6 +4,7 @@ import com.ails.backend.common.BusinessException;
 import com.ails.backend.config.DocumentStorageProperties;
 import com.ails.backend.config.MyBatisMetaObjectHandler;
 import com.ails.backend.config.MybatisPlusConfig;
+import com.ails.backend.config.RetrievalProperties;
 import com.ails.backend.dto.document.DocumentUploadResponse;
 import com.ails.backend.dto.document.ReadyDocument;
 import com.ails.backend.entity.Document;
@@ -312,7 +313,7 @@ class DocumentServiceIntegrationTest {
             SecurityFilterAutoConfiguration.class,
             UserDetailsServiceAutoConfiguration.class
     })
-    @EnableConfigurationProperties(DocumentStorageProperties.class)
+    @EnableConfigurationProperties({DocumentStorageProperties.class, RetrievalProperties.class})
     @Import({
             DocumentService.class,
             LearningSpaceService.class,

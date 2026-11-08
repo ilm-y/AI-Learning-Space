@@ -73,6 +73,16 @@ ails:
     # 过期时间（毫秒），默认 7 天
     expiration-ms: ${JWT_EXPIRATION_MS:604800000}
 
+  # ===================== 知识检索策略 =====================
+  retrieval:
+    # RAG-04 阶段 A：默认 false，行为与历史完全一致（fingerprint 为 NULL 的 legacy
+    # 文档仍按 model/provider/dimension 兼容匹配）。阶段 B 由产品拍板后，才允许在
+    # 完成 RAG-02/03 与 legacy 重建后翻转为 true。
+    # 开启后：ready-ids 要求 model + 非空 fingerprint，且 SQL 精确匹配 fingerprint；
+    # legacy 文档整体退出白名单，不会降级兼容。详见
+    # docs/operations/rag-04-legacy-reindex.md。
+    require-embedding-fingerprint: ${AILS_RETRIEVAL_REQUIRE_EMBEDDING_FINGERPRINT:false}
+
   # ===================== 文档原文存储 =====================
   document:
     storage:

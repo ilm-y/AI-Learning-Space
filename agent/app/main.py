@@ -112,6 +112,9 @@ async def lifespan(app: FastAPI):
             store=qdrant_store,
             collection_prefix=settings.qdrant_collection_prefix,
             timeout_seconds=settings.knowledge_timeout_seconds,
+            # RAG-04 阶段 A：默认 False，与历史行为一致。必须与后端
+            # ails.retrieval.require-embedding-fingerprint 同步开启。
+            require_embedding_fingerprint=settings.require_embedding_fingerprint,
         ),
     )
     log.info("Agent 启动：%s", settings.describe())

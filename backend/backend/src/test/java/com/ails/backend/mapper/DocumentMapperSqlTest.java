@@ -86,11 +86,68 @@ class DocumentMapperSqlTest {
         assertThat(sql).contains("d.embedding_dimension IS NULL");
     }
 
+    @Test
+    void nonStrictModeIsByteForByteTheHistoricalFallbackBranch() {
+        String sql = normalize(boundSql(
+                "hash-v1", "hash", 256, "v1:abc", false).getSql());
+
+        // 关闭开关时不允许出现严格分支的任何条件；否则就无法声称“行为完全一致”。
+        assertThat(sql)
+                .contains("d.embedding_fingerprint IS NULL")
+                .contains("d.embedding_provider IS NULL")
+                .contains("d.embedding_dimension IS NULL")
+                .doesNotContain("d.embedding_fingerprint <> ''");
+    }
+
+    @Test
+    void strictModeRequiresExactFingerprintAndDropsLegacyFallback() {
+        BoundSql bound = boundSql("hash-v1", "hash", 256, "v1:abc", true);
+        String sql = normalize(bound.getSql());
+
+        // 严格白名单：fingerprint 必须非空、非空白且精确相等；model 再兜底一次。
+        assertThat(sql)
+                .contains("d.embedding_fingerprint IS NOT NULL")
+                .contains("d.embedding_fingerprint <> ''")
+                .contains("d.embedding_fingerprint = ?")
+                .contains("d.embedding_model = ?")
+                // 不允许再出现 “fingerprint 为 NULL 也按 model 放行” 的兼容分支。
+                .doesNotContain("d.embedding_provider IS NULL")
+                .doesNotContain("d.embedding_dimension IS NULL");
+        assertThat(sql).doesNotContain("IS NULL OR d.embedding_fingerprint IS NULL");
+    }
+
+    @Test
+    void strictModeValidatesFingerprintWithAnEqualityParameter() {
+        BoundSql withFingerprint = boundSql(
+                "text-embedding-v4", "openai-compatible", 1024, "v1:same-endpoint", true);
+        BoundSql withoutFingerprint = boundSql(
+                "text-embedding-v4", "openai-compatible", 1024, null, true);
+
+        // fingerprint 是参数化的等值比较，不做字符串拼接。
+        assertThat(normalize(withFingerprint.getSql()))
+                .contains("d.embedding_fingerprint = ?");
+        // 未传 fingerprint 时 SQL 同样只保留等值条件（绑定 NULL 时天然零命中），
+        // Service 层还会在进入 SQL 前直接 400，形成双重 fail closed。
+        assertThat(normalize(withoutFingerprint.getSql()))
+                .contains("d.embedding_fingerprint = ?")
+                .doesNotContain("d.embedding_provider IS NULL");
+    }
+
     private static BoundSql boundSql(
             String embeddingModel,
             String embeddingProvider,
             Integer embeddingDimension,
             String embeddingFingerprint) {
+        return boundSql(
+                embeddingModel, embeddingProvider, embeddingDimension, embeddingFingerprint, false);
+    }
+
+    private static BoundSql boundSql(
+            String embeddingModel,
+            String embeddingProvider,
+            Integer embeddingDimension,
+            String embeddingFingerprint,
+            boolean requireEmbeddingFingerprint) {
         Map<String, Object> params = new HashMap<>();
         params.put("userId", 1L);
         params.put("spaceId", 2L);
@@ -98,6 +155,7 @@ class DocumentMapperSqlTest {
         params.put("embeddingProvider", embeddingProvider);
         params.put("embeddingDimension", embeddingDimension);
         params.put("embeddingFingerprint", embeddingFingerprint);
+        params.put("requireEmbeddingFingerprint", requireEmbeddingFingerprint);
         return statement.getBoundSql(params);
     }
 

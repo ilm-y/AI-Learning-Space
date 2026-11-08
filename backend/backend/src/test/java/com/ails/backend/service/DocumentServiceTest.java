@@ -2,8 +2,12 @@ package com.ails.backend.service;
 
 import com.ails.backend.common.BusinessException;
 import com.ails.backend.config.DocumentStorageProperties;
+import com.ails.backend.config.RetrievalProperties;
 import com.ails.backend.dto.document.DocumentResponse;
 import com.ails.backend.dto.document.DocumentUploadResponse;
+import com.ails.backend.dto.document.LegacyReadyDocument;
+import com.ails.backend.dto.document.LegacyReadyReport;
+import com.ails.backend.dto.document.LegacyReadySummary;
 import com.ails.backend.dto.document.ReadyDocument;
 import com.ails.backend.entity.Document;
 import com.ails.backend.entity.LearningSpace;
@@ -68,8 +72,7 @@ class DocumentServiceTest {
     void setUp() {
         storageService = new DocumentStorageService(
                 new DocumentStorageProperties(root.toString(), 1024 * 1024));
-        service = new DocumentService(
-                documentMapper, spaceService, storageService, indexService, deletionService);
+        service = serviceWith(new RetrievalProperties(false));
 
         space = new LearningSpace();
         space.setId(10L);
@@ -241,7 +244,7 @@ class DocumentServiceTest {
         ready.setId(7L);
         ready.setIndexVersion(3);
         when(documentMapper.selectReadyDocuments(
-                1L, 10L, "text-embedding-v4", "hash", 256, "v1:abc"))
+                1L, 10L, "text-embedding-v4", "hash", 256, "v1:abc", false))
                 .thenReturn(List.of(ready));
 
         List<ReadyDocument> result = service.listReadyDocuments(
@@ -251,18 +254,146 @@ class DocumentServiceTest {
         assertThat(result.get(0).getIndexVersion()).isEqualTo(3);
         verify(spaceService).ownedSpace(1L, 10L);
         verify(documentMapper).selectReadyDocuments(
-                1L, 10L, "text-embedding-v4", "hash", 256, "v1:abc");
+                1L, 10L, "text-embedding-v4", "hash", 256, "v1:abc", false);
     }
 
     @Test
     void readyIdsWithoutModelDoesNotFilterByModel() {
         when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
-        when(documentMapper.selectReadyDocuments(1L, 10L, null, null, null, null))
+        when(documentMapper.selectReadyDocuments(1L, 10L, null, null, null, null, false))
                 .thenReturn(List.of(new ReadyDocument()));
 
         assertThat(service.listReadyDocuments(1L, 10L, "  ", null, null, null)).hasSize(1);
 
-        verify(documentMapper).selectReadyDocuments(1L, 10L, null, null, null, null);
+        verify(documentMapper).selectReadyDocuments(1L, 10L, null, null, null, null, false);
+    }
+
+    // ===================== RAG-04 严格指纹模式 =====================
+
+    @Test
+    void strictModePassesStrictFlagAndStillObservesLegacyDocuments() {
+        DocumentService strictService = serviceWith(new RetrievalProperties(true));
+        when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
+        when(documentMapper.selectReadyDocuments(
+                1L, 10L, "text-embedding-v4", "openai", 1024, "v1:fp", true))
+                .thenReturn(List.of(new ReadyDocument()));
+        when(documentMapper.selectLegacyReadySummary(1L, 10L)).thenReturn(List.of());
+
+        List<ReadyDocument> result = strictService.listReadyDocuments(
+                1L, 10L, "text-embedding-v4", "openai", 1024, "v1:fp");
+
+        assertThat(result).hasSize(1);
+        verify(documentMapper).selectReadyDocuments(
+                1L, 10L, "text-embedding-v4", "openai", 1024, "v1:fp", true);
+        verify(documentMapper).selectLegacyReadySummary(1L, 10L);
+    }
+
+    @Test
+    void strictModeRejectsModelOnlyNormalRetrievalBeforeQuerying() {
+        DocumentService strictService = serviceWith(new RetrievalProperties(true));
+        when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
+
+        assertThatThrownBy(() -> strictService.listReadyDocuments(
+                1L, 10L, "text-embedding-v4", "openai", 1024, null))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getCode()).isEqualTo(400);
+                    assertThat(ex.getMessage()).contains("embeddingFingerprint");
+                });
+
+        verifyNoInteractions(documentMapper);
+    }
+
+    @Test
+    void strictModeRejectsBlankFingerprintWithoutDowngrading() {
+        DocumentService strictService = serviceWith(new RetrievalProperties(true));
+        when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
+
+        assertThatThrownBy(() -> strictService.listReadyDocuments(
+                1L, 10L, "text-embedding-v4", "openai", 1024, "   "))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400));
+
+        verifyNoInteractions(documentMapper);
+    }
+
+    @Test
+    void strictModeRejectsModelMissingEvenWithFingerprint() {
+        DocumentService strictService = serviceWith(new RetrievalProperties(true));
+        when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
+
+        assertThatThrownBy(() -> strictService.listReadyDocuments(
+                1L, 10L, null, "openai", 1024, "v1:fp"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400));
+
+        verifyNoInteractions(documentMapper);
+    }
+
+    @Test
+    void observationFailureNeverBreaksRetrieval() {
+        when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
+        ReadyDocument ready = new ReadyDocument();
+        ready.setId(7L);
+        when(documentMapper.selectReadyDocuments(
+                1L, 10L, "text-embedding-v4", "openai", 1024, "v1:fp", false))
+                .thenReturn(List.of(ready));
+        when(documentMapper.selectLegacyReadySummary(1L, 10L))
+                .thenThrow(new RuntimeException("summary query down"));
+
+        assertThat(service.listReadyDocuments(
+                1L, 10L, "text-embedding-v4", "openai", 1024, "v1:fp"))
+                .containsExactly(ready);
+    }
+
+    @Test
+    void observationAggregatesLegacyModelsAndCollectionsIncludingNullCollection() {
+        when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
+        when(documentMapper.selectReadyDocuments(
+                1L, 10L, "text-embedding-v4", "openai", 1024, "v1:fp", false))
+                .thenReturn(List.of());
+        when(documentMapper.selectLegacyReadySummary(1L, 10L)).thenReturn(List.of(
+                summary("text-embedding-v4", "old_collection", 2),
+                summary("text-embedding-v4", null, 1),
+                summary("hash-v1", "hash_collection", 1)));
+
+        // 观测只打日志，但必须真的读取聚合结果；这里通过不抛异常 + 完成查询验证。
+        assertThat(service.listReadyDocuments(
+                1L, 10L, "text-embedding-v4", "openai", 1024, "v1:fp")).isEmpty();
+        verify(documentMapper).selectLegacyReadySummary(1L, 10L);
+    }
+
+    @Test
+    void legacyDiagnosticsIsOwnerScoped() {
+        LegacyReadyDocument item = new LegacyReadyDocument();
+        item.setId(5L);
+        item.setUserId(1L);
+        item.setLearningSpaceId(10L);
+        item.setEmbeddingModel("text-embedding-v4");
+        item.setVectorCollection(null);
+        when(spaceService.ownedSpace(1L, 10L)).thenReturn(space);
+        when(documentMapper.selectLegacyReadyDocuments(1L, 10L, "text-embedding-v4"))
+                .thenReturn(List.of(item));
+
+        LegacyReadyReport report =
+                service.legacyReadyDiagnostics(1L, 10L, " text-embedding-v4 ");
+
+        assertThat(report.legacyReadyDocs()).isEqualTo(1);
+        assertThat(report.legacyModels()).containsExactly("text-embedding-v4");
+        assertThat(report.legacyCollections()).containsExactly("<null>");
+        assertThat(report.items()).containsExactly(item);
+        verify(documentMapper).selectLegacyReadyDocuments(1L, 10L, "text-embedding-v4");
+    }
+
+    @Test
+    void legacyDiagnosticsRejectsOtherUsersSpaceWith404() {
+        when(spaceService.ownedSpace(2L, 10L))
+                .thenThrow(BusinessException.notFound("学习空间不存在"));
+
+        assertThatThrownBy(() -> service.legacyReadyDiagnostics(2L, 10L, null))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(404));
+
+        verifyNoInteractions(documentMapper);
     }
 
     @Test
@@ -315,6 +446,21 @@ class DocumentServiceTest {
     }
 
     // ===================== helpers =====================
+
+    private DocumentService serviceWith(RetrievalProperties properties) {
+        return new DocumentService(
+                documentMapper, spaceService, storageService, indexService, deletionService,
+                properties);
+    }
+
+    private static LegacyReadySummary summary(
+            String model, String collection, int documentCount) {
+        LegacyReadySummary row = new LegacyReadySummary();
+        row.setEmbeddingModel(model);
+        row.setVectorCollection(collection);
+        row.setDocumentCount(documentCount);
+        return row;
+    }
 
     private static MockMultipartFile markdown(String name, String content) {
         return new MockMultipartFile("file", name, "text/markdown",

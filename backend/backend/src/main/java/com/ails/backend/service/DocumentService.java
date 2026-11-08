@@ -1,8 +1,12 @@
 package com.ails.backend.service;
 
 import com.ails.backend.common.BusinessException;
+import com.ails.backend.config.RetrievalProperties;
 import com.ails.backend.dto.document.DocumentResponse;
 import com.ails.backend.dto.document.DocumentUploadResponse;
+import com.ails.backend.dto.document.LegacyReadyDocument;
+import com.ails.backend.dto.document.LegacyReadyReport;
+import com.ails.backend.dto.document.LegacyReadySummary;
 import com.ails.backend.dto.document.ReadyDocument;
 import com.ails.backend.entity.Document;
 import com.ails.backend.entity.LearningSpace;
@@ -46,6 +50,7 @@ public class DocumentService {
     private final DocumentStorageService storageService;
     private final DocumentIndexService indexService;
     private final DocumentDeletionService deletionService;
+    private final RetrievalProperties retrievalProperties;
 
     @Transactional(readOnly = true)
     public List<DocumentResponse> listBySpace(Long userId, Long spaceId) {
@@ -65,7 +70,13 @@ public class DocumentService {
      * <p>这是 Agent 知识检索的权限白名单：先做 Space 归属校验，再由 Mapper
      * 在 SQL 里同时检查 READY、未软删、索引完整。Embedding 身份由 Agent 传入
      * 当前真实生效的 provider/model/dimension/fingerprint，用来排除不兼容的旧索引；
-     * 不传 model 时返回全部，供管理/排查使用。</p>
+     * 不传 model 时返回全部，供管理/排查使用（仅限非严格模式，见下）。</p>
+     *
+     * <p><b>严格指纹模式（RAG-04 阶段 A 的开关，默认关闭）：</b>开启后本方法只接受
+     * “model + 非空 fingerprint”的正常检索调用，SQL 要求 fingerprint 精确匹配，
+     * legacy 文档整体退出白名单。只传 model（或无 model）的调用会被拒绝，必须改用
+     * {@link #legacyReadyDiagnostics} 这条<b>独立诊断路径</b>；这样正常检索接口不会
+     * 同时承担“诊断资格判定”。关闭时行为与历史完全一致。</p>
      */
     @Transactional(readOnly = true)
     public List<ReadyDocument> listReadyDocuments(Long userId, Long spaceId,
@@ -85,8 +96,107 @@ public class DocumentService {
         if (fingerprint != null && model == null) {
             throw new BusinessException(400, "传入 embeddingFingerprint 时必须同时传入 embeddingModel");
         }
-        return documentMapper.selectReadyDocuments(
-                userId, spaceId, model, provider, embeddingDimension, fingerprint);
+        boolean strict = retrievalProperties.strictFingerprintEnabled();
+        if (strict) {
+            // 正常检索的 Runtime 契约：必须携带当前 fingerprint。缺任何一个都 fail closed，
+            // 不允许“model-only”调用借用正常检索接口充当诊断查询。
+            if (model == null) {
+                throw new BusinessException(400, "严格指纹模式下正常检索必须传入 embeddingModel");
+            }
+            if (fingerprint == null) {
+                throw new BusinessException(400,
+                        "严格指纹模式下正常检索必须传入非空 embeddingFingerprint；"
+                                + "诊断查询请使用 /api/spaces/{spaceId}/documents/diagnostics/legacy");
+            }
+        }
+        List<ReadyDocument> ready = documentMapper.selectReadyDocuments(
+                userId, spaceId, model, provider, embeddingDimension, fingerprint, strict);
+        // 观测不改变检索行为：即便严格模式已排除 legacy 文档，也要记录过滤前的规模，
+        // 供产品判断 RAG-04 场景 2 是否真实发生。
+        observeLegacyReadyDocuments(userId, spaceId, model);
+        return ready;
+    }
+
+    /**
+     * 只读诊断：列出当前用户、当前 Space 内 fingerprint 为空的 READY 文档。
+     *
+     * <p>与 {@link #listReadyDocuments} 刻意分成两条路径：本方法返回的是<b>诊断数据</b>，
+     * 不构成检索白名单，Agent 的正常检索流程不会也不需要消费它。权限沿用
+     * {@link LearningSpaceService#ownedSpace}：非 Space owner 一律 404，SQL 再按
+     * userId + spaceId 过滤，不暴露其他用户的数据。</p>
+     */
+    @Transactional(readOnly = true)
+    public LegacyReadyReport legacyReadyDiagnostics(Long userId, Long spaceId,
+                                                    String embeddingModel) {
+        spaceService.ownedSpace(userId, spaceId);
+        String model = trimToNull(embeddingModel, 128, "embeddingModel");
+        List<LegacyReadyDocument> items =
+                documentMapper.selectLegacyReadyDocuments(userId, spaceId, model);
+        return new LegacyReadyReport(
+                items.size(),
+                distinctNonBlank(items, LegacyReadyDocument::getEmbeddingModel),
+                distinctCollections(items),
+                items);
+    }
+
+    /**
+     * ready-ids 路径的结构化观测。
+     *
+     * <p>仓库当前没有 Micrometer / 自定义指标框架，因此本批只打日志，不引入新依赖。
+     * 观测本身必须绝对安全：任何异常都只记 warn，绝不能让检索失败。</p>
+     */
+    private void observeLegacyReadyDocuments(Long userId, Long spaceId, String requestedModel) {
+        try {
+            List<LegacyReadySummary> rows = documentMapper.selectLegacyReadySummary(userId, spaceId);
+            int total = rows.stream()
+                    .map(LegacyReadySummary::getDocumentCount)
+                    .filter(count -> count != null)
+                    .mapToInt(Integer::intValue)
+                    .sum();
+            if (total == 0) {
+                log.debug("legacyReadyDocs=0, spaceId={}, model={}, legacyModels=[], legacyCollections=[]",
+                        spaceId, requestedModel);
+                return;
+            }
+            List<String> models = rows.stream()
+                    .map(LegacyReadySummary::getEmbeddingModel)
+                    .filter(value -> value != null && !value.isBlank())
+                    .distinct()
+                    .sorted()
+                    .toList();
+            List<String> collections = rows.stream()
+                    .map(LegacyReadySummary::getVectorCollection)
+                    .map(value -> value == null ? "<null>" : value)
+                    .distinct()
+                    .sorted()
+                    .toList();
+            log.info("legacyReadyDocs={}, spaceId={}, model={}, legacyModels={}, legacyCollections={}",
+                    total, spaceId, requestedModel, models, collections);
+        } catch (RuntimeException e) {
+            // 观测失败不是检索失败：日志缺一条，但不能影响白名单返回。
+            log.warn("legacy 文档观测失败（不影响检索）: spaceId={}, error={}",
+                    spaceId, e.toString());
+        }
+    }
+
+    private static List<String> distinctNonBlank(
+            List<LegacyReadyDocument> items,
+            java.util.function.Function<LegacyReadyDocument, String> extractor) {
+        return items.stream()
+                .map(extractor)
+                .filter(value -> value != null && !value.isBlank())
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private static List<String> distinctCollections(List<LegacyReadyDocument> items) {
+        return items.stream()
+                .map(LegacyReadyDocument::getVectorCollection)
+                .map(value -> value == null ? "<null>" : value)
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     @Transactional(readOnly = true)

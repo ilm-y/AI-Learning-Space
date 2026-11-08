@@ -4,6 +4,7 @@ import com.ails.backend.config.DocumentIndexConfig;
 import com.ails.backend.config.DocumentStorageProperties;
 import com.ails.backend.config.MyBatisMetaObjectHandler;
 import com.ails.backend.config.MybatisPlusConfig;
+import com.ails.backend.config.RetrievalProperties;
 import com.ails.backend.dto.document.DocumentUploadResponse;
 import com.ails.backend.entity.Document;
 import com.ails.backend.entity.DocumentChunk;
@@ -347,7 +348,8 @@ class DocumentIndexServiceIntegrationTest {
         assertThat(failed.getIndexAttempts()).isEqualTo(1);
         assertThat(failed.getChunkCount()).isZero();
         assertThat(chunkService.listByDocument(document.getId())).isEmpty();
-        assertThat(documentMapper.selectReadyDocuments(userId, spaceId, "hash-test", null, null, null))
+        assertThat(documentMapper.selectReadyDocuments(
+                        userId, spaceId, "hash-test", null, null, null, false))
                 .extracting(com.ails.backend.dto.document.ReadyDocument::getId)
                 .doesNotContain(document.getId());
     }
@@ -363,7 +365,8 @@ class DocumentIndexServiceIntegrationTest {
         Document failed = documentMapper.selectById(document.getId());
         assertThat(failed.getStatus()).isEqualTo(DocumentStatus.FAILED);
         assertThat(failed.getIndexError()).contains("中断").contains("可重新提交索引");
-        assertThat(documentMapper.selectReadyDocuments(userId, spaceId, "hash-test", null, null, null))
+        assertThat(documentMapper.selectReadyDocuments(
+                        userId, spaceId, "hash-test", null, null, null, false))
                 .extracting(com.ails.backend.dto.document.ReadyDocument::getId)
                 .doesNotContain(document.getId());
     }
@@ -552,7 +555,7 @@ class DocumentIndexServiceIntegrationTest {
             SecurityFilterAutoConfiguration.class,
             UserDetailsServiceAutoConfiguration.class
     })
-    @EnableConfigurationProperties(DocumentStorageProperties.class)
+    @EnableConfigurationProperties({DocumentStorageProperties.class, RetrievalProperties.class})
     @Import({
             DocumentService.class,
             DocumentIndexService.class,

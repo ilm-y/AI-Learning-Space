@@ -280,6 +280,15 @@ public class DocumentIndexService {
 
     void complete(Long documentId, long attempt, int chunkCount,
                   String parserVersion, ValidatedIndex indexed) {
+        // RAG-04 T4 不变量：READY 文档必须带非空 fingerprint。validateIndexResponse
+        // 已经检查过一次；这里再守一道，防止未来新增的写入路径直接构造
+        // ValidatedIndex、绕过响应校验后把空 fingerprint 写进 READY 行。
+        if (indexed == null
+                || indexed.embeddingFingerprint() == null
+                || indexed.embeddingFingerprint().isBlank()) {
+            throw new DocumentIndexException(502,
+                    "拒绝完成索引：embeddingFingerprint 不能为空");
+        }
         int updated = documentMapper.update(null, new LambdaUpdateWrapper<Document>()
                 .eq(Document::getId, documentId)
                 .eq(Document::getIndexAttempts, Math.toIntExact(attempt))

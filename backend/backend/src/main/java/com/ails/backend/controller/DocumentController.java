@@ -3,6 +3,7 @@ package com.ails.backend.controller;
 import com.ails.backend.common.ApiResponse;
 import com.ails.backend.dto.document.DocumentResponse;
 import com.ails.backend.dto.document.DocumentUploadResponse;
+import com.ails.backend.dto.document.LegacyReadyReport;
 import com.ails.backend.dto.document.ReadyDocument;
 import com.ails.backend.service.DocumentService;
 import com.ails.backend.utils.SecurityUtil;
@@ -61,6 +62,11 @@ public class DocumentController {
      * <p>Embedding 身份参数由 Agent 传入当前真实生效的配置；provider/model/
      * dimension/fingerprint 不兼容的文档会被排除，绝不拿新模型的查询向量去
      * 检索旧模型写入的 collection/points。</p>
+     *
+     * <p><b>严格指纹模式（默认关闭）</b>开启后，本端点要求 {@code embeddingModel}
+     * 与 {@code embeddingFingerprint} 同时非空，否则返回 400。它是<b>正常检索</b>
+     * 的资格判定入口，不承担诊断职责；legacy 文档清单请使用下面的
+     * {@code /diagnostics/legacy}。</p>
      */
     @GetMapping("/api/spaces/{spaceId}/documents/ready-ids")
     public ApiResponse<List<ReadyDocument>> readyIds(
@@ -72,6 +78,24 @@ public class DocumentController {
         return ApiResponse.ok(documentService.listReadyDocuments(
                 SecurityUtil.currentUserId(), spaceId,
                 embeddingModel, embeddingProvider, embeddingDimension, embeddingFingerprint));
+    }
+
+    /**
+     * <b>只读诊断端点</b>：列出当前用户、当前 Space 内 fingerprint 为空的 READY 文档。
+     *
+     * <p>这是 RAG-04 阶段 A 的观测/重建清单入口，<b>不是</b> Agent 的检索白名单。
+     * 它与 {@code ready-ids} 刻意隔离：正常检索永远走 model + fingerprint → 严格白名单；
+     * 诊断查询只供管理员/owner 排查和阶段 B 重建使用，不能被 Agent 检索流程消费。</p>
+     *
+     * <p>权限：与 Space 内其他接口一致，先校验 Space 归属（非 owner 返回 404），
+     * SQL 再按 userId + spaceId 过滤，不会暴露其他用户的数据。</p>
+     */
+    @GetMapping("/api/spaces/{spaceId}/documents/diagnostics/legacy")
+    public ApiResponse<LegacyReadyReport> legacyDiagnostics(
+            @PathVariable Long spaceId,
+            @RequestParam(value = "embeddingModel", required = false) String embeddingModel) {
+        return ApiResponse.ok(documentService.legacyReadyDiagnostics(
+                SecurityUtil.currentUserId(), spaceId, embeddingModel));
     }
 
     @GetMapping("/api/documents/{id}")

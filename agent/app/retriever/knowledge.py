@@ -55,6 +55,7 @@ class KnowledgeSearchService:
         store: QdrantDocumentStore,
         collection_prefix: str,
         timeout_seconds: float,
+        require_embedding_fingerprint: bool = False,
     ) -> None:
         if timeout_seconds <= 0:
             raise ValueError("knowledge timeout 必须为正数")
@@ -62,6 +63,9 @@ class KnowledgeSearchService:
         self._store = store
         self._prefix = collection_prefix
         self._timeout = timeout_seconds
+        # RAG-04 阶段 A：默认关闭，行为与历史一致。开启后 payload 中缺失/空白/
+        # 不匹配的 fingerprint 都会被丢弃，绝不把身份未知的 legacy point 当作兼容。
+        self._require_fingerprint = bool(require_embedding_fingerprint)
 
     @property
     def embedding_model(self) -> str:
@@ -79,6 +83,11 @@ class KnowledgeSearchService:
     @property
     def embedding_fingerprint(self) -> str:
         return self._provider.fingerprint
+
+    @property
+    def require_embedding_fingerprint(self) -> bool:
+        """正常检索是否要求使用当前 fingerprint（严格模式）。"""
+        return self._require_fingerprint
 
     async def search(
         self, query: KnowledgeQuery, allowed_documents: list[AllowedDocument]
@@ -107,6 +116,20 @@ class KnowledgeSearchService:
             return KnowledgeResult(
                 status=KnowledgeStatus.NO_VALID_DOCUMENTS,
                 warning="本空间没有已就绪且索引完整的文档，本次回答未使用上传资料。",
+            )
+
+        # Runtime 调用契约：严格模式下正常检索必须使用当前 fingerprint。
+        # provider 正常实现都会给出非空值；这里显式 fail closed，防止未来新增
+        # 不带 fingerprint 的调用路径悄悄绕过严格策略。
+        if self._require_fingerprint and not self._provider.fingerprint.strip():
+            log.warning(
+                "严格指纹模式缺少当前 fingerprint，知识检索 fail closed：user=%s space=%s",
+                query.user_id,
+                query.space_id,
+            )
+            return KnowledgeResult.degraded(
+                "严格指纹模式要求当前 Embedding 配置具有非空 fingerprint，"
+                "本次未使用文档资料。"
             )
 
         try:
@@ -198,7 +221,12 @@ class KnowledgeSearchService:
         invalid = 0
         seen: set[int] = set()
         for hit in above_threshold:
-            chunk = _parse_hit(hit, allowed_versions, self._provider.fingerprint)
+            chunk = _parse_hit(
+                hit,
+                allowed_versions,
+                self._provider.fingerprint,
+                require_fingerprint=self._require_fingerprint,
+            )
             if chunk is None:
                 invalid += 1
                 continue
@@ -276,6 +304,8 @@ def _parse_hit(
     hit: KnowledgeSearchHit,
     allowed_versions: dict[int, int],
     expected_fingerprint: str,
+    *,
+    require_fingerprint: bool = False,
 ) -> KnowledgeChunk | None:
     payload = hit.payload
     if not isinstance(payload, dict):
@@ -304,7 +334,14 @@ def _parse_hit(
 
     # Embedding 兼容性：同一模型名可能被不同网关复用，collection 名无法区分。
     payload_fingerprint = payload.get("embedding_fingerprint")
-    if isinstance(payload_fingerprint, str) and payload_fingerprint.strip():
+    if require_fingerprint:
+        # 严格模式：payload 必须带非空 fingerprint 且与当前配置精确一致。
+        # 缺失（legacy point）或空白一律丢弃，不做降级兼容。
+        if not isinstance(payload_fingerprint, str) or not payload_fingerprint.strip():
+            return None
+        if payload_fingerprint.strip() != expected_fingerprint:
+            return None
+    elif isinstance(payload_fingerprint, str) and payload_fingerprint.strip():
         if payload_fingerprint.strip() != expected_fingerprint:
             return None
 

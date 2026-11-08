@@ -137,12 +137,12 @@ points 丢失、或写入后未真正持久化，MySQL 中的文档仍可能是 
 | 项 | 内容 |
 | --- | --- |
 | 严重度 | 中（语义检索质量；不报错） |
-| 状态 | 未修复（有意兼容） |
-| 代码位置 | `backend/backend/src/main/java/com/ails/backend/mapper/DocumentMapper.java:50-67`；`agent/app/vectorstore/qdrant_store.py:79`；`DocumentIndexService.java:294`、`:409-413` |
+| 状态 | **部分缓解（阶段 A）**：默认关闭的严格开关 + 只读观测 + 重建 runbook；风险本身尚未消除 |
+| 代码位置 | `backend/backend/src/main/java/com/ails/backend/mapper/DocumentMapper.java`（`selectReadyDocuments` / `selectLegacyReadySummary` / `selectLegacyReadyDocuments`）；`backend/backend/src/main/java/com/ails/backend/service/DocumentService.java`（`listReadyDocuments` / `legacyReadyDiagnostics` / `observeLegacyReadyDocuments`）；`backend/backend/src/main/java/com/ails/backend/config/RetrievalProperties.java`；`agent/app/retriever/knowledge.py`；`agent/app/retriever/http_backend.py` |
 
 ### 问题描述
 
-Embedding 指纹包含 provider、model、dimension、endpoint 等信息，但
+Embedding 指纹包含 provider、model、dimension、endpoint 等信息，但默认模式下
 `selectReadyDocuments` 对 `d.embedding_fingerprint IS NULL` 的历史文档放行：
 只要 `embedding_model` 相同，且 provider/dimension 为空或相同，就认为兼容。
 同时 collection 名只由 `model + dimension` 决定，不含 endpoint。
@@ -157,31 +157,91 @@ Embedding 指纹包含 provider、model、dimension、endpoint 等信息，但
 - 只影响检索质量，不影响权限、状态机或引用身份。
 - 新文档有 fingerprint，风险主要落在 legacy 行和未回填数据上。
 
-### 当前权衡（为什么现在不修）
+### 阶段 A 已交付（本批）
+
+1. **默认关闭的严格开关**
+   - 后端：`ails.retrieval.require-embedding-fingerprint`
+     （`AILS_RETRIEVAL_REQUIRE_EMBEDDING_FINGERPRINT`，默认 `false`）。
+   - Agent：`AILS_REQUIRE_EMBEDDING_FINGERPRINT`，默认 `false`。
+   - `false` 时行为与历史完全一致；`true` 时三层同时 fail closed：
+     Backend SQL 精确指纹白名单 → Agent payload 校验 → Runtime 必须携带当前指纹。
+2. **只读观测**
+   - `ready-ids` 路径统计当前用户 + Space 内 fingerprint 为 NULL 的 READY 文档，
+     日志输出 `legacyReadyDocs`、`spaceId`、`model`、`legacyModels`、
+     `legacyCollections`。
+   - 观测查询失败只记 warning，不影响检索；仓库没有 Micrometer，未新增指标依赖。
+3. **诊断端点（与检索路径隔离）**
+   - `GET /api/spaces/{spaceId}/documents/diagnostics/legacy`，强制 Space 所有权，
+     跨用户 404；结果是结构化清单，仅供 owner/运维使用。
+   - Agent 的正常检索只调用 `ready-ids`，**从不调用或消费诊断端点**；
+     Java/Python 测试均守护该隔离。
+4. **重建 runbook**
+   - `docs/operations/rag-04-legacy-reindex.md`：前置条件、观测、逐文档
+     `POST /api/documents/{id}/reindex`、批量循环、失败处理、回滚与验证。
+   - 记录 `max-index-attempts=3`、`reindex-cooldown-ms=30000`。
+5. **测试**
+   - 9 场景严格模式矩阵（后端 SQL/Service/索引状态机 + Agent payload/版本/调用契约）；
+   - 开关 false 的历史行为对照；
+   - T4 不变量：`validateIndexResponse` 拒绝空 fingerprint；`complete()` 再守一道，
+     即使未来新增路径绕过响应校验，也不能把空 fingerprint 写入 READY。
+
+### 仍需阶段 B / 产品决策
+
+1. **是否开启严格模式、何时开启**：涉及“未重建 legacy 文档暂时不可检索”，
+   必须由产品签字并准备公告。
+2. **失败文档的处理策略**：阻塞上线 / 按 Space 灰度 / 接受暂时不可检索；
+   三选一需要写入变更单，不能由工程默认。
+3. **生产规模未知**：仓库没有生产文档量、重建耗时、Qdrant collection 规模的
+   可信数据；本阶段无法给出重建窗口估算。
+4. **场景 2 是否真实发生仍是条件性的**：观测到“同 model 多 collection / 多
+   endpoint”才说明风险已实际出现；目前只有检测手段，没有生产观测结论。
+5. **collection 命名是否加入 endpoint 身份**、是否引入 `deployment_id` /
+   `model_revision`：本批明确不做，留待阶段 B 评估。
+
+### 指纹身份边界
+
+`v1:sha256(provider|model|dimension|endpoint_identity)` 能区分 provider、model、
+dimension 与规范化 endpoint 身份，但**不能**保证：
+
+- 供应商静默升级模型权重时指纹不变，无法检测；
+- 同一 URL 按 API key / tenant 路由到不同后端时，指纹相同但向量空间可能不同；
+- 本批未引入 `deployment_id` / `model_revision`，无法表达部署级差异。
+
+因此严格指纹降低混用概率，不等价于“证明向量空间一致”。
+
+### 当前权衡（为什么仍默认 false）
 
 - 直接要求 `embedding_fingerprint IS NOT NULL` 会让所有 legacy 文档立即退出召回，
   对已有用户是破坏性变更。
-- 回填 fingerprint 需要重新计算/重新索引，成本高；在当前数据规模下，先保留按
-  model/provider/dimension 的兼容匹配，避免“升级即不可用”。
+- 回填 fingerprint 需要重新索引，成本高；先提供观测、开关与 runbook，
+  由产品选择窗口，避免“升级即不可用”。
 - collection 名加入 endpoint 会改变现有 collection 布局，需要迁移与双写/切换方案，
   不适合作为本轮最小修复。
 
 ### 后续方向
 
-1. 提供 fingerprint 回填任务：按文档记录重新计算并写入，回填后逐步要求非空。
-2. collection 命名加入 endpoint 指纹（或至少加入 fingerprint 前缀），避免不同
-   endpoint 共用 collection。
-3. 在检索白名单 SQL 中对 legacy 行加显式告警/降级标记，而不是静默放行。
-4. 迁移完成后删除“fingerprint 为空也匹配”的分支。
+1. 用诊断端点/日志确认风险规模，完成 legacy 文档重建。
+2. 产品拍板失败策略与开启窗口，再翻转严格开关。
+3. 评估 collection 命名加入 endpoint 指纹（或 fingerprint 前缀）。
+4. 评估 `deployment_id` / `model_revision` 是否能覆盖“同 URL 不同租户”的边界。
+5. 迁移完成后删除“fingerprint 为空也匹配”的非严格兼容分支。
 
 ### 测试覆盖
 
-- **行为覆盖，风险未覆盖**：
-  `DocumentMapperSqlTest.legacyDocumentsWithoutFingerprintStillMatchByModelProviderAndDimension`
-  明确断言 legacy 行会按 model/provider/dimension 匹配——这验证的是当前兼容行为，
-  不是“endpoint 不同也安全”。
-- 没有“同 model/dimension、不同 endpoint、legacy 无 fingerprint”的集成测试。
-- 结论：测试锁定了兼容行为，但没有覆盖 RAG-04 的风险场景。
+- **9 场景矩阵已新增并真实运行**：
+  - 后端：`DocumentMapperSqlTest`（严格/非严格 SQL）、`DocumentServiceTest`
+    （严格拒绝、观测失败不影响检索、诊断端点 owner 校验）、
+    `DocumentIndexServiceTest`（T4 空 fingerprint 不变量、重建窗口场景 7-9）、
+    `DocumentControllerTest`（严格 400、诊断路由与 404）。
+  - Agent：`agent/tests/test_rag04_strict_fingerprint.py`
+    （场景 1-9、开关 false 对照、诊断端点不被消费）。
+- **仍未覆盖/未运行**：
+  - 真实 MySQL 集成测试 `DocumentServiceIntegrationTest`、
+    `DocumentIndexIntegrationTest` 需要 `AILS_DOCUMENT_IT=true` 与独立 MySQL；
+    本轮环境未提供，已跳过，未声称运行。
+  - 没有“同 model/dimension、不同 endpoint、legacy 无 fingerprint”的端到端生产数据验证。
+- 结论：阶段 A 锁定了开关语义、fail-closed 行为与诊断隔离；RAG-04 的
+  **数据层面风险仍存在**，直到 legacy 文档完成重建并开启严格模式。
 
 ---
 
@@ -984,7 +1044,7 @@ ANALYSIS run 不受影响。
 | --- | --- | --- | --- | --- |
 | RAG-02 | 中 | 存储残留，不影响召回 | 部分（同 collection） | 记录 |
 | RAG-03 | 中 | 可能静默丢失召回 | 无 | 记录 |
-| RAG-04 | 中 | 可能降低召回质量 | 行为覆盖、风险未覆盖 | 记录 |
+| RAG-04 | 中 | 可能降低召回质量 | 阶段 A：默认关闭严格开关、观测、诊断隔离、9 场景矩阵已覆盖；数据风险未消除 | 部分缓解（阶段 A） |
 | MEM-01 | 低-中 | 错误码曾为 500，不丢数据 | 真实 MySQL 并发 + 异常分类单测充分；MySQL 版本升级需回归 | 已修复（方案 A）；依赖异常 message 中的约束名 |
 | CIT-01 | 低-中 | 实时/历史展示不一致 | 单测 + 真实 MySQL 集成覆盖实时/历史一致性与降级 | 已修复（方案 C：统一活跃版本语义 + `isHistorical` 三态；旧记录无快照场景不可区分） |
 | CIT-02 | 中 | 历史引用指向非活跃来源 | 单测覆盖 READY / 版本 / DELETING | 已修复（方案 C：READY + 活跃版本校验） |

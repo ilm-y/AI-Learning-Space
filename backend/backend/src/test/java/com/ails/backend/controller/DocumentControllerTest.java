@@ -4,6 +4,8 @@ import com.ails.backend.common.BusinessException;
 import com.ails.backend.common.GlobalExceptionHandler;
 import com.ails.backend.dto.document.DocumentResponse;
 import com.ails.backend.dto.document.DocumentUploadResponse;
+import com.ails.backend.dto.document.LegacyReadyDocument;
+import com.ails.backend.dto.document.LegacyReadyReport;
 import com.ails.backend.dto.document.ReadyDocument;
 import com.ails.backend.enums.DocumentStatus;
 import com.ails.backend.security.AuthUser;
@@ -161,6 +163,62 @@ class DocumentControllerTest {
                 .andExpect(jsonPath("$.data").isEmpty());
 
         verify(documentService).listReadyDocuments(1L, 10L, null, null, null, null);
+    }
+
+    @Test
+    void strictReadyIdsRejectionPropagatesAsBadRequest() throws Exception {
+        when(documentService.listReadyDocuments(1L, 10L, "text-embedding-v4", null, null, null))
+                .thenThrow(new BusinessException(400,
+                        "严格指纹模式下正常检索必须传入非空 embeddingFingerprint"));
+
+        mockMvc.perform(get("/api/spaces/10/documents/ready-ids")
+                        .param("embeddingModel", "text-embedding-v4"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("embeddingFingerprint")));
+
+        verify(documentService).listReadyDocuments(
+                1L, 10L, "text-embedding-v4", null, null, null);
+    }
+
+    @Test
+    void legacyDiagnosticsUsesAuthenticatedUserAndReturnsStructuredReport() throws Exception {
+        LegacyReadyDocument item = new LegacyReadyDocument();
+        item.setId(5L);
+        item.setUserId(1L);
+        item.setLearningSpaceId(10L);
+        item.setEmbeddingModel("text-embedding-v4");
+        item.setVectorCollection(null);
+        when(documentService.legacyReadyDiagnostics(1L, 10L, "text-embedding-v4"))
+                .thenReturn(new LegacyReadyReport(
+                        1,
+                        List.of("text-embedding-v4"),
+                        List.of("<null>"),
+                        List.of(item)));
+
+        mockMvc.perform(get("/api/spaces/10/documents/diagnostics/legacy")
+                        .param("embeddingModel", "text-embedding-v4"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.legacyReadyDocs").value(1))
+                .andExpect(jsonPath("$.data.legacyModels[0]").value("text-embedding-v4"))
+                .andExpect(jsonPath("$.data.legacyCollections[0]").value("<null>"))
+                .andExpect(jsonPath("$.data.items[0].id").value(5));
+
+        verify(documentService).legacyReadyDiagnostics(1L, 10L, "text-embedding-v4");
+    }
+
+    @Test
+    void legacyDiagnosticsPropagatesOwnershipFailureAs404() throws Exception {
+        when(documentService.legacyReadyDiagnostics(1L, 10L, null))
+                .thenThrow(BusinessException.notFound("学习空间不存在"));
+
+        mockMvc.perform(get("/api/spaces/10/documents/diagnostics/legacy"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404));
+
+        verify(documentService).legacyReadyDiagnostics(1L, 10L, null);
     }
 
     @Test

@@ -92,6 +92,13 @@ class Settings(BaseSettings):
     knowledge_min_score: float = 0.35
     # 一次知识检索（白名单 + 查询向量 + Qdrant）的总时限；超时按依赖错误降级为空知识。
     knowledge_timeout_seconds: float = 15.0
+    # RAG-04 阶段 A 的严格指纹开关，默认 False。
+    # False：行为与历史一致——后端白名单放行 legacy 文档，payload 缺少 fingerprint
+    # 的 legacy point 也可被接受（兼容迁移前数据）。
+    # True：正常检索必须使用当前 fingerprint；payload 中缺失/空白/不匹配的
+    # fingerprint 一律丢弃。必须与后端 ails.retrieval.require-embedding-fingerprint
+    # 同步开启，两层各自 fail closed，互不依赖。
+    require_embedding_fingerprint: bool = False
     evidence_top_k: int = 3
     # 受控一跳跨概念扩展：最多附加几个“相关概念”，以及为它们单独保留的
     # Evidence 条数预算。设为 0 即关闭扩展。它们只在 Evidence 检索被触发时生效。
@@ -271,6 +278,7 @@ class Settings(BaseSettings):
             "knowledge_top_k": self.knowledge_top_k,
             "knowledge_min_score": self.knowledge_min_score,
             "knowledge_timeout_seconds": self.knowledge_timeout_seconds,
+            "require_embedding_fingerprint": self.require_embedding_fingerprint,
             "evidence_top_k": self.evidence_top_k,
             "evidence_related_concepts_limit": self.evidence_related_concepts_limit,
             "evidence_related_evidence_limit": self.evidence_related_evidence_limit,

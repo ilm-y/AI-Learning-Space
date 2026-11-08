@@ -8,8 +8,14 @@
 | Understanding | `GET /api/understandings/{conceptId}` |
 | Memory | `GET /api/memories/search/hybrid?spaceId=&conceptId=&keyword=` |
 | Evidence | `GET /api/evidences?spaceId=&conceptIds=&limit=`（有界批量；旧单概念接口保留兼容） |
-| Knowledge 白名单 | `GET /api/spaces/{spaceId}/documents/ready-ids?embeddingModel=` |
+| Knowledge 白名单 | `GET /api/spaces/{spaceId}/documents/ready-ids?embeddingModel=&embeddingFingerprint=` |
 | Knowledge 向量 | 现有 Embedding Provider + Qdrant（`KnowledgeSearchService`） |
+
+**诊断接口不在这里消费。** 后端的
+`GET /api/spaces/{spaceId}/documents/diagnostics/legacy` 只供管理员/owner 排查与
+RAG-04 阶段 B 重建清单使用；Agent 的正常检索只走 `ready-ids`，且严格模式下
+必须携带当前 `embeddingFingerprint`。两条路径刻意分开，避免诊断结果被当成
+检索资格判定。
 
 **为什么不自己连 MySQL？** 因为 `agent-architecture.md` 第二节写得很清楚：
 业务数据由 Backend 管理，认知判断由 Agent 管理，Agent 不绕过 Backend 直接改库。
@@ -168,11 +174,25 @@ class HttpBackendRetriever:
                 "知识检索组件未配置，本次回答未使用文档资料。"
             )
 
+        # Runtime 调用契约（RAG-04 阶段 A）：严格模式下，正常检索必须携带当前
+        # fingerprint。没有任何“model-only 正常检索”的旁路；诊断查询是后端独立
+        # 端点，Agent 不调用、也不消费其结果。
+        current_fingerprint = self._knowledge_search.embedding_fingerprint
+        if (
+            self._knowledge_search.require_embedding_fingerprint
+            and not current_fingerprint.strip()
+        ):
+            log.warning("严格指纹模式缺少当前 fingerprint，知识检索 fail closed")
+            return KnowledgeResult.degraded(
+                "严格指纹模式要求当前 Embedding 配置具有非空 fingerprint，"
+                "本次未使用文档资料。"
+            )
+
         params = {
             "embeddingModel": self._knowledge_search.embedding_model,
             "embeddingProvider": self._knowledge_search.embedding_provider,
             "embeddingDimension": self._knowledge_search.embedding_dimension,
-            "embeddingFingerprint": self._knowledge_search.embedding_fingerprint,
+            "embeddingFingerprint": current_fingerprint,
         }
         try:
             data = await self._get(

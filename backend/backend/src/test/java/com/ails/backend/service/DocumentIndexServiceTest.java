@@ -264,6 +264,144 @@ class DocumentIndexServiceTest {
                 .anySatisfy(value -> assertThat(String.valueOf(value)).contains("向量引用数量"));
     }
 
+    // ===================== RAG-04 T5：重建窗口场景 7-9 =====================
+
+    /**
+     * 场景 7：READY 文档重建进行中，旧活跃版本继续服务。
+     * 租约只改 attempt/时间戳，不动 {@code index_version}，状态保持 READY；
+     * 白名单 SQL 只统计 {@code c.index_version = d.index_version}（见 Mapper SQL 测试）。
+     */
+    @Test
+    void scenario7_rebuildInProgressKeepsOldActiveVersionAndReadyStatus() {
+        Document document = document(DocumentStatus.READY, 0);
+        document.setIndexVersion(1);
+        when(documentMapper.update(isNull(), any())).thenReturn(1);
+        when(documentMapper.selectById(42L)).thenReturn(document);
+
+        service.submit(42L);
+
+        ArgumentCaptor<Wrapper<Document>> captor = updateCaptor();
+        verify(documentMapper).update(isNull(), captor.capture());
+        assertThat(sqlSet(captor.getValue()))
+                .contains("status = CASE WHEN status = 'READY' THEN 'READY' ELSE 'PROCESSING' END")
+                .doesNotContain("index_version");
+    }
+
+    /**
+     * 场景 8：重建成功后，一条 UPDATE 原子切换到新版本，随后才清理旧版本。
+     */
+    @Test
+    void scenario8_successfulRebuildSwitchesToNewVersionThenCleansOldOne() {
+        Document document = document(DocumentStatus.READY, 2);
+        document.setIndexVersion(1);
+        when(documentMapper.selectById(42L)).thenReturn(document);
+        when(storageService.read(any())).thenReturn("hello".getBytes());
+        when(agentClient.parse(any(), any())).thenReturn(parseResponse());
+        when(chunkService.stageChunks(any(), any(), eq(2))).thenReturn(List.of(savedChunk()));
+        when(agentClient.index(any(), any())).thenReturn(indexResponse());
+        when(documentMapper.update(isNull(), any())).thenReturn(1);
+        when(chunkService.listOtherVersions(42L, 2)).thenReturn(List.of(1));
+
+        service.runIndex(42L, 2);
+
+        // 生效动作只有一条 UPDATE；index_version 与 READY 在同一条件更新中写入。
+        ArgumentCaptor<Wrapper<Document>> captor = updateCaptor();
+        verify(documentMapper, times(1)).update(isNull(), captor.capture());
+        assertThat(sqlSet(captor.getValue()))
+                .contains("index_version=")
+                .contains("status=");
+
+        // 切换后才清理旧版本 1，新老版本不会混在活跃索引里。
+        InOrder order = inOrder(documentMapper, agentClient, chunkService);
+        order.verify(documentMapper).update(isNull(), any());
+        order.verify(agentClient).deleteVersions(any(), eq(List.of(1)), eq(false), any());
+        order.verify(chunkService).deleteVersions(42L, List.of(1));
+    }
+
+    /**
+     * 场景 9：重建失败，旧活跃版本与 READY 状态原样保留，只回滚本次 attempt。
+     */
+    @Test
+    void scenario9_failedRebuildPreservesOldActiveVersionAndReadyStatus() {
+        Document document = document(DocumentStatus.READY, 2);
+        document.setIndexVersion(1);
+        when(documentMapper.selectById(42L)).thenReturn(document);
+        when(storageService.read(any())).thenReturn("hello".getBytes());
+        when(agentClient.parse(any(), any())).thenReturn(parseResponse());
+        when(chunkService.stageChunks(any(), any(), eq(2))).thenReturn(List.of(savedChunk()));
+        when(agentClient.index(any(), any()))
+                .thenThrow(new DocumentIndexException(503, "embedding unavailable"));
+        when(documentMapper.update(isNull(), any())).thenReturn(1);
+
+        service.runIndex(42L, 2);
+
+        // fail 不写 index_version：活跃版本 1 保持不变。
+        ArgumentCaptor<Wrapper<Document>> captor = updateCaptor();
+        verify(documentMapper, times(1)).update(isNull(), captor.capture());
+        assertThat(sqlSet(captor.getValue()))
+                .contains("CASE WHEN status = 'PROCESSING' THEN 'FAILED' ELSE status END")
+                .doesNotContain("index_version");
+        // 只清理本次 attempt 2；旧版本 chunk/points 不动。
+        verify(chunkService).deleteVersion(42L, 2);
+        verify(chunkService, never()).deleteVersions(any(), any());
+    }
+
+    // ===================== RAG-04 T4：非空 fingerprint 不变量 =====================
+
+    @Test
+    void blankFingerprintInIndexResponseFailsAndNeverMarksReady() {
+        assertFingerprintInvariantRejects("   ");
+    }
+
+    @Test
+    void nullFingerprintInIndexResponseFailsAndNeverMarksReady() {
+        assertFingerprintInvariantRejects(null);
+    }
+
+    /**
+     * 当前实现的真实行为：{@code validateIndexResponse} 会拒绝空 fingerprint，
+     * 因此“校验通过但写入空 fingerprint”的路径不存在，索引整体失败、READY 不被置位。
+     *
+     * <p>该测试守护这个不变量：未来任何新增的写入路径如果绕过
+     * {@code validateIndexResponse}，必须在这里或同等位置被拦住。</p>
+     */
+    private void assertFingerprintInvariantRejects(String fingerprint) {
+        Document document = document(DocumentStatus.PROCESSING, 1);
+        when(documentMapper.selectById(42L)).thenReturn(document);
+        when(storageService.read("space-1/doc.md")).thenReturn("hello".getBytes());
+        when(agentClient.parse(any(), any())).thenReturn(parseResponse());
+        when(chunkService.stageChunks(any(), any(), eq(1))).thenReturn(List.of(savedChunk()));
+        when(agentClient.index(any(), any())).thenReturn(new AgentIndexResponse(
+                "collection", "hash-test", "hash", 256, fingerprint,
+                List.of(new AgentVectorRef(100L, "point-100"))));
+        when(documentMapper.update(isNull(), any())).thenReturn(1);
+
+        service.runIndex(42L, 1);
+
+        // 不能把向量引用写回、不能执行 complete；只允许走 fail 分支。
+        verify(chunkService, never()).updateVectorRefs(any(), anyInt(), any());
+        ArgumentCaptor<Wrapper<Document>> captor = updateCaptor();
+        verify(documentMapper).update(isNull(), captor.capture());
+        assertThat(sqlSet(captor.getValue()))
+                .contains("CASE WHEN status = 'PROCESSING' THEN 'FAILED' ELSE status END")
+                .doesNotContain("index_version =");
+        assertThat(values(captor.getValue()))
+                .anySatisfy(value -> assertThat(String.valueOf(value))
+                        .contains("embeddingFingerprint"));
+    }
+
+    @Test
+    void completeRejectsBlankFingerprintEvenWhenValidationWasBypassed() {
+        DocumentIndexService.ValidatedIndex indexed = new DocumentIndexService.ValidatedIndex(
+                Map.of(), "collection", "hash-test", "hash", 256, "   ");
+
+        assertThatThrownBy(() -> service.complete(42L, 1, 1, "parser-v1", indexed))
+                .isInstanceOf(DocumentIndexException.class)
+                .hasMessageContaining("embeddingFingerprint");
+        // 即便有人绕过 validateIndexResponse 直接调用 complete，也不能写 READY。
+        verify(documentMapper, never()).update(isNull(), any());
+    }
+
     @Test
     void completeFailsWhenAttemptWasFenced() {
         DocumentIndexService.ValidatedIndex indexed = new DocumentIndexService.ValidatedIndex(
