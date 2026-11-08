@@ -149,6 +149,7 @@ async def test_real_memory_upsert_search_delete_and_isolation() -> None:
             top_k=10,
             model=provider.model,
             dimension=provider.dimension,
+            embedding_fingerprint=provider.fingerprint,
         )
         assert warnings == []
         assert {hit.memory_id for hit in hits} == {101, 102}
@@ -163,6 +164,7 @@ async def test_real_memory_upsert_search_delete_and_isolation() -> None:
             top_k=10,
             model=provider.model,
             dimension=provider.dimension,
+            embedding_fingerprint=provider.fingerprint,
         )
         assert {hit.memory_id for hit in hits} == {101, 102}
 
@@ -175,6 +177,7 @@ async def test_real_memory_upsert_search_delete_and_isolation() -> None:
             top_k=10,
             model=provider.model,
             dimension=provider.dimension,
+            embedding_fingerprint=provider.fingerprint,
         )
         assert {hit.memory_id for hit in hits} == {101}
 
@@ -187,6 +190,7 @@ async def test_real_memory_upsert_search_delete_and_isolation() -> None:
             top_k=10,
             model=provider.model,
             dimension=provider.dimension,
+            embedding_fingerprint=provider.fingerprint,
         )
         assert {hit.memory_id for hit in hits} == {103}
 
@@ -286,6 +290,7 @@ async def test_real_memory_upsert_search_delete_and_isolation() -> None:
             top_k=10,
             model=provider.model,
             dimension=provider.dimension,
+            embedding_fingerprint=provider.fingerprint,
         )
         assert 105 not in {hit.memory_id for hit in hits}
 
@@ -337,6 +342,84 @@ async def test_real_memory_upsert_search_delete_and_isolation() -> None:
             exact=True,
         )
         assert count.count == 1
+    finally:
+        try:
+            await store._client.delete_collection(collection)
+        finally:
+            await store.aclose()
+
+
+async def test_search_filters_embedding_fingerprint_before_top_k() -> None:
+    """旧指纹向量相似度更高，但必须在 Qdrant 层被过滤，不能挤占 Top-K。"""
+    prefix = f"ails_mem_fp_it_{uuid.uuid4().hex[:10]}"
+    store = QdrantMemoryStore(
+        url=URL,
+        api_key=os.getenv("AILS_QDRANT_API_KEY", ""),
+        timeout_seconds=10,
+        collection_prefix=prefix,
+    )
+    provider = HashEmbeddingProvider(dimension=4)
+    collection = store.collection_name(
+        model=provider.model, dimension=provider.dimension
+    )
+
+    try:
+        await store.ensure_collection(
+            model=provider.model, dimension=provider.dimension
+        )
+        query = [1.0, 0.0, 0.0, 0.0]
+
+        # 旧 Endpoint：与查询向量完全一致，相似度 1.0。
+        await store.upsert_memory(
+            collection_name=collection,
+            point_id=point_id_for_memory(201),
+            vector=query,
+            payload=_payload(
+                memory_id=201,
+                user_id=7,
+                content_hash="old-endpoint",
+                fingerprint="v1:old-endpoint",
+            ),
+        )
+        # 当前 Endpoint：相似度只有 0.6，不过滤时会被旧向量挤出 Top-1。
+        await store.upsert_memory(
+            collection_name=collection,
+            point_id=point_id_for_memory(202),
+            vector=[0.6, 0.8, 0.0, 0.0],
+            payload=_payload(
+                memory_id=202,
+                user_id=7,
+                content_hash="current-endpoint",
+                fingerprint=provider.fingerprint,
+            ),
+        )
+
+        hits, warnings = await store.search(
+            query_vector=query,
+            user_id=7,
+            space_id=None,
+            concept_id=None,
+            top_k=1,
+            model=provider.model,
+            dimension=provider.dimension,
+            embedding_fingerprint=provider.fingerprint,
+        )
+        assert warnings == []
+        assert [hit.memory_id for hit in hits] == [202]
+
+        # 反向验证：旧指纹的相似度确实是第一名，说明过滤发生在 Top-K 之前。
+        old_hits, _ = await store.search(
+            query_vector=query,
+            user_id=7,
+            space_id=None,
+            concept_id=None,
+            top_k=1,
+            model=provider.model,
+            dimension=provider.dimension,
+            embedding_fingerprint="v1:old-endpoint",
+        )
+        assert [hit.memory_id for hit in old_hits] == [201]
+        assert old_hits[0].score > 0.99
     finally:
         try:
             await store._client.delete_collection(collection)

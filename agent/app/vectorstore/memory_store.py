@@ -8,8 +8,8 @@
 * collection 名 = `<prefix>_<model>_<dimension>`；Hash 与真实语义模型不混用；
 * point id 由 `memory_id` 通过 UUIDv5 确定性生成，重试是覆盖而不是追加；
 * payload 不写 `content`：检索只返回 id / 分数，正文必须由 Spring 回 MySQL 回源；
-* 检索必须同时过滤 `user_id` 与 `status=ACTIVE`；`space_id` 为空时不做作用域过滤，
-  与 `MemoryService.search` 的语义保持一致；
+* 检索必须同时过滤 `user_id`、`status=ACTIVE` 与 `embedding_fingerprint`；
+  `space_id` 为空时不做作用域过滤，与 `MemoryService.search` 的语义保持一致；
 * 删除 **不做物理删除**，而是把 point 改写成 tombstone（`status=DELETED`）：
   Outbox 事件可能因网络重试乱序到达，墓碑让晚到的旧 UPSERT 无法复活已删除记忆；
 * 写入前比较 `memory_version`，incoming 落后于现有版本时丢弃，避免 V1 覆盖 V2。
@@ -51,6 +51,7 @@ _PAYLOAD_INDEX_FIELDS: dict[str, qm.PayloadSchemaType] = {
     "scope_type": qm.PayloadSchemaType.KEYWORD,
     "space_id": qm.PayloadSchemaType.INTEGER,
     "concept_id": qm.PayloadSchemaType.INTEGER,
+    "embedding_fingerprint": qm.PayloadSchemaType.KEYWORD,
 }
 
 
@@ -346,8 +347,12 @@ class QdrantMemoryStore:
         top_k: int,
         model: str,
         dimension: int,
+        embedding_fingerprint: str,
     ) -> tuple[list[MemoryVectorHit], list[str]]:
-        """按用户 + 状态 + 作用域过滤后做向量检索。
+        """按用户 + 状态 + 指纹 + 作用域过滤后做向量检索。
+
+        指纹必须在 Qdrant 层过滤：旧 Endpoint 的向量属于另一个向量空间，
+        若在拿到 Top-K 之后再剔除，它们会先挤占名额，导致正确候选根本进不来。
 
         返回 `(hits, warnings)`：collection 不存在时返回空列表 + 一条 warning，
         **不在检索路径里隐式建集合**（那会掩盖写入失败）。
@@ -356,6 +361,8 @@ class QdrantMemoryStore:
             raise MemoryVectorStoreError("记忆检索 top_k 必须为正数")
         if not query_vector:
             raise MemoryVectorStoreError("记忆检索查询向量为空")
+        if not embedding_fingerprint.strip():
+            raise MemoryVectorStoreError("记忆检索 embedding_fingerprint 不能为空")
 
         collection = self.collection_name(model=model, dimension=dimension)
         if not await self._collection_exists(collection):
@@ -364,6 +371,10 @@ class QdrantMemoryStore:
         must: list[qm.Condition] = [
             qm.FieldCondition(key="user_id", match=qm.MatchValue(value=user_id)),
             qm.FieldCondition(key="status", match=qm.MatchValue(value="ACTIVE")),
+            qm.FieldCondition(
+                key="embedding_fingerprint",
+                match=qm.MatchValue(value=embedding_fingerprint),
+            ),
         ]
         should: list[qm.Condition] | None = None
         if space_id is not None:

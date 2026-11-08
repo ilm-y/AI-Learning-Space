@@ -202,8 +202,8 @@ class HybridSearchServiceTest {
     }
 
     @Test
-    @DisplayName("向量 contentHash 过期：结果仍使用 MySQL 正文，不泄漏陈旧内容")
-    void staleVectorHashNeverLeaksOldContent() {
+    @DisplayName("向量 contentHash 过期：从向量候选集中剔除，词法命中仍保留")
+    void staleVectorHashIsRemovedFromVectorCandidates() {
         Memory current = memory(1L, "MySQL 中的最新内容", 0.5f);
         when(memoryMapper.searchFulltext(any(), any(), any(), anyString(), eq(50)))
                 .thenReturn(List.of(current));
@@ -218,9 +218,30 @@ class HybridSearchServiceTest {
         assertThat(response.status()).isEqualTo(MemoryHybridStatus.OK);
         assertThat(response.items()).singleElement()
                 .satisfies(item -> {
+                    // 正文仍以 MySQL 为准，但过期向量不再贡献排名/分数。
                     assertThat(item.memory().content()).isEqualTo("MySQL 中的最新内容");
-                    assertThat(item.vectorScore()).isEqualTo(0.9);
+                    assertThat(item.lexicalRank()).isEqualTo(1);
+                    assertThat(item.vectorRank()).isNull();
+                    assertThat(item.vectorScore()).isNull();
                 });
+    }
+
+    @Test
+    @DisplayName("Qdrant 返回的过期向量候选被剔除：最终结果不包含该 id")
+    void staleVectorHashOnlyCandidateIsDroppedEntirely() {
+        Memory current = memory(1L, "MySQL 中的最新内容", 0.5f);
+        when(memoryMapper.searchFulltext(any(), any(), any(), anyString(), eq(50)))
+                .thenReturn(List.of());
+        when(agentMemoryClient.search(any())).thenReturn(List.of(
+                new MemoryVectorHit(1L, 0.9, "hash-of-an-old-revision")));
+        when(memoryMapper.selectVisibleByIds(eq(USER_ID), isNull(), isNull(), anyList()))
+                .thenReturn(List.of(current));
+
+        HybridMemorySearchResponse response =
+                service.search(USER_ID, null, null, "递归", null);
+
+        assertThat(response.status()).isEqualTo(MemoryHybridStatus.OK);
+        assertThat(response.items()).isEmpty();
     }
 
     @Test

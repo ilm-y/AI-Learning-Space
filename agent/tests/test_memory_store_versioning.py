@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import math
 from types import SimpleNamespace
 
 from qdrant_client.http import models as qm
@@ -27,6 +28,8 @@ class FakeQdrantClient:
         self.points: dict[str, dict[str, qm.PointStruct]] = {}
         self.upsert_calls = 0
         self.set_payload_calls = 0
+        self.payload_indexes: dict[str, set[str]] = {}
+        self.query_calls: list[dict] = []
 
     async def collection_exists(self, name: str) -> bool:
         return name in self.collections
@@ -34,6 +37,7 @@ class FakeQdrantClient:
     async def create_collection(self, *, collection_name: str, vectors_config) -> None:
         self.collections[collection_name] = vectors_config
         self.points[collection_name] = {}
+        self.payload_indexes[collection_name] = set()
 
     async def get_collection(self, name: str):
         return SimpleNamespace(
@@ -46,7 +50,7 @@ class FakeQdrantClient:
     async def create_payload_index(
         self, *, collection_name: str, field_name: str, field_schema, wait: bool
     ) -> None:
-        return None
+        self.payload_indexes[collection_name].add(field_name)
 
     async def retrieve(
         self,
@@ -89,8 +93,68 @@ class FakeQdrantClient:
                 id=point.id, vector=point.vector, payload=merged
             )
 
+    async def query_points(
+        self,
+        *,
+        collection_name: str,
+        query,
+        query_filter,
+        limit: int,
+        with_payload,
+        with_vectors: bool,
+    ):
+        self.query_calls.append(
+            {"collection": collection_name, "filter": query_filter, "limit": limit}
+        )
+        matched = []
+        for point in self.points[collection_name].values():
+            if not _matches(query_filter, point.payload or {}):
+                continue
+            matched.append(
+                SimpleNamespace(
+                    id=point.id,
+                    score=_cosine(query, point.vector),
+                    payload=dict(point.payload or {}),
+                )
+            )
+        matched.sort(key=lambda point: point.score, reverse=True)
+        return SimpleNamespace(points=matched[:limit])
+
     async def close(self) -> None:
         return None
+
+
+def _matches(filter_obj, payload: dict) -> bool:
+    if filter_obj is None:
+        return True
+    for condition in filter_obj.must or []:
+        if not _matches_condition(condition, payload):
+            return False
+    for condition in filter_obj.must_not or []:
+        if _matches_condition(condition, payload):
+            return False
+    should = filter_obj.should or []
+    return not should or any(_matches_condition(c, payload) for c in should)
+
+
+def _matches_condition(condition, payload: dict) -> bool:
+    if isinstance(condition, qm.Filter):
+        return _matches(condition, payload)
+    value = payload.get(condition.key)
+    match = condition.match
+    if isinstance(match, qm.MatchAny):
+        return value in match.any
+    if isinstance(match, qm.MatchValue):
+        return value == match.value
+    raise AssertionError(f"unexpected match type: {type(match)}")  # pragma: no cover
+
+
+def _cosine(left: list[float], right: list[float]) -> float:
+    dot = sum(a * b for a, b in zip(left, right))
+    norm = math.sqrt(sum(a * a for a in left)) * math.sqrt(
+        sum(b * b for b in right)
+    )
+    return dot / norm if norm else 0.0
 
 
 def make_store() -> tuple[QdrantMemoryStore, FakeQdrantClient]:
@@ -105,7 +169,13 @@ def make_store() -> tuple[QdrantMemoryStore, FakeQdrantClient]:
     return store, fake
 
 
-def _payload(memory_id: int, *, version: int, content_hash: str) -> dict:
+def _payload(
+    memory_id: int,
+    *,
+    version: int,
+    content_hash: str,
+    fingerprint: str = "v1:test",
+) -> dict:
     return {
         "memory_id": memory_id,
         "user_id": 7,
@@ -117,7 +187,7 @@ def _payload(memory_id: int, *, version: int, content_hash: str) -> dict:
         "importance": 0.5,
         "content_hash": content_hash,
         "memory_version": version,
-        "embedding_fingerprint": "v1:test",
+        "embedding_fingerprint": fingerprint,
     }
 
 
@@ -278,3 +348,64 @@ async def test_delete_on_missing_collection_does_not_create_it() -> None:
 
     assert fake.collections == {}
     assert fake.upsert_calls == 0
+
+
+async def test_collection_indexes_embedding_fingerprint() -> None:
+    _store, fake, collection = await _setup()
+
+    assert "embedding_fingerprint" in fake.payload_indexes[collection]
+
+
+async def test_search_filters_fingerprint_at_qdrant_layer_before_top_k() -> None:
+    store, fake, collection = await _setup()
+    query = [1.0, 0.0, 0.0, 0.0]
+
+    # 旧 Endpoint 的向量与查询完全一致（相似度 1.0），若不前置过滤会占据 Top-1。
+    await store.upsert_memory(
+        collection_name=collection,
+        point_id=point_id_for_memory(48),
+        vector=query,
+        payload=_payload(
+            48, version=1, content_hash="old", fingerprint="v1:old-endpoint"
+        ),
+    )
+    # 当前 Endpoint 相似度只有 0.6。
+    await store.upsert_memory(
+        collection_name=collection,
+        point_id=point_id_for_memory(49),
+        vector=[0.6, 0.8, 0.0, 0.0],
+        payload=_payload(49, version=1, content_hash="current"),
+    )
+
+    hits, warnings = await store.search(
+        query_vector=query,
+        user_id=7,
+        space_id=None,
+        concept_id=None,
+        top_k=1,
+        model=MODEL,
+        dimension=DIMENSION,
+        embedding_fingerprint="v1:test",
+    )
+
+    assert warnings == []
+    assert [hit.memory_id for hit in hits] == [49]
+    # 指纹进入了 Qdrant must 过滤条件。
+    conditions = fake.query_calls[-1]["filter"].must
+    assert any(
+        getattr(c, "key", None) == "embedding_fingerprint" for c in conditions
+    )
+
+    # 反向验证：旧指纹相似度更高，说明确实是 Qdrant 层过滤而不是事后剔除。
+    old_hits, _ = await store.search(
+        query_vector=query,
+        user_id=7,
+        space_id=None,
+        concept_id=None,
+        top_k=1,
+        model=MODEL,
+        dimension=DIMENSION,
+        embedding_fingerprint="v1:old-endpoint",
+    )
+    assert [hit.memory_id for hit in old_hits] == [48]
+    assert old_hits[0].score > 0.99

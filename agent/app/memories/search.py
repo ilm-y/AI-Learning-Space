@@ -64,10 +64,11 @@ class MemoryVectorSearch:
             top_k=request.recall_k or self._default_top_k,
             model=self._provider.model,
             dimension=self._provider.dimension,
+            embedding_fingerprint=self._provider.fingerprint,
         )
 
-        # 不同网关的相同模型名可能落进同一个 collection；指纹不同的候选
-        # 属于另一个向量空间，不能参与本次排名。
+        # 指纹已在 Qdrant 层过滤，这里保留一次兜底：既能防御旧 collection
+        # 的实现差异，也避免未来有人绕过 store.scan 时把错误向量混入排名。
         filtered = []
         mismatch = 0
         for hit in hits:

@@ -19,7 +19,6 @@ import org.springframework.util.StringUtils;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -127,19 +126,27 @@ public class HybridSearchService {
             return response(MemoryHybridStatus.UNAVAILABLE, List.of(), warnings, startedAt);
         }
 
-        List<MemoryVectorHit> vectorHits = vector.ok() ? vector.value() : List.of();
-        List<RrfFuser.Fused> fused = RrfFuser.fuse(
-                lexical.ok() ? lexical.value() : List.of(),
-                vectorHits,
-                properties.rrfK(),
-                properties.lexicalWeight(),
-                properties.vectorWeight());
+        List<Long> lexicalIds = lexical.ok() ? lexical.value() : List.of();
+        List<MemoryVectorHit> rawVectorHits = vector.ok() ? vector.value() : List.of();
 
-        if (fused.isEmpty()) {
+        // 回源复核必须先覆盖两路候选：向量候选可能在融合前就被剔除，
+        // 但仍需要 MySQL 的内容来计算 hash。
+        List<Long> ids = new ArrayList<>();
+        for (Long id : lexicalIds) {
+            if (id != null) {
+                ids.add(id);
+            }
+        }
+        for (MemoryVectorHit hit : rawVectorHits) {
+            if (hit != null && hit.memoryId() != null) {
+                ids.add(hit.memoryId());
+            }
+        }
+        ids = ids.stream().distinct().toList();
+        if (ids.isEmpty()) {
             return response(status(lexical, vector), List.of(), warnings, startedAt);
         }
 
-        List<Long> ids = fused.stream().map(RrfFuser.Fused::memoryId).distinct().toList();
         Map<Long, Memory> visible;
         try {
             visible = memoryMapper.selectVisibleByIds(userId, spaceId, conceptId, ids)
@@ -152,15 +159,38 @@ public class HybridSearchService {
             return response(MemoryHybridStatus.UNAVAILABLE, List.of(), warnings, startedAt);
         }
 
-        Map<Long, String> vectorHashes = hashByMemoryId(vectorHits);
+        // contentHash 不一致说明 Qdrant 里是旧内容算出的向量：排名不可信，
+        // 必须在 RRF 之前从向量候选集中移除，避免它污染/挤占融合结果。
+        List<MemoryVectorHit> vectorHits = new ArrayList<>(rawVectorHits.size());
         int stale = 0;
-        for (Memory memory : visible.values()) {
-            String expected = vectorHashes.get(memory.getId());
-            if (expected != null && !expected.equals(Hashing.sha256Hex(memory.getContent()))) {
-                stale++;
-                // 正文以 MySQL 为准；这里只记录索引落后，绝不把陈旧正文带进结果。
-                log.warn("memory.hybrid.stale memoryId={} userId={}", memory.getId(), userId);
+        for (MemoryVectorHit hit : rawVectorHits) {
+            if (hit == null) {
+                continue;
             }
+            Memory memory = hit.memoryId() == null ? null : visible.get(hit.memoryId());
+            String expected = hit.contentHash();
+            if (memory != null && expected != null
+                    && !expected.equals(Hashing.sha256Hex(memory.getContent()))) {
+                stale++;
+                log.warn("memory.hybrid.stale.drop memoryId={} userId={}",
+                        hit.memoryId(), userId);
+                continue;
+            }
+            vectorHits.add(hit);
+        }
+        if (stale > 0) {
+            log.info("memory.hybrid.stale.dropped userId={} count={}", userId, stale);
+        }
+
+        List<RrfFuser.Fused> fused = RrfFuser.fuse(
+                lexicalIds,
+                vectorHits,
+                properties.rrfK(),
+                properties.lexicalWeight(),
+                properties.vectorWeight());
+
+        if (fused.isEmpty()) {
+            return response(status(lexical, vector), List.of(), warnings, startedAt);
         }
 
         Comparator<RrfFuser.Fused> comparator = Comparator
@@ -227,16 +257,6 @@ public class HybridSearchService {
         return lexical.ok()
                 ? MemoryHybridStatus.DEGRADED_VECTOR
                 : MemoryHybridStatus.DEGRADED_KEYWORD;
-    }
-
-    private static Map<Long, String> hashByMemoryId(List<MemoryVectorHit> hits) {
-        Map<Long, String> hashes = new HashMap<>();
-        for (MemoryVectorHit hit : hits) {
-            if (hit.memoryId() != null && hit.contentHash() != null) {
-                hashes.put(hit.memoryId(), hit.contentHash());
-            }
-        }
-        return hashes;
     }
 
     private static Float importanceOf(Memory memory) {
