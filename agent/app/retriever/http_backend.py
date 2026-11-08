@@ -45,9 +45,13 @@ from app.retriever.base import (
     EvidenceRetrievalResult,
     KnowledgeQuery,
     KnowledgeResult,
+    MemoryRetrievalResult,
     RelatedConceptResult,
     RelatedConceptStatus,
     RetrievalError,
+    RetrievalStatus,
+    RevisionRetrievalResult,
+    UnderstandingRetrievalResult,
 )
 from app.retriever.knowledge import AllowedDocument, KnowledgeSearchService
 from app.schemas import (
@@ -116,25 +120,58 @@ class HttpBackendRetriever:
 
     async def get_understandings(
         self, user_id: int, space_id: int, concept_ids: list[int]
-    ) -> list[Understanding]:
+    ) -> UnderstandingRetrievalResult:
+        """逐个 concept 读取当前认知快照，并保留「失败 ≠ 没有快照」的区分。
+
+        后端对「还没有该 Concept 的快照」返回 ``data: null``（正常），而超时、5xx、
+        业务错误或响应无法解析属于查询失败。两者绝不能都变成「这个用户没学过」：
+        前者计入 EMPTY，后者让整体状态变成 DEGRADED（已成功取到的快照仍保留）。
+        """
         results: list[Understanding] = []
+        failed: list[int] = []
         for concept_id in concept_ids:
-            # data 为 null 表示这个用户还没有该 Concept 的快照，是正常情况
-            data = await self._get(f"/api/understandings/{concept_id}", fatal=False)
+            ok, data, failure = await self._get_outcome(
+                f"/api/understandings/{concept_id}"
+            )
+            if not ok:
+                log.warning(
+                    "学习认知查询失败：concept=%s reason=%s", concept_id, failure
+                )
+                failed.append(concept_id)
+                continue
+            if data is None:
+                # 后端明确返回 null：该用户还没有这个 Concept 的快照，是正常空结果。
+                continue
             item = _parse_one(data, Understanding)
-            if item is not None:
-                results.append(item)
-        return results
+            if item is None:
+                failed.append(concept_id)
+                continue
+            results.append(item)
+
+        if failed:
+            return UnderstandingRetrievalResult(
+                items=results,
+                status=RetrievalStatus.DEGRADED,
+                warning=(
+                    f"学习认知检索失败或不完整（conceptIds={failed}），"
+                    "无法确认这些知识点是否已有认知记录。"
+                ),
+                failed_concept_ids=failed,
+            )
+        return UnderstandingRetrievalResult(
+            items=results,
+            status=RetrievalStatus.SUCCESS if results else RetrievalStatus.EMPTY,
+        )
 
     async def get_memories(
         self, user_id: int, space_id: int, concept_ids: list[int], query: str
-    ) -> list[MemoryItem]:
+    ) -> MemoryRetrievalResult:
         # 后端已按 status = ACTIVE 过滤，CANDIDATE 不会流进来。
         #
         # 走 /search/hybrid 而不是旧 /search：旧端点只返回 List，检索整条链路
         # 不可用时和「确实没有相关记忆」都是空列表，Agent 无从区分。混合检索端点
         # 带 status（OK / DEGRADED_* / UNAVAILABLE / BLANK_QUERY），必须在这里
-        # 显式识别并告警，绝不能把「检索失败」静默当成「没有记忆」。
+        # 显式识别并保留状态，绝不能把「检索失败」静默当成「没有记忆」。
         #
         # keyword 传的是用户原话（截前 60 字），这没问题 —— 后端不是把整串当作
         # 一个子串去 LIKE，而是先按空白/标点切词、中文再补字符二元组，命中任意
@@ -151,20 +188,70 @@ class HttpBackendRetriever:
         }
         if concept_ids:
             params["conceptId"] = concept_ids[0]
-        data = await self._get(
-            "/api/memories/search/hybrid",
-            params=params,
-            fatal=False,
+        ok, data, failure = await self._get_outcome(
+            "/api/memories/search/hybrid", params=params
         )
+        if not ok:
+            log.warning("记忆检索请求失败：space=%s reason=%s", space_id, failure)
+            return MemoryRetrievalResult(
+                status=RetrievalStatus.DEGRADED,
+                detail="REQUEST_FAILED",
+                warning="记忆检索请求失败，无法确认是否有相关记忆。",
+            )
+        if data is None:
+            # 请求成功但响应体没有 data：不能解释成「确实没有记忆」。
+            return MemoryRetrievalResult(
+                status=RetrievalStatus.DEGRADED,
+                detail="EMPTY_RESPONSE",
+                warning="记忆检索响应缺少数据，无法确认是否有相关记忆。",
+            )
+
         status, memories, warnings = _parse_memory_search(data)
         joined = "；".join(warnings)
-        if status == "UNAVAILABLE":
-            # 空列表在这里是「检索不可用」，不是「没有记忆」。必须留下明确痕迹。
-            log.warning("记忆检索不可用（status=UNAVAILABLE）：%s", joined or "无附加信息")
-            return []
+        trimmed = memories[: self._memory_top_k]
+
+        if status == "OK":
+            final = RetrievalStatus.SUCCESS if trimmed else RetrievalStatus.EMPTY
+            return MemoryRetrievalResult(items=trimmed, status=final, detail=status)
         if status in {"DEGRADED_VECTOR", "DEGRADED_KEYWORD"}:
             log.warning("记忆检索降级（status=%s）：%s", status, joined or "无附加信息")
-        return memories[: self._memory_top_k]
+            return MemoryRetrievalResult(
+                items=trimmed,
+                status=RetrievalStatus.DEGRADED,
+                detail=status,
+                warning=f"记忆检索部分降级（{status}），结果可能不完整；不能据此判断用户没有相关记忆。",
+            )
+        if status == "UNAVAILABLE":
+            log.warning("记忆检索不可用（status=UNAVAILABLE）：%s", joined or "无附加信息")
+            return MemoryRetrievalResult(
+                status=RetrievalStatus.DEGRADED,
+                detail=status,
+                warning="记忆检索不可用，无法确认是否有相关记忆。",
+            )
+        if status == "BLANK_QUERY":
+            # 后端因关键词为空而未做语义检索；即使返回了列表也不是「按话题召回」，
+            # 空列表更不能解释成「没有记忆」。
+            return MemoryRetrievalResult(
+                items=trimmed,
+                status=(
+                    RetrievalStatus.SUCCESS if trimmed else RetrievalStatus.DEGRADED
+                ),
+                detail=status,
+                warning=(
+                    None
+                    if trimmed
+                    else "记忆检索未执行语义查询（BLANK_QUERY），无法确认是否有相关记忆。"
+                ),
+            )
+
+        # status 缺失（旧格式 / 网关裁剪）：结果可能可用，但完整性无法确认。
+        log.warning("记忆检索响应缺少可识别 status，按不完整结果处理")
+        return MemoryRetrievalResult(
+            items=trimmed,
+            status=RetrievalStatus.DEGRADED,
+            detail=status or "UNKNOWN",
+            warning="记忆检索响应缺少状态，无法确认结果是否完整；不能据此判断用户没有相关记忆。",
+        )
 
     async def get_knowledge(self, query: KnowledgeQuery) -> KnowledgeResult:
         # 第一步必须是后端授权白名单。拿不到就 fail closed；绝不先查 Qdrant 再过滤，
@@ -374,21 +461,61 @@ class HttpBackendRetriever:
 
     async def get_revisions(
         self, user_id: int, concept_ids: list[int]
-    ) -> dict[int, list[UnderstandingRevision]]:
+    ) -> RevisionRetrievalResult:
         """读取每个概念的真实版本历史。
 
-        没有快照/没有历史是正常情况（返回空列表），不抛 RetrievalError。
+        「没有快照 / 没有历史」是正常情况（EMPTY），不抛 RetrievalError；
+        但请求失败、HTTP 错误或响应无法解析必须记成 DEGRADED —— 否则
+        「Revision 查询失败」会被模型解释成「用户过去没有误区、没有变化」。
         后端接口本身按登录用户鉴权，这里不自行推断权限。
         """
-        results: dict[int, list[UnderstandingRevision]] = {}
+        revisions: dict[int, list[UnderstandingRevision]] = {}
+        failed: list[int] = []
         for concept_id in concept_ids:
-            data = await self._get(
-                f"/api/understandings/{concept_id}/revisions", fatal=False
+            ok, data, failure = await self._get_outcome(
+                f"/api/understandings/{concept_id}/revisions"
             )
-            revisions = _parse_list(data, UnderstandingRevision)
-            revisions.sort(key=lambda item: item.revision_no)
-            results[concept_id] = revisions
-        return results
+            if not ok:
+                log.warning(
+                    "历史轨迹查询失败：concept=%s reason=%s", concept_id, failure
+                )
+                failed.append(concept_id)
+                revisions[concept_id] = []
+                continue
+            if data is None:
+                # 没有快照/没有历史，正常空结果。
+                revisions[concept_id] = []
+                continue
+            if not isinstance(data, list):
+                log.warning("历史轨迹响应格式异常：concept=%s", concept_id)
+                failed.append(concept_id)
+                revisions[concept_id] = []
+                continue
+            parsed = _parse_list(data, UnderstandingRevision)
+            if len(parsed) < len(data):
+                # 部分版本无法解析：已解析的仍可用，但整体必须标成不完整。
+                failed.append(concept_id)
+            parsed.sort(key=lambda item: item.revision_no)
+            revisions[concept_id] = parsed
+
+        if failed:
+            return RevisionRetrievalResult(
+                revisions=revisions,
+                status=RetrievalStatus.DEGRADED,
+                warning=(
+                    f"历史轨迹检索失败或不完整（conceptIds={failed}），"
+                    "无法确认用户过去是否存在误区或变化。"
+                ),
+                failed_concept_ids=failed,
+            )
+        return RevisionRetrievalResult(
+            revisions=revisions,
+            status=(
+                RetrievalStatus.SUCCESS
+                if any(revisions.values())
+                else RetrievalStatus.EMPTY
+            ),
+        )
 
     async def get_evidence_details(
         self, user_id: int, concept_ids: list[int], evidence_ids: list[int]
@@ -426,36 +553,47 @@ class HttpBackendRetriever:
 
         `fatal=True` 的调用（列 Concept）失败说明后端整体不可用，向上抛；
         `fatal=False` 的调用失败只影响这一次检索的丰满度，记日志后返回 None。
+        需要区分「请求失败」与「后端明确返回 null」的调用方应改用 `_get_outcome`。
+        """
+        ok, data, failure = await self._get_outcome(path, params=params)
+        if ok:
+            return data
+        if fatal:
+            raise RetrievalError(f"检索请求失败（{failure}）：{path}")
+        return None
+
+    async def _get_outcome(
+        self, path: str, *, params: dict[str, Any] | None = None
+    ) -> tuple[bool, Any, str | None]:
+        """返回 ``(ok, data, failure)``。
+
+        ``ok=False`` 只表示请求/统一响应体这一层失败（连接、非 2xx、非统一响应、
+        业务错误），与「请求成功但 data 为 null」严格区分 —— 后者是正常空结果。
+        ``failure`` 是脱敏的失败分类，仅供日志/状态诊断，不进入 Prompt。
         """
         try:
             response = await self._client.get(f"{self._base_url}{path}", params=params)
         except httpx.HTTPError as exc:
-            if fatal:
-                raise RetrievalError(f"连接后端失败：{self._base_url}{path}（{exc}）") from exc
             log.warning("检索请求失败，跳过：%s（%s）", path, exc)
-            return None
+            return False, None, type(exc).__name__
 
         if response.status_code == 401:
             raise RetrievalError(
                 "后端返回 401：凭据无效（用户 JWT 过期，或 AILS_INTERNAL_TOKEN 与后端不一致）"
             )
         if response.status_code >= 400:
-            if fatal:
-                raise RetrievalError(f"后端返回 {response.status_code}：{path}")
             log.warning("检索请求返回 %s，跳过：%s", response.status_code, path)
-            return None
+            return False, None, f"HTTP_{response.status_code}"
 
         try:
             envelope = ApiResponse.model_validate(response.json())
         except ValueError:
             log.warning("响应不是统一响应体，跳过：%s", path)
-            return None
+            return False, None, "INVALID_ENVELOPE"
         if not envelope.is_ok():
-            if fatal:
-                raise RetrievalError(f"后端业务错误 code={envelope.code}：{envelope.message}")
             log.warning("后端业务错误，跳过：%s code=%s", path, envelope.code)
-            return None
-        return envelope.data
+            return False, None, f"BUSINESS_CODE_{envelope.code}"
+        return True, envelope.data, None
 
 
 def _parse_memory_search(

@@ -60,6 +60,10 @@ PRIORITY_HISTORY = 90
 # 丢了它只是少一层「我们正在做什么」的框架，丢了 Understanding 才是丢了「你之前是怎么理解的」。
 PRIORITY_SESSION = 85
 PRIORITY_UNDERSTANDING = 70
+# 学习认知 / 记忆 / 轨迹的检索状态比认知内容本身还高一点：它解释的是
+# 「本轮有没有查、查成没查成」。降级说明很短，但决定了模型能不能把
+# 「没看到记录」说成「用户没有记录」。预算紧张时内容可丢，这条不能丢。
+PRIORITY_COGNITIVE_STATUS = 71
 # 历史轨迹低于当前理解：复盘要能看到过去，但当前状态永远先被保留。
 PRIORITY_TRAJECTORY = 68
 PRIORITY_MEMORY = 50
@@ -82,6 +86,7 @@ PRIORITY_RELATED_EVIDENCE = 18
 # 顺序决定人读起来顺不顺）。session 放最前：它是后面一切内容的框架。
 RENDER_ORDER = (
     "session",
+    "cognitive_status",
     "understanding",
     "trajectory",
     "memory",
@@ -245,6 +250,15 @@ class BuiltContext:
     resolver_status: str = "NOT_CALLED"
     resolver_intent: str = "other"
     resolver_warning: str | None = None
+    # 检索阶段的学习认知 / 记忆 / 轨迹状态。把它们随上下文一起返回，
+    # 保证「没查到」「没查」「查失败」在 preview 与调用方眼里仍然可区分。
+    understanding_status: str = "NOT_QUERIED"
+    understanding_warning: str | None = None
+    memory_status: str = "NOT_QUERIED"
+    memory_warning: str | None = None
+    memory_detail: str | None = None
+    revision_status: str = "NOT_QUERIED"
+    revision_warning: str | None = None
 
     @property
     def dropped_sections(self) -> list[str]:
@@ -273,6 +287,13 @@ class BuiltContext:
             "resolverStatus": self.resolver_status,
             "resolverIntent": self.resolver_intent,
             "resolverWarning": self.resolver_warning,
+            "understandingStatus": self.understanding_status,
+            "understandingWarning": self.understanding_warning,
+            "memoryStatus": self.memory_status,
+            "memoryWarning": self.memory_warning,
+            "memoryDetail": self.memory_detail,
+            "revisionStatus": self.revision_status,
+            "revisionWarning": self.revision_warning,
             "droppedSections": self.dropped_sections,
             "warnings": self.warnings,
             "sections": [section.as_dict() for section in self.sections],
@@ -383,6 +404,13 @@ class ContextBuilder:
             resolver_status=state.resolver_status,
             resolver_intent=state.resolver_intent,
             resolver_warning=state.resolver_warning,
+            understanding_status=state.understanding_status,
+            understanding_warning=state.understanding_warning,
+            memory_status=state.memory_status,
+            memory_warning=state.memory_warning,
+            memory_detail=state.memory_detail,
+            revision_status=state.revision_status,
+            revision_warning=state.revision_warning,
         )
 
     # ---------- 1. 收集 ----------
@@ -431,6 +459,25 @@ class ContextBuilder:
                     )
                 )
 
+        # 认知检索状态：只在检索失败/不完整时出现。它先于具体认知内容渲染，
+        # 因为「这次没查成」会改变后面所有「没有看到」的解读方式。
+        cognitive_status_note = _render_cognitive_status(state)
+        if cognitive_status_note:
+            sections.append(
+                ContextSection(
+                    name="cognitive_status",
+                    title="学习认知检索状态",
+                    content=cognitive_status_note,
+                    priority=PRIORITY_COGNITIVE_STATUS,
+                    source_ids=[
+                        f"understanding-status:{state.understanding_status}",
+                        f"memory-status:{state.memory_status}",
+                        f"revision-status:{state.revision_status}",
+                    ],
+                    dedupe_key="cognitive_status",
+                )
+            )
+
         # 认知背景
         learning_memory_concept_ids = {
             memory.concept_id
@@ -438,8 +485,10 @@ class ContextBuilder:
             if memory.memory_type is MemoryType.LEARNING
         }
         for understanding in state.understandings:
-            if not understanding.has_content:
-                # 只有 UNKNOWN 空快照的概念不提供任何信息，塞进去只会浪费预算
+            if not understanding.has_content and understanding.status is UnderstandingStatus.UNKNOWN:
+                # 只有「UNKNOWN 且没有任何内容」的快照不提供任何信息，塞进去只会浪费预算。
+                # EXPOSED / PARTIAL 等状态即使没有条目化正文也必须保留 ——
+                # 「接触过但没写细节」本身就是一条有效事实，不能因为正文为空就整块丢掉。
                 continue
             has_learning_memory = (
                 None in learning_memory_concept_ids
@@ -686,7 +735,13 @@ class ContextBuilder:
 
         # 这句话只描述「历史认知记录」。知识状态 / 知识片段 / 判定依据都不属于
         # 学习者认知记录，不能让它们把「没有历史认知」这句话顶掉。
-        cognitive_kinds = {"session", "understanding", "trajectory", "memory"}
+        cognitive_kinds = {
+            "session",
+            "cognitive_status",
+            "understanding",
+            "trajectory",
+            "memory",
+        }
         kept_cognitive = any(
             _kind(section) in cognitive_kinds and not section.dropped
             for section in sections
@@ -704,6 +759,12 @@ class ContextBuilder:
         )
         if not kept_cognitive and not dropped_records:
             degraded_notes: list[str] = []
+            if _understanding_degraded(state):
+                degraded_notes.append("本轮学习认知检索未完成或失败")
+            if _memory_degraded(state):
+                degraded_notes.append("本轮记忆检索未完成或失败")
+            if _revision_degraded(state):
+                degraded_notes.append("本轮历史轨迹检索未完成或失败")
             if _evidence_degraded(state):
                 degraded_notes.append("本轮证据检索发生降级")
             if _concept_resolver_degraded(state):
@@ -713,13 +774,36 @@ class ContextBuilder:
             if degraded_notes:
                 blocks.append(
                     "## 学习者背景\n"
-                    f"（本次没有检索到可用的历史认知记录；但{'；'.join(degraded_notes)}，"
-                    "不能据此判断学习者没有相关历史，按新知识谨慎教学，"
-                    "不要断言用户从未学过相关内容。）"
+                    f"（本次没有可用于回答的历史认知记录；但{'；'.join(degraded_notes)}，"
+                    "不能据此判断学习者没有相关历史，也不要声称用户没学过、没有记录或过去没有误区。"
+                    "按新知识谨慎教学即可。）"
+                )
+            elif _cognitive_not_queried(state):
+                # 本轮根本没有发起这类检索（通常是没有识别到可关联概念）。
+                # 此时不渲染任何「学习者背景」：沉默是中性的，而任何
+                # 「没有记录」措辞都会被模型读成「用户没学过」。也避免为
+                # 一次未发生的检索占用本就不宽裕的上下文预算。
+                pass
+            elif _understandings_without_content(state):
+                blocks.append(
+                    "## 学习者背景\n"
+                    "（本轮检索到了认知记录，但没有可用于教学的详细内容；"
+                    "这不代表用户从未学过，也不代表用户没有相关历史。）"
+                )
+            elif not _all_cognitive_queried(state):
+                blocks.append(
+                    "## 学习者背景\n"
+                    "（本轮部分认知检索未发起，无法确认用户是否已有相关记录；"
+                    "这不代表用户没有相关历史或记忆，不要声称用户没学过或没有记录。"
+                    "按新知识谨慎教学即可。）"
                 )
             else:
-                # 真的什么都没检索到，才是「没有历史认知记录」。
-                blocks.append("## 学习者背景\n（本次没有检索到任何历史认知记录，按新知识正常教学。）")
+                # 只有「确实查过且确实为空」才允许说没有记录。
+                blocks.append(
+                    "## 学习者背景\n"
+                    "（本轮已完成学习认知与记忆检索，结果确实为空；按新知识正常教学。"
+                    "不要据此推断用户在其他知识点上的历史或记忆。）"
+                )
         elif dropped_records and not kept_records:
             # 检索到了，只是被预算丢掉：不能对用户谎称「没有历史」。
             names = "、".join(section.name for section in dropped_records)
@@ -749,10 +833,30 @@ class ContextBuilder:
     @staticmethod
     def _collect_warnings(state: AgentState, sections: list[ContextSection]) -> list[str]:
         warnings: list[str] = []
-        # UNKNOWN 且什么都不含的快照不算「检索到了」—— 它提供不了任何可用信息，
-        # 所以这里看的是可用的快照，而不是列表是否为空。
-        if not any(understanding.has_content for understanding in state.understandings):
-            warnings.append("没有检索到任何 Understanding：这次回答无法接着用户已有认知讲。")
+        # 只有「确实查过且结果为空」才能说没有可用快照。
+        # NOT_QUERIED 是「没查」，DEGRADED 是「没查成」—— 两者都绝不能写成
+        # 「没有检索到 Understanding」，否则 meta/preview 会把失败说成事实。
+        if _understanding_degraded(state):
+            warnings.append(
+                state.understanding_warning
+                or "学习认知检索降级：无法确认用户是否已有认知记录，不能当作没有。"
+            )
+        elif state.understanding_status == "EMPTY" and not any(
+            understanding.has_content for understanding in state.understandings
+        ):
+            warnings.append(
+                "学习认知检索完成，结果为空：用户在这些知识点上确实没有可用快照。"
+            )
+        if _memory_degraded(state):
+            warnings.append(
+                state.memory_warning
+                or "记忆检索降级：无法确认是否有相关记忆，不能当作没有。"
+            )
+        if _revision_degraded(state):
+            warnings.append(
+                state.revision_warning
+                or "历史轨迹检索降级：无法确认用户过去是否存在误区或变化，不能当作没有历史。"
+            )
         # 知识检索的正常空结果 / 阈值过滤 / 依赖失败由检索层给出明确原因。
         # 这里只负责把它带进 context preview 与 meta，不把失败伪装成「没有资料」。
         if state.knowledge_warning:
@@ -789,11 +893,19 @@ _BLOCK_HEADINGS = {
         "> 用户正在进行的这一段学习最终想解决什么、此刻卡在哪里。它是这一轮回答的框架与落点，"
         "不等于用户已经掌握的内容。回答要往这个目标上靠，但不要逐字复述它。",
     ),
+    "cognitive_status": (
+        "本轮学习认知检索状态",
+        "> 这决定本轮能否把「没有看到记录」当成「用户没有记录」。"
+        "NOT_QUERIED 表示本轮未发起检索，DEGRADED 表示检索失败或不完整；"
+        "两者都不说明用户没有学过、没有记忆或过去没有误区。",
+    ),
     "understanding": (
         "学习者的当前认知（系统长期记录）",
         "> 这是系统对「这个用户现在怎么理解这些概念」的判断，用来决定**从哪讲起**。"
         "只有「已经理解」明确列出的内容才算已掌握；状态「已能讲清」不覆盖未列出的相关知识，"
         "「部分理解」「接触过」「未接触」都不能说成已掌握。"
+        "只有状态、没有条目化内容也是一条有效记录：表示用户接触过该概念，"
+        "但不能据此推断任何具体掌握程度。"
         "不要向用户复述这一段的结构，也不要说「根据我的记录」。",
     ),
     "trajectory": (
@@ -882,6 +994,15 @@ def _render_understanding(
 ) -> str:
     label = _STATUS_LABEL.get(understanding.status, understanding.status.value)
     lines = [f"### {understanding.concept_name} ｜ 状态：{label}"]
+    if not understanding.has_content:
+        # EXPOSED / PARTIAL 等状态可能没有任何条目化正文。整块丢掉会让模型
+        # 把「接触过但没写细节」误读成「从未学过」，所以保留状态本身并明确边界。
+        lines.append(
+            "- 该知识点已有状态记录，但当前没有可用的详细内容"
+            "（没有条目化的已理解 / 误区 / 不确定信息）。"
+            "这只说明用户接触过该知识点，不能推断其具体掌握程度，"
+            "也不能据此说用户从未学过。"
+        )
     if understanding.summary:
         lines.append(f"- 当前理解：{understanding.summary}")
     if understanding.known_parts:
@@ -1123,6 +1244,90 @@ def _budget_knowledge_status_note(
             "也不要把未放入的片段当作依据或编造引用。",
         ]
     )
+
+
+_COGNITIVE_DEGRADED = "DEGRADED"
+_COGNITIVE_NOT_QUERIED = "NOT_QUERIED"
+_COGNITIVE_QUERIED = {"EMPTY", "SUCCESS"}
+
+
+def _understanding_degraded(state: AgentState) -> bool:
+    return str(state.understanding_status) == _COGNITIVE_DEGRADED
+
+
+def _memory_degraded(state: AgentState) -> bool:
+    return str(state.memory_status) == _COGNITIVE_DEGRADED
+
+
+def _revision_degraded(state: AgentState) -> bool:
+    return str(state.revision_status) == _COGNITIVE_DEGRADED
+
+
+def _cognitive_not_queried(state: AgentState) -> bool:
+    """两类认知检索都没发起。空列表在这里只表示「没查」，不表示「没有」。"""
+    return (
+        str(state.understanding_status) == _COGNITIVE_NOT_QUERIED
+        and str(state.memory_status) == _COGNITIVE_NOT_QUERIED
+    )
+
+
+def _all_cognitive_queried(state: AgentState) -> bool:
+    return (
+        str(state.understanding_status) in _COGNITIVE_QUERIED
+        and str(state.memory_status) in _COGNITIVE_QUERIED
+    )
+
+
+def _understandings_without_content(state: AgentState) -> bool:
+    """检索确实返回了快照，但没有任何可渲染的条目化内容。"""
+    return bool(state.understandings) and not any(
+        understanding.has_content for understanding in state.understandings
+    )
+
+
+def _render_cognitive_status(state: AgentState) -> str:
+    """渲染学习认知 / 记忆 / 历史轨迹的检索状态。
+
+    只为 DEGRADED 输出：SUCCESS / EMPTY 由内容本身说明，NOT_QUERIED 不产生
+    任何「没有记录」的暗示。DEGRADED 的文案必须同时说清「失败」与
+    「不能据此判断用户没有」，否则模型仍会顺手补一句「你没有相关记录」。
+    """
+    blocks: list[str] = []
+    if _understanding_degraded(state):
+        blocks.append(
+            "\n".join(
+                [
+                    "- 学习认知检索：DEGRADED",
+                    f"- 检索层记录：{state.understanding_warning or '未提供具体原因'}",
+                    "- 说明：本轮学习认知检索失败或不完整，无法确认用户是否已有认知记录。"
+                    "不要声称用户没学过、没有认知记录或这是全新概念；"
+                    "需要时说明本轮未能完整检索。",
+                ]
+            )
+        )
+    if _memory_degraded(state):
+        blocks.append(
+            "\n".join(
+                [
+                    "- 长期记忆检索：DEGRADED",
+                    f"- 检索层记录：{state.memory_warning or '未提供具体原因'}",
+                    "- 说明：本轮记忆检索失败或不完整，不能据此判断用户没有相关记忆。"
+                    "不要声称用户没有记忆或从未提过相关偏好；需要时说明本轮未能完整检索。",
+                ]
+            )
+        )
+    if _revision_degraded(state):
+        blocks.append(
+            "\n".join(
+                [
+                    "- 历史轨迹检索：DEGRADED",
+                    f"- 检索层记录：{state.revision_warning or '未提供具体原因'}",
+                    "- 说明：本轮历史版本检索失败或不完整，不能据此判断用户过去没有误区、"
+                    "没有变化或没有历史记录。需要时说明本轮未能完整检索历史。",
+                ]
+            )
+        )
+    return "\n".join(blocks)
 
 
 _EVIDENCE_DEGRADED = "DEGRADED"

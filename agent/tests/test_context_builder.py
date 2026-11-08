@@ -93,16 +93,40 @@ def test_understanding_misconception_reaches_the_model():
 def test_unknown_empty_snapshot_is_not_injected():
     """UNKNOWN 且什么都不含的快照不提供信息，不该占预算。"""
     empty = Understanding(id=9, concept_id=11, concept_name="Page Table")
-    context = ContextBuilder().build(make_state(understandings=[empty]))
+    context = ContextBuilder().build(
+        make_state(
+            understandings=[empty],
+            understanding_status="EMPTY",
+            memory_status="EMPTY",
+        )
+    )
 
     assert "Page Table" not in context.messages[0].content
-    assert any("没有检索到任何 Understanding" in warning for warning in context.warnings)
+    # 只有「确实查过且为空」才允许说明空结果；不能写成「没有检索到 Understanding」
+    # 这种把检索状态压成事实的措辞。
+    assert any("结果为空" in warning for warning in context.warnings)
+    assert all("没有检索到任何 Understanding" not in warning for warning in context.warnings)
 
 
-def test_no_retrieval_result_says_so_explicitly():
+def test_not_queried_does_not_claim_there_is_no_history():
     context = ContextBuilder().build(make_state())
 
-    assert "没有检索到任何历史认知记录" in context.messages[0].content
+    system = context.messages[0].content
+    assert "没有检索到任何历史认知记录" not in system
+    assert "没有历史记录" not in system
+    assert "没学过" not in system
+    assert "没有记忆" not in system
+    assert "学习者背景" not in system
+
+
+def test_queried_empty_result_is_reported_as_empty_not_as_failure():
+    context = ContextBuilder().build(
+        make_state(understanding_status="EMPTY", memory_status="EMPTY")
+    )
+
+    system = context.messages[0].content
+    assert "已完成学习认知与记忆检索，结果确实为空" in system
+    assert "检索未完成" not in system
 
 
 def test_session_goal_and_focus_reach_the_model():

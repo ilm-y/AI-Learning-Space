@@ -86,7 +86,18 @@ class AgentState:
     resolver_elapsed_ms: int = 0
     resolver_dropped: list[str] = field(default_factory=list)
     understandings: list[Understanding] = field(default_factory=list)
+    # 本轮学习认知检索状态：NOT_QUERIED / SUCCESS / EMPTY / DEGRADED。
+    # 必须与 `understandings` 分开保存 —— 空列表既可能是「确实没有快照」，
+    # 也可能是「没有发起检索」或「查询失败」，三者的上下文措辞完全不同。
+    understanding_status: str = "NOT_QUERIED"
+    understanding_warning: str | None = None
     memories: list[MemoryItem] = field(default_factory=list)
+    # 本轮记忆检索状态：NOT_QUERIED / SUCCESS / EMPTY / DEGRADED。
+    # `memory_detail` 保留后端细分状态（OK / DEGRADED_VECTOR / UNAVAILABLE / ...），
+    # 只用于 trace 与 preview，不进入 Prompt 正文。
+    memory_status: str = "NOT_QUERIED"
+    memory_warning: str | None = None
+    memory_detail: str | None = None
     knowledge: list[KnowledgeChunk] = field(default_factory=list)
     # 知识检索的失败/空结果原因。它是「这次为什么没有用资料」的唯一事实，
     # 会进 trace、meta warnings 与 context preview；不要把失败伪装成一次成功空检索。
@@ -113,6 +124,10 @@ class AgentState:
     cross_concept_evidence_warning: str | None = None
     # 仅显式复盘时填充：真实 Revision 历史 + 由 trigger/reversal 关联精确找回的 Evidence。
     trajectories: list[LearningTrajectory] = field(default_factory=list)
+    # 历史轨迹检索状态：NOT_QUERIED（本轮没复盘）/ SUCCESS / EMPTY / DEGRADED。
+    # DEGRADED 绝不能解释成「用户过去没有误区、没有变化」。
+    revision_status: str = "NOT_QUERIED"
+    revision_warning: str | None = None
     # 用户这句话是否是显式个人复盘（由 _is_history_review 判定，与是否检索到概念无关）。
     # Runtime 只对这类回答做「生成后、推送前」的证据校验：普通知识问题仍即时流式，
     # 不能被缓冲。它也是 Current-only 场景的判断依据 —— 没有轨迹但要约束回答。
@@ -165,10 +180,13 @@ class AgentState:
             "resolverStatus": self.resolver_status,
             "retrieved": {
                 "understandings": len(self.understandings),
+                "understandingStatus": self.understanding_status,
                 "memories": len(self.memories),
+                "memoryStatus": self.memory_status,
                 "knowledge": len(self.knowledge),
                 "evidences": len(self.evidences),
                 "history": len(self.history),
+                "revisionStatus": self.revision_status,
             },
             "responseChars": len(self.response),
             "pendingTasks": self.pending_tasks,

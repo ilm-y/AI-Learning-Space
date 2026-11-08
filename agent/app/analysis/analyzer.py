@@ -35,7 +35,12 @@ from pydantic import ValidationError
 from app.analysis.prompts import ANALYSIS_SYSTEM_INSTRUCTION
 from app.config import Settings
 from app.llm.base import ChatMessage, LLMAdapter
-from app.retriever import build_retriever, detect_concepts
+from app.retriever import (
+    build_retriever,
+    detect_concepts,
+    normalize_memory_result,
+    normalize_understanding_result,
+)
 from app.schemas import (
     AnalyzeRequest,
     AnalyzeResult,
@@ -180,7 +185,11 @@ class LearningAnalyzer:
                 return self._empty_result()
 
             concept_ids = [concept.id for concept, _, _ in detected]
-            understandings, memories, evidence_result = await asyncio.gather(
+            (
+                understanding_result,
+                memory_result,
+                evidence_result,
+            ) = await asyncio.gather(
                 retriever.get_understandings(request.user_id, request.learning_space_id, concept_ids),
                 retriever.get_memories(
                     request.user_id, request.learning_space_id, concept_ids, request.user_message
@@ -192,6 +201,15 @@ class LearningAnalyzer:
                     self._settings.evidence_top_k,
                 ),
             )
+            # 分析链路同样不能把「查询失败」压成「没有快照 / 没有记忆」：
+            # 旧检索源返回裸列表时按兼容层降级；DEGRADED 会原样进入分析 Prompt
+            # 的状态说明，绝不能让模型据此断言「这是新概念」或「用户没有记忆」。
+            understanding_result = normalize_understanding_result(understanding_result)
+            memory_result = normalize_memory_result(memory_result)
+            understandings = list(understanding_result.items)
+            memories = list(memory_result.items)
+            understanding_status = understanding_result.status.value
+            memory_status = memory_result.status.value
             # 分析链路只把证据当作上下文材料；DEGRADED 时不伪造“没有证据”，
             # 但也不能因为证据检索失败就阻断分析本身。状态进 trace 供排查。
             evidences = list(evidence_result.items)
@@ -207,7 +225,12 @@ class LearningAnalyzer:
                 source=retriever.name,
                 conceptIds=concept_ids,
                 understandings=len(understandings),
+                understandingStatus=understanding_status,
+                understandingWarning=understanding_result.warning,
                 memories=len(memories),
+                memoryStatus=memory_status,
+                memoryDetail=memory_result.detail,
+                memoryWarning=memory_result.warning,
                 evidences=len(evidences),
                 evidenceStatus=evidence_status,
                 evidenceWarnings=evidence_result.warnings,
@@ -217,7 +240,15 @@ class LearningAnalyzer:
                 raw = self._heuristic_analysis(request, detected, understandings)
                 trace.record(TraceEventType.LLM_CALL, adapter="mock", strategy="heuristic")
             else:
-                raw = await self._llm_analysis(request, detected, understandings, memories, evidences)
+                raw = await self._llm_analysis(
+                    request,
+                    detected,
+                    understandings,
+                    memories,
+                    evidences,
+                    understanding_status=understanding_status,
+                    memory_status=memory_status,
+                )
                 trace.record(
                     TraceEventType.LLM_CALL,
                     adapter=self._llm.name,
@@ -251,13 +282,22 @@ class LearningAnalyzer:
         understandings: list[Understanding],
         memories: list[MemoryItem],
         evidences: list[EvidenceItem],
+        *,
+        understanding_status: str = "SUCCESS",
+        memory_status: str = "SUCCESS",
     ) -> AnalyzeResult:
         messages = [
             ChatMessage(role="system", content=ANALYSIS_SYSTEM_INSTRUCTION),
             ChatMessage(
                 role="user",
                 content=_render_analysis_input(
-                    request, detected, understandings, memories, evidences
+                    request,
+                    detected,
+                    understandings,
+                    memories,
+                    evidences,
+                    understanding_status=understanding_status,
+                    memory_status=memory_status,
                 ),
             ),
         ]
@@ -410,6 +450,9 @@ def _render_analysis_input(
     understandings: list[Understanding],
     memories: list[MemoryItem],
     evidences: list[EvidenceItem],
+    *,
+    understanding_status: str = "SUCCESS",
+    memory_status: str = "SUCCESS",
 ) -> str:
     lines = ["## 本轮对话", f"用户：{request.user_message.strip()}"]
     if request.assistant_message:
@@ -424,7 +467,13 @@ def _render_analysis_input(
 
     lines += ["", "## 当前理解（只有当轮之前的数据）"]
     if not understandings:
-        lines.append("- （没有快照：这是一个新概念）")
+        if understanding_status == "DEGRADED":
+            lines.append(
+                "- （学习认知检索失败或不完整：无法确认用户此前的理解状态，"
+                "不要据此判定这是新概念或用户没有相关认知）"
+            )
+        else:
+            lines.append("- （没有快照：这是一个新概念）")
     for understanding in understandings:
         parts = [f"- id={understanding.concept_id} 状态={understanding.status.value}"]
         if understanding.known_parts:
@@ -451,7 +500,13 @@ def _render_analysis_input(
 
     lines += ["", "## 已有 Memory（避免重复提出）"]
     if not memories:
-        lines.append("- （无）")
+        if memory_status == "DEGRADED":
+            lines.append(
+                "- （记忆检索失败或不完整：无法确认是否有相关记忆，"
+                "不要据此判定用户没有记忆）"
+            )
+        else:
+            lines.append("- （无）")
     for memory in memories:
         lines.append(
             f"- id={memory.id} scope={memory.scope_type.value} "

@@ -78,6 +78,9 @@ from app.retriever.base import (
     RelatedConceptResult,
     RelatedConceptStatus,
     RetrievalError,
+    normalize_memory_result,
+    normalize_revision_result,
+    normalize_understanding_result,
 )
 from app.retriever.knowledge import KnowledgeSearchService
 from app.retriever.routing import FallbackRetriever
@@ -810,8 +813,17 @@ class AgentRuntime:
         state.knowledge_warning = knowledge_result.warning
 
         if concept_ids:
-            state.understandings = retrieved["understandings"]
-            state.memories = retrieved["memories"]
+            understanding_result = normalize_understanding_result(
+                retrieved["understandings"]
+            )
+            memory_result = normalize_memory_result(retrieved["memories"])
+            state.understandings = understanding_result.items
+            state.understanding_status = understanding_result.status.value
+            state.understanding_warning = understanding_result.warning
+            state.memories = memory_result.items
+            state.memory_status = memory_result.status.value
+            state.memory_warning = memory_result.warning
+            state.memory_detail = memory_result.detail
 
         if "related" in retrieved:
             related_result: RelatedConceptResult = retrieved["related"]
@@ -856,8 +868,14 @@ class AgentRuntime:
                 state.evidences.extend(state.cross_concept_evidences)
 
         if retrieve_trajectory:
-            revisions = await retriever.get_revisions(state.user_id, concept_ids)
-            state.trajectories = build_trajectories(state.understandings, revisions)
+            revision_result = normalize_revision_result(
+                await retriever.get_revisions(state.user_id, concept_ids)
+            )
+            state.revision_status = revision_result.status.value
+            state.revision_warning = revision_result.warning
+            state.trajectories = build_trajectories(
+                state.understandings, revision_result.revisions
+            )
             if state.trajectories:
                 evidence_ids = collect_evidence_ids(
                     state.trajectories, state.understandings
@@ -881,7 +899,14 @@ class AgentRuntime:
             source=retriever.name,
             conceptIds=concept_ids,
             understandings=[item.concept_name for item in state.understandings],
+            understandingStatus=state.understanding_status,
+            understandingWarning=state.understanding_warning,
             memories=len(state.memories),
+            memoryStatus=state.memory_status,
+            memoryDetail=state.memory_detail,
+            memoryWarning=state.memory_warning,
+            revisionStatus=state.revision_status,
+            revisionWarning=state.revision_warning,
             knowledge=len(state.knowledge),
             knowledgeStatus=state.knowledge_status,
             knowledgeCandidates=knowledge_result.candidates,

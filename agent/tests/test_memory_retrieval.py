@@ -11,6 +11,7 @@ import logging
 
 import httpx
 
+from app.retriever.base import RetrievalStatus
 from app.retriever.http_backend import HttpBackendRetriever
 
 
@@ -66,7 +67,7 @@ async def test_memories_use_hybrid_endpoint_and_parse_nested_memory() -> None:
 
     retriever = _retriever(handler)
     try:
-        memories = await retriever.get_memories(7, 9, [3], "递归怎么写")
+        result = await retriever.get_memories(7, 9, [3], "递归怎么写")
     finally:
         await retriever.aclose()
 
@@ -74,7 +75,8 @@ async def test_memories_use_hybrid_endpoint_and_parse_nested_memory() -> None:
     assert seen["limit"] == "5"
     assert seen["keyword"] == "递归怎么写"
     assert seen["conceptId"] == "3"
-    assert [memory.id for memory in memories] == [11, 12]
+    assert [memory.id for memory in result.items] == [11, 12]
+    assert result.status is RetrievalStatus.SUCCESS
 
 
 async def test_unavailable_status_is_logged_instead_of_silently_empty(caplog) -> None:
@@ -88,11 +90,14 @@ async def test_unavailable_status_is_logged_instead_of_silently_empty(caplog) ->
     )
     try:
         with caplog.at_level(logging.WARNING, logger="app.retriever.http_backend"):
-            memories = await retriever.get_memories(7, 9, [], "递归")
+            result = await retriever.get_memories(7, 9, [], "递归")
     finally:
         await retriever.aclose()
 
-    assert memories == []
+    assert result.items == []
+    assert result.status is RetrievalStatus.DEGRADED
+    assert result.detail == "UNAVAILABLE"
+    assert "无法确认" in (result.warning or "")
     assert "UNAVAILABLE" in caplog.text
     assert "记忆检索不可用" in caplog.text
     assert "向量检索失败" in caplog.text
@@ -114,11 +119,14 @@ async def test_degraded_status_returns_items_but_logs_warning(caplog) -> None:
     )
     try:
         with caplog.at_level(logging.WARNING, logger="app.retriever.http_backend"):
-            memories = await retriever.get_memories(7, 9, [], "递归")
+            result = await retriever.get_memories(7, 9, [], "递归")
     finally:
         await retriever.aclose()
 
-    assert [memory.id for memory in memories] == [21]
+    assert [memory.id for memory in result.items] == [21]
+    assert result.status is RetrievalStatus.DEGRADED
+    assert result.detail == "DEGRADED_VECTOR"
+    assert "不能据此判断" in (result.warning or "")
     assert "DEGRADED_VECTOR" in caplog.text
 
 
@@ -132,9 +140,11 @@ async def test_missing_status_is_reported_but_keeps_parsable_items(caplog) -> No
     )
     try:
         with caplog.at_level(logging.WARNING, logger="app.retriever.http_backend"):
-            memories = await retriever.get_memories(7, 9, [], "递归")
+            result = await retriever.get_memories(7, 9, [], "递归")
     finally:
         await retriever.aclose()
 
-    assert [memory.id for memory in memories] == [31]
+    assert [memory.id for memory in result.items] == [31]
+    assert result.status is RetrievalStatus.DEGRADED
+    assert result.detail == "UNKNOWN"
     assert "缺少 status" in caplog.text

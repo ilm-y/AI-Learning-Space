@@ -79,8 +79,17 @@ async def test_no_concept_hit_still_attempts_knowledge_retrieval(runtime):
     assert detail["understandings"] == []
     assert detail["evidences"] == 0
     assert detail["evidenceRequested"] is False
-    assert any("没有检索到任何 Understanding" in warning for warning in prepared.context.warnings)
-    assert "没有检索到任何历史认知记录" in prepared.context.messages[0].content
+    # 没识别到概念 => 这三条检索线根本没有发起。NOT_QUERIED 不能渲染成
+    # 「没有记录 / 没学过」，也不能让 preview 的 warnings 暗示结果为空。
+    assert detail["understandingStatus"] == "NOT_QUERIED"
+    assert detail["memoryStatus"] == "NOT_QUERIED"
+    assert detail["revisionStatus"] == "NOT_QUERIED"
+    assert all("没有检索到任何 Understanding" not in warning for warning in prepared.context.warnings)
+    system = prepared.context.messages[0].content
+    # 固定教学契约里本来就可能出现「没有记录的部分不能算已掌握」这类通用规则，
+    # 所以这里只检查动态生成的「学习者背景」区块没有被错误添加。
+    assert "没有检索到任何历史认知记录" not in system
+    assert "学习者背景" not in system
 
 
 async def test_no_concept_does_not_call_understanding_memory_or_evidence(settings, monkeypatch):

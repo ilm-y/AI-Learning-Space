@@ -42,6 +42,128 @@ class RetrievalError(RuntimeError):
     """
 
 
+class RetrievalStatus(str, Enum):
+    """一次检索的「检索阶段」状态（与注入阶段状态分开）。
+
+    - ``NOT_QUERIED``：本轮没有发起这类检索（例如没有识别到概念）；
+    - ``EMPTY``：已经查过，且确实没有数据；
+    - ``SUCCESS``：查到了数据；
+    - ``DEGRADED``：查询失败或结果不完整，**不能**当成 EMPTY。
+
+    这四个值刻意互斥。不要把「未查询」「查询失败」「确实为空」压成同一个空列表 ——
+    模型会据此断言用户「从未学过 / 没有记忆」，而事实可能只是这次没查或没查成。
+    """
+
+    NOT_QUERIED = "NOT_QUERIED"
+    EMPTY = "EMPTY"
+    SUCCESS = "SUCCESS"
+    DEGRADED = "DEGRADED"
+
+
+@dataclass(slots=True)
+class UnderstandingRetrievalResult:
+    """学习认知快照的检索结果。
+
+    ``status=DEGRADED`` 表示至少一个 concept 的查询失败或响应无法解析。
+    已成功取得的快照仍放在 ``items`` 里（部分成功），但整体不能被当作 EMPTY。
+    """
+
+    items: list[Understanding] = field(default_factory=list)
+    status: RetrievalStatus = RetrievalStatus.EMPTY
+    warning: str | None = None
+    failed_concept_ids: list[int] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class MemoryRetrievalResult:
+    """长期记忆的检索结果。
+
+    ``detail`` 保留后端原始细分状态（OK / DEGRADED_VECTOR / DEGRADED_KEYWORD /
+    UNAVAILABLE / BLANK_QUERY），只用于结构化观测；``warning`` 是脱敏后的可读原因，
+    可以进入 meta 与 prompt 的状态说明。
+    """
+
+    items: list[MemoryItem] = field(default_factory=list)
+    status: RetrievalStatus = RetrievalStatus.EMPTY
+    detail: str | None = None
+    warning: str | None = None
+
+
+@dataclass(slots=True)
+class RevisionRetrievalResult:
+    """理解版本历史的检索结果。
+
+    ``revisions`` 按 conceptId 分组；``status=DEGRADED`` 表示至少一次请求失败，
+    此时 ``revisions`` 里可能仍有部分概念的历史。DEGRADED 绝不能解释为
+    「用户过去没有误区 / 没有变化」。
+    """
+
+    revisions: dict[int, list[UnderstandingRevision]] = field(default_factory=dict)
+    status: RetrievalStatus = RetrievalStatus.EMPTY
+    warning: str | None = None
+    failed_concept_ids: list[int] = field(default_factory=list)
+
+
+def normalize_understanding_result(value: object) -> UnderstandingRetrievalResult:
+    """兼容旧检索源：返回裸列表时按「已查询，结果有无」降级为 EMPTY / SUCCESS。
+
+    旧契约无法区分「查询失败」与「确实为空」；这里不伪造成功，也不把它当故障：
+    受控测试源与 Fixture 返回的空列表明确表示「确实没有」。HTTP 检索源必须返回
+    ``UnderstandingRetrievalResult``，否则无法表达 DEGRADED。
+    """
+    if isinstance(value, UnderstandingRetrievalResult):
+        return value
+    if isinstance(value, list):
+        items = list(value)
+        return UnderstandingRetrievalResult(
+            items=items,
+            status=RetrievalStatus.SUCCESS if items else RetrievalStatus.EMPTY,
+        )
+    return UnderstandingRetrievalResult(
+        status=RetrievalStatus.DEGRADED,
+        warning="学习认知检索返回格式异常，无法确认是否已有认知记录。",
+    )
+
+
+def normalize_memory_result(value: object) -> MemoryRetrievalResult:
+    """兼容旧检索源：裸列表按「已查询，结果有无」降级为 EMPTY / SUCCESS。"""
+    if isinstance(value, MemoryRetrievalResult):
+        return value
+    if isinstance(value, list):
+        items = list(value)
+        return MemoryRetrievalResult(
+            items=items,
+            status=RetrievalStatus.SUCCESS if items else RetrievalStatus.EMPTY,
+        )
+    return MemoryRetrievalResult(
+        status=RetrievalStatus.DEGRADED,
+        warning="记忆检索返回格式异常，无法确认是否有相关记忆。",
+    )
+
+
+def normalize_revision_result(value: object) -> RevisionRetrievalResult:
+    """兼容旧检索源：裸 dict 按「是否取到任意版本」降级为 EMPTY / SUCCESS。"""
+    if isinstance(value, RevisionRetrievalResult):
+        return value
+    if isinstance(value, dict):
+        revisions = {
+            int(concept_id): list(items or [])
+            for concept_id, items in value.items()
+        }
+        return RevisionRetrievalResult(
+            revisions=revisions,
+            status=(
+                RetrievalStatus.SUCCESS
+                if any(revisions.values())
+                else RetrievalStatus.EMPTY
+            ),
+        )
+    return RevisionRetrievalResult(
+        status=RetrievalStatus.DEGRADED,
+        warning="历史轨迹检索返回格式异常，无法确认用户过去是否有变化。",
+    )
+
+
 class KnowledgeStatus(str, Enum):
     """一次知识检索的结果状态，进 trace / 日志 / 上下文 warning。
 
@@ -194,14 +316,20 @@ class Retriever(Protocol):
 
     async def get_understandings(
         self, user_id: int, space_id: int, concept_ids: list[int]
-    ) -> list[Understanding]:
-        """用户在这些 Concept 上的当前认知快照。"""
+    ) -> UnderstandingRetrievalResult:
+        """用户在这些 Concept 上的当前认知快照。
+
+        必须区分「确实没有快照」（EMPTY）与「查询失败/响应不完整」（DEGRADED）。
+        """
         ...
 
     async def get_memories(
         self, user_id: int, space_id: int, concept_ids: list[int], query: str
-    ) -> list[MemoryItem]:
-        """与当前话题相关的长期 Memory。只取 ACTIVE —— CANDIDATE 还没被用户确认。"""
+    ) -> MemoryRetrievalResult:
+        """与当前话题相关的长期 Memory。只取 ACTIVE —— CANDIDATE 还没被用户确认。
+
+        UNAVAILABLE / DEGRADED_* 必须保留为 DEGRADED，不能折叠成「没有记忆」。
+        """
         ...
 
     async def get_knowledge(self, query: KnowledgeQuery) -> KnowledgeResult:
@@ -245,11 +373,12 @@ class Retriever(Protocol):
 
     async def get_revisions(
         self, user_id: int, concept_ids: list[int]
-    ) -> dict[int, list[UnderstandingRevision]]:
+    ) -> RevisionRetrievalResult:
         """理解快照的不可变版本历史，按 conceptId 分组。
 
         只有显式复盘才调用；它用于找到「误区何时出现、何时被纠正」以及
         每次变化的 triggerEvidenceId，而不是把所有版本无差别塞进上下文。
+        查询失败必须是 DEGRADED，不能伪装成「没有历史版本」。
         """
         ...
 

@@ -23,21 +23,18 @@ from app.retriever.base import (
     EvidenceRetrievalResult,
     KnowledgeQuery,
     KnowledgeResult,
+    MemoryRetrievalResult,
     RelatedConceptResult,
     RelatedConceptStatus,
     RetrievalError,
     Retriever,
+    RevisionRetrievalResult,
+    UnderstandingRetrievalResult,
 )
 from app.retriever.fixture import FixtureRetriever
 from app.retriever.http_backend import HttpBackendRetriever
 from app.retriever.knowledge import KnowledgeSearchService
-from app.schemas import (
-    Concept,
-    EvidenceItem,
-    MemoryItem,
-    Understanding,
-    UnderstandingRevision,
-)
+from app.schemas import Concept, EvidenceItem
 
 log = logging.getLogger(__name__)
 
@@ -129,14 +126,14 @@ class FallbackRetriever:
 
     async def get_understandings(
         self, user_id: int, space_id: int, concept_ids: list[int]
-    ) -> list[Understanding]:
+    ) -> UnderstandingRetrievalResult:
         return await self._call(
             "get_understandings", user_id=user_id, space_id=space_id, concept_ids=concept_ids
         )
 
     async def get_memories(
         self, user_id: int, space_id: int, concept_ids: list[int], query: str
-    ) -> list[MemoryItem]:
+    ) -> MemoryRetrievalResult:
         return await self._call(
             "get_memories", user_id=user_id, space_id=space_id, concept_ids=concept_ids, query=query
         )
@@ -202,7 +199,7 @@ class FallbackRetriever:
 
     async def get_revisions(
         self, user_id: int, concept_ids: list[int]
-    ) -> dict[int, list[UnderstandingRevision]]:
+    ) -> RevisionRetrievalResult:
         return await self._call("get_revisions", user_id=user_id, concept_ids=concept_ids)
 
     async def get_evidence_details(
