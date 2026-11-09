@@ -1,0 +1,133 @@
+{
+  "startedAt": "2026-11-09T13:51:41+08:00",
+  "reachability": {
+    "qdrant": "OPEN",
+    "spring-boot": "OPEN",
+    "mysql": "OPEN",
+    "agent": "OPEN"
+  },
+  "effectiveConfig": {
+    "llm_provider": "openai",
+    "llm_model": "deepseek-flash",
+    "llm_base_url_host": "api.deepseek.com",
+    "llm_max_tokens": 4096,
+    "llm_timeout_seconds": 60.0,
+    "embedding_provider": "openai",
+    "embedding_model": "text-embedding-v4",
+    "embedding_base_url_host": "dashscope.aliyuncs.com",
+    "embedding_dimension": 1024,
+    "embedding_batch_size": 10,
+    "qdrant_url": "http://127.0.0.1:6333",
+    "qdrant_collection_prefix": "ails_documents",
+    "retriever_mode": "auto",
+    "llm_api_key_set": true,
+    "embedding_api_key_set": true
+  },
+  "llm": {
+    "status": "FAIL",
+    "provider": "openai",
+    "model": "deepseek-flash",
+    "baseUrlHost": "api.deepseek.com",
+    "requestId": "7372dec849984827956c3b86a7adf75c",
+    "httpStatus": 200,
+    "finishReason": "length",
+    "usage": {
+      "prompt_tokens": 34,
+      "completion_tokens": 16,
+      "total_tokens": 50,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 16
+      },
+      "prompt_cache_hit_tokens": 0,
+      "prompt_cache_miss_tokens": 34
+    },
+    "attempts": 1,
+    "emptyReason": "reasoning_only",
+    "errorCategory": "empty_stream",
+    "latencyMs": 936,
+    "contentChars": 0,
+    "nonEmpty": false,
+    "error": {
+      "type": "LLMError",
+      "message": "模型返回空流（reason=reasoning_only, status=200, attempts=1）"
+    }
+  },
+  "embedding": {
+    "status": "PASS",
+    "provider": "openai-compatible",
+    "model": "text-embedding-v4",
+    "dimension": 1024,
+    "expectedDimension": 1024,
+    "count": 1,
+    "nonEmpty": true,
+    "vectorNorm": 1.0,
+    "latencyMs": 403,
+    "fingerprint": "v1:e7464a6c1e9cb1088e8eba5c3a39f0193ea450b14ba8a9a35824794276d0a90d"
+  },
+  "qdrant": {
+    "status": "PASS",
+    "urlHost": "127.0.0.1:6333",
+    "collection": "phase5-test-20261109135143-b2e57395",
+    "dimension": 1024,
+    "distance": "Cosine",
+    "vectorSource": "real embedding result (text-embedding-v4)",
+    "writeCount": 1,
+    "queryCount": 1,
+    "createLatencyMs": 110,
+    "createHttpStatus": 200,
+    "upsertLatencyMs": 28,
+    "upsertHttpStatus": 200,
+    "searchLatencyMs": 24,
+    "searchHttpStatus": 200,
+    "hitCount": 1,
+    "recalled": true,
+    "score": 1.0,
+    "recalledMarker": "phase5-connectivity-58cf18b2",
+    "cleanup": {
+      "deleteLatencyMs": 11,
+      "deleteHttpStatus": 200,
+      "deleted": true,
+      "getAfterDeleteHttpStatus": 404,
+      "verifiedGone": true,
+      "stillListed": false
+    }
+  },
+  "tavily": {
+    "status": "BLOCKED",
+    "reason": "Agent 代码中不存在 Tavily 客户端、工具抽象、依赖或配置项；无可调用的集成点。",
+    "evidence": [
+      "agent/requirements.txt 无 tavily 依赖",
+      "agent/app 下无 tavily/tool/function-calling 客户端",
+      "agent/.env 无 AILS_TAVILY_* 配置"
+    ]
+  },
+  "mysql": {
+    "status": "PASS",
+    "host": "127.0.0.1:3306",
+    "database": "ails_phase5_test_5a2041e0dedb",
+    "isolation": "dedicated database, dropped after check; production schema untouched",
+    "writeCount": 1,
+    "readCount": 1,
+    "connectLatencyMs": 16,
+    "createDatabaseLatencyMs": 29,
+    "createTablesLatencyMs": 151,
+    "writeLatencyMs": 25,
+    "writeNote": "1 transaction / 3 rows (user, space, message)",
+    "readLatencyMs": 0,
+    "readBack": [
+      "phase5_probe_user",
+      "phase5_probe_space",
+      "user",
+      "phase5 probe message"
+    ],
+    "cleanupLatencyMs": 45,
+    "cleanup": {
+      "dropped": true,
+      "verifiedGone": true
+    }
+  },
+  "finishedAt": "2026-11-09T13:51:43+08:00"
+}

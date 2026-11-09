@@ -309,7 +309,7 @@ class BuiltContext:
     memory_detail: str | None = None
     revision_status: str = "NOT_QUERIED"
     revision_warning: str | None = None
-    # D4-3 最小 Manifest：只含 source_id / source_ids / 状态 / 原因 / token 估算与预算汇总。
+    # D4-3 最小 Manifest：只含 source_id / 状态 / 原因 / token 估算与预算汇总。
     # 刻意不包含正文、完整 prompt、query 或异常原文；不是可查询的持久化结构。
     context_manifest: dict[str, object] = field(default_factory=dict)
 
@@ -1139,6 +1139,25 @@ class ContextBuilder:
     # ---------- 6. Manifest ----------
 
     @staticmethod
+    def _split_section_tokens(
+        section: ContextSection, source_ids: list[str]
+    ) -> list[int]:
+        """把一个 section 的 token 估算拆给它的多个 source。
+
+        没有 per-source 的精确 token；这里按 source 数均分，余数给靠前的 source。
+        选择拆分而不是每个 entry 共享完整 token，是因为 budget.per_type 会对
+        sources 求和：共享完整值会把同一 section 的 token 重复计入预算。
+        """
+        total = int(section.estimated_tokens)
+        if len(source_ids) <= 1:
+            return [total]
+        base, remainder = divmod(total, len(source_ids))
+        return [
+            base + (1 if index < remainder else 0)
+            for index in range(len(source_ids))
+        ]
+
+    @staticmethod
     def _record_exclusion(
         scope: _BuildScope,
         section: ContextSection,
@@ -1146,17 +1165,23 @@ class ContextBuilder:
         reason: str,
     ) -> None:
         source_ids = list(section.source_ids) or [section.name]
-        scope.exclusions.append(
-            {
-                "type": section.source_type or _kind(section),
-                "source_id": source_ids[0],
-                "source_ids": source_ids,
-                "retrieval_status": section.retrieval_status or "UNKNOWN",
-                "injection_status": injection_status,
-                "reason": reason,
-                "estimated_tokens": section.estimated_tokens,
-            }
-        )
+        tokens = ContextBuilder._split_section_tokens(section, source_ids)
+        base_type = section.source_type or _kind(section)
+        for index, (source_id, estimated_tokens) in enumerate(
+            zip(source_ids, tokens)
+        ):
+            scope.exclusions.append(
+                {
+                    # 同一 section 的第一个 source 保留顶层 type；后续 source 用
+                    # `<type>_source` 子类型，避免把同一内容块重复计为独立内容单元。
+                    "type": base_type if index == 0 else f"{base_type}_source",
+                    "source_id": source_id,
+                    "retrieval_status": section.retrieval_status or "UNKNOWN",
+                    "injection_status": injection_status,
+                    "reason": reason,
+                    "estimated_tokens": estimated_tokens,
+                }
+            )
 
     @staticmethod
     def _finalize_injection_status(sections: list[ContextSection]) -> None:
@@ -1184,7 +1209,11 @@ class ContextBuilder:
         严禁放入正文、完整 prompt、query 或异常原文。来源被排除时也留下记录，
         否则「没进上下文」的原因只能靠猜。
         """
-        entries = [self._manifest_entry(section) for section in sections]
+        entries = [
+            entry
+            for section in sections
+            for entry in self._manifest_entries(section)
+        ]
         entries.extend(scope.exclusions)
         entries.sort(key=lambda item: (str(item["type"]), str(item["source_id"])))
         per_type: dict[str, dict[str, object]] = {}
@@ -1248,21 +1277,29 @@ class ContextBuilder:
         }
 
     @staticmethod
-    def _manifest_entry(section: ContextSection) -> dict[str, object]:
+    def _manifest_entries(section: ContextSection) -> list[dict[str, object]]:
         source_ids = list(section.source_ids) or [section.name]
-        return {
-            "type": section.source_type or _kind(section),
-            "source_id": source_ids[0],
-            "source_ids": source_ids,
-            "retrieval_status": section.retrieval_status or "UNKNOWN",
-            "injection_status": section.injection_status or INJECTION_SELECTED,
-            "reason": (
-                section.exclusion_reason
-                or section.compression_reason
-                or REASON_WITHIN_BUDGET
-            ),
-            "estimated_tokens": section.estimated_tokens,
-        }
+        tokens = ContextBuilder._split_section_tokens(section, source_ids)
+        base_type = section.source_type or _kind(section)
+        return [
+            {
+                # 同一 section 的第一个 source 保留顶层 type；后续 source 用
+                # `<type>_source` 子类型，避免把同一内容块重复计为独立内容单元。
+                "type": base_type if index == 0 else f"{base_type}_source",
+                "source_id": source_id,
+                "retrieval_status": section.retrieval_status or "UNKNOWN",
+                "injection_status": section.injection_status or INJECTION_SELECTED,
+                "reason": (
+                    section.exclusion_reason
+                    or section.compression_reason
+                    or REASON_WITHIN_BUDGET
+                ),
+                "estimated_tokens": estimated_tokens,
+            }
+            for index, (source_id, estimated_tokens) in enumerate(
+                zip(source_ids, tokens)
+            )
+        ]
 
     # ---------- 4/5. 渲染 ----------
 

@@ -70,7 +70,6 @@ async def test_done_carries_minimal_context_manifest(runtime):
         assert set(source) == {
             "type",
             "source_id",
-            "source_ids",
             "retrieval_status",
             "injection_status",
             "reason",

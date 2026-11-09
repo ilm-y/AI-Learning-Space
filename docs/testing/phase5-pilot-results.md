@@ -96,6 +96,8 @@
 | B | `LEARNING_REVIEW` | `d4-2-v1` | 1600 / 3000 | `history:1` 35；`history:2` 24；`knowledge_status` 144；`memory:1` 100；`session:1` 50；`trajectory:revision:1` 177；`understanding:1` 333；`user_input` 54。**无 `evidence` source。** |
 | C | `KNOWLEDGE_QUERY` | `d4-2-v1` | 1567 / 3000 | `evidence:1` 53；`history:1` 35；`history:2` 24；`knowledge:chunk:1` 302；`memory:1` 100；`session:1` 50；`understanding:1` 333；`user_input` 48 |
 
+上表是**修复前**的 Pilot 原始 Manifest；B 的 `trajectory` 当时只记录 `revision:1`。修复后的展开规则见 5.3 发现 1，尚未用真实链路重跑验证。
+
 ### 5.2 Policy 合规
 
 | 策略 | Policy 期望 | 实际 | 判定 |
@@ -114,7 +116,7 @@
 2. 这句话只存在于 seeded Evidence 的 `observation`，不在历史消息或 Revision 的 `user_explanation` 中。
 3. Agent 日志：`GET http://127.0.0.1:8081/api/evidence/1 "HTTP/1.1 200"`，发生在 B 的 run 3 期间（18:34:37）。
 4. B 的 Manifest 只有 `type=trajectory, source_id=revision:1, estimated_tokens=177`；`per_type` 中也没有 `evidence`。
-5. 代码：`agent/app/context/builder.py:651-653` 把 trajectory 区块的 `source_ids` 设为 `revision:{id}` + `evidence:{id}`；而 `agent/app/context/builder.py:1254`（以及 `:1151-1152` 的 exclusion 路径）只取 `section.source_ids[0]` 写入 Manifest。
+5. 代码（修复前）：`agent/app/context/builder.py:652-653` 把 trajectory 区块的 `source_ids` 设为 `revision:{id}` + `evidence:{id}`；而 `_manifest_entries`（现 `builder.py:1280`）和 exclusion 路径 `_record_exclusion`（现 `builder.py:1161`）只取 `section.source_ids[0]` 写入 Manifest。
 
 结论：Evidence 确实被注入（在 trajectory 区块内），但 Manifest 只记录 `revision:1`，导致：
 
@@ -122,7 +124,14 @@
 - Evidence 的 token 被计入 `trajectory`（177），`per_type` 没有 evidence 条目；
 - 如果全量 Step 3 用 Manifest 统计“Evidence 是否注入/占多少预算”，B 会被误判。
 
-建议（未在本次实施）：Manifest 对多 source section 输出 `source_ids` 数组，或为每个 source 生成独立 entry；`per_type` 对折叠进 trajectory 的 evidence 也保留 allocation/used。该修改属于生产代码变更，需单独立项。
+修复（本工作区已实施，未提交）：`agent/app/context/builder.py` 不再只取 `source_ids[0]`，而是为同一 section 的每个 source_id 生成独立 `sources` entry，共享该 section 的 `injection_status` / `reason`：
+
+- 第一个 source 保留 section 原 `type`，后续 source 使用 `${type}_source` 子类型（如 `trajectory_source`）。这是为了不改变 D4-5 `CONTENT_TYPES` 的“内容单元”口径：同一 section 的第二个 source 不是独立内容块，若用同一个 `trajectory` type，D4-5 precision 会把 evidence source_id 当成额外注入内容而误判。
+- `estimated_tokens` 按 source 数均分，余数给靠前的 source。不采用“每条共享完整 token”，因为 `budget.per_type` 会对 `sources` 求和，共享完整值会把同一 section 的 token 重复计入预算；拆分后 section 总 token 不变。
+- 未新增字段，`schema_version` 仍为 1；exclusion 路径（`_record_exclusion`）同样按 source 展开。
+- 修复后的 B 预期 Manifest：`trajectory:revision:1` + `trajectory_source:evidence:1`，二者均 `SELECTED` / `within_budget`，token 合计仍为 177。
+
+剩余口径：`per_type` 仍不会出现 `evidence` 键，只是多出 `trajectory_source`。如果全量要求 `per_type` 按真实来源类型（如 `evidence`）聚合，需要另行调整类型/预算口径和 D4-5 gold，不在本次边界内。
 
 #### 发现 2：A 基线包含 `knowledge_status`
 
@@ -134,7 +143,15 @@ A 的 Manifest 只有 `knowledge_status` + `user_input`，没有 Session/Underst
 - 不是字面意义上的“只有 system prompt + 问题”；
 - 该提示可能让模型倾向于说明“没有资料”，从而影响 A 与 B/C 的可比性。
 
-建议：全量 Step 3 要么显式接受这个基线定义，要么增加一个真正的 `baseline_no_context_no_status` 开关/策略；不要把它当作“纯 system+question”基线来解读。
+决策：采用**方案 B（近似基线）**，保持 Pilot 脚本与生产链路不变，并在全量报告中显式标注该基线定义。
+
+理由：
+
+- `knowledge_status` 不是 Pilot 脚本构造出来的，而是 `ContextBuilder` 在 `state.knowledge_status=NO_VALID_DOCUMENTS` 时无条件注入（`agent/app/context/builder.py:714-728`，文案由 `_render_knowledge_status` 在 `builder.py:2339-2346` 生成）。Pilot A 只是让 A 在 concept/document 创建前运行，没有开关能关闭该 section。
+- 方案 A 若只改 `scripts/phase5/pilot/`，只能绕过 Spring→Agent 真实链路、自行拼接 system + 问题并直接持有 LLM 密钥，这会让 A 失去“真实链路基线”的含义，也违反 Pilot 不接触密钥的约束；若在 `agent/app` 增加开关，则是生产代码变更，超出本批允许范围。
+- 该提示并非 A 独有：B 在文档上传前运行，Manifest 中同样有 144-token `knowledge_status:NO_VALID_DOCUMENTS`；C 有可用知识 chunk，没有该提示。因此 A/B 在“无文档状态提示”上是对齐的，A/B 的差异仍主要来自个人上下文；只有“纯 system+question”这个标签不成立。
+
+全量解读要求：A 记作“无个人上下文 + 无 Knowledge chunk + 有 knowledge 状态提示（144 tokens）”的近似基线；不得把 A 的回答差异全部归因于个人上下文缺失。
 
 ---
 
@@ -172,7 +189,9 @@ A 的 Manifest 只有 `knowledge_status` + `user_input`，没有 Session/Underst
 | 重试 | 0 | 1 | 所有调用 attempt=1。 |
 | 运行时长 | 约 57 秒（18:34:15–18:35:12） | — | 不含服务启动/清理；单次 13–20 秒。 |
 
-**成本口径风险**：本次把“写事务 ≤2”理解为 Pilot 脚本直接写库的事务数（1 个）。Spring 正常业务链路在同一隔离库内产生了多次写入（用户、Space、Conversation、Message、AgentRun、Document、Chunk 等）。如果该上限的意图是“整个 Pilot 的 MySQL 事务总数 ≤2”，则本次**不满足**，需要在全量 Step 3 前明确口径。本文不把应用正常写入伪装成 1 个事务。
+**成本口径**：写事务 ≤2 指 Pilot 脚本直接写库事务；Spring 正常业务链路的写入不计入该上限。
+
+本次 Pilot 脚本直接写库事务为 1 个（`seed_personal_context`）。Spring 正常业务链路在同一隔离库内产生了多次写入（用户、Space、Conversation、Message、AgentRun、Document、Chunk 等），按上述口径不计入；本文也不把这些应用正常写入伪装成 Pilot 的直接事务。
 
 ---
 
@@ -218,12 +237,12 @@ A/B 的 `citations=[]`，与“无 Knowledge 文档”一致。B 引用的 Evide
 
 ### 10.1 进入全量前的决策项
 
-1. **B Manifest Evidence**：先决定是否修复 `source_ids[0]` 的 Manifest 表达，或在全量分析中接受“Evidence 折进 trajectory”的口径。若不修复，所有 B 类样本的 evidence 统计都会偏低。
-2. **A 基线定义**：接受 `knowledge_status` 提示，还是增加真正的无上下文/无状态基线。两者不能混称。
+1. **B Manifest Evidence**：已修复（本工作区，未提交）。Manifest 为每个 source_id 生成独立 entry；全量审计可按 `trajectory:revision:*` 与 `trajectory_source:evidence:*` 统计 Evidence 是否注入。注意 `per_type` 仍不会出现 `evidence` 键。
+2. **A 基线定义**：已决定采用方案 B（近似基线）。A 保留 144-token `knowledge_status` 提示；全量报告不得把它解读为“纯 system+question”。
 3. **usage 可观测性**：在生产 AgentRun 中增加 model/token usage 字段，或明确全量 Step 3 继续使用测试专用诊断路由。后者不适合作为长期方案。
 4. **同题对照**：全量应使用同一 case 的同一问题，只切换 A/B/C 上下文策略；否则策略效果与问题难度混杂。
 5. **顺序与隔离**：若同一 Space 内先跑 C 再跑 B，B 会检索到文档。建议每个 case 使用独立 Space/Conversation，或严格按 A→B（上传前）→C（上传后）执行。
-6. **写事务口径**：明确“写事务 ≤2”是否只统计 Pilot 直接 SQL，还是统计整个应用链路。
+6. **写事务口径**：已明确“写事务 ≤2”只统计 Pilot 脚本直接写库事务；Spring 正常业务链路写入不计入。
 
 ### 10.2 建议预算
 
@@ -257,8 +276,8 @@ A/B 的 `citations=[]`，与“无 Knowledge 文档”一致。B 引用的 Evide
 1. **样本量极小**：3 次调用，不能代表 90 次全量；语义质量、Citation 稳定性、失败率都无统计意义。
 2. **A/B/C 问题不同**：策略效果与问题差异混杂；全量需同题对照。
 3. **顺序 A→B→C**：不是理想的 A→C→B；B 在文档上传前运行是刻意隔离，但全量需明确同一 case 的执行顺序。
-4. **A 基线不纯**：`knowledge_status` 注入，A 不是严格 system+question 基线。
-5. **B Manifest 缺 evidence**：已确认，需修复或明确口径。
+4. **A 基线不纯**：`knowledge_status` 注入，A 不是严格 system+question 基线；已按方案 B 接受并标注。
+5. **B Manifest 缺 evidence**：已在工作区修复为独立 `trajectory_source` entry，待评审/提交后在真实链路复验。
 6. **记忆检索默认 collection 告警**：`ails_memories_text-embedding-v4_1024` 不存在，仅 `/exists` 检查；未写入，但说明记忆检索路径没有随 Pilot 前缀隔离。
 7. **ANALYSIS 未执行**：3 条 PENDING、MQ 3 条未消费；Understanding/Revision 更新链路未验证。
 8. **AgentRun 缺 model/token 字段**：usage 只能靠测试专用诊断路由；生产可观测性不足。
@@ -291,7 +310,7 @@ A/B 的 `citations=[]`，与“无 Knowledge 文档”一致。B 引用的 Evide
 
 ## 13. Git 状态
 
-`git status --short`：
+Pilot 执行时（提交 `37d5749` 前）`git status --short`：
 
 ```text
 ?? docs/testing/phase5-connectivity-check.md
@@ -299,20 +318,19 @@ A/B 的 `citations=[]`，与“无 Knowledge 文档”一致。B 引用的 Evide
 ?? scripts/phase5/
 ```
 
-- 无 tracked 文件修改（`git diff --name-only` 为空）。
-- 本次新增：`docs/testing/phase5-pilot-results.md`、`scripts/phase5/pilot/`（common.py、run_agent.py、start_services.py、pilot.py、cleanup.py、fixture_tcp.md）。
-- 之前 Step 1/2 的两个 docs 与 `scripts/phase5/` 仍是 untracked。
-- 未 commit、未 push。
+- Pilot 结果提交后新增 `37d5749`（Pilot 记录）与 `531dbd0`（`source_ids` 数组版 Manifest 修复）。
+- 本批（B Manifest 独立 entry + A 基线决策 + 文档口径）尚未提交，当前工作区另见交付报告；`531dbd0` 的 `source_ids` 字段实现会被本批的独立 entry 方案替代。
+- 不 commit、不 push。
 - Spring jar 在 `backend/backend/target/` 重建，target 为构建产物，未纳入 tracked 变更。
 
 ---
 
 ## 14. 人工决策
 
-1. 是否接受 A 的 `knowledge_status` 注入作为基线定义？若不接受，全量前增加真正的无上下文基线。
-2. 是否在全量 Step 3 前修复 B 的 Manifest evidence 表达（`source_ids` 数组或独立 entry）？建议修复，否则 evidence 统计不可信。
+1. 是否批准采用方案 B：接受 A 的 `knowledge_status` 注入并标注为近似基线？（方案 A 需要生产开关或绕过真实链路，已判定超出本批边界。）
+2. 是否批准 B Manifest 修复（独立 entry + `${type}_source` 子类型）进入全量 Step 3？建议批准，否则 evidence 统计不可信。
 3. 是否把 model/token usage 持久化到 AgentRun，或继续使用测试专用诊断路由？建议至少为全量 Step 3 保留诊断路由并明确其非生产属性。
 4. 全量 Step 3 是否采用“同一 case 同一问题、独立 Space/Conversation”的严格对照设计？
-5. “写事务 ≤2”的口径是否只统计 Pilot 直接 SQL？若统计整个应用链路，本次已超限，需要重新定义。
+5. “写事务 ≤2”是否按已明确口径只统计 Pilot 脚本直接写库事务？（本次直接事务 1 个；应用链路写入不计入。）
 6. 生产 8000/8080 的旧 token/旧进程是否在 Phase 5 后续单独重启验证？本次未重启。
 7. Tavily 继续排除，不纳入 Phase 5。

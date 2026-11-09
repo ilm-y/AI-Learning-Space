@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "purpose": "retry once with effective max_tokens from .env (probe #2, no further retry)",
+  "model": "deepseek-flash",
+  "maxTokens": 4096,
+  "requestId": "46312708899940b092afc4312d6a2af9",
+  "httpStatus": 200,
+  "finishReason": "stop",
+  "truncated": false,
+  "usage": {
+    "prompt_tokens": 34,
+    "completion_tokens": 25,
+    "total_tokens": 59,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 23
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 34
+  },
+  "attempts": 1,
+  "emptyReason": null,
+  "errorCategory": "none",
+  "latencyMs": 1087,
+  "contentChars": 1,
+  "content": "好",
+  "error": null
+}
