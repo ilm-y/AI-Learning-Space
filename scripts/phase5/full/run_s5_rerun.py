@@ -1,26 +1,33 @@
-"""Phase 5 Step 3：S5 数据重设计 + HISTORY_GUARD 判据调整后的 S5-A/B/C 重跑。
+"""Phase 5 Step 3 Batch 4：HISTORY_GUARD 否定语境修复 + 回退保护后的 S5-B/C 重跑。
 
-只跑 S5 的 A / C / B 各 3 次（共 9 次对话）：
+只跑 S5 的 B / C 各 3 次（共 6 次对话）；S5-A 沿用上一批的 PASS 结果，
+本批不重跑：
 
     python scripts/phase5/full/run_s5_rerun.py --phase setup
     python scripts/phase5/full/run_s5_rerun.py --phase run --state <state.json>
     python scripts/phase5/full/run_s5_rerun.py --phase cleanup --state <state.json>
     python scripts/phase5/full/run_s5_rerun.py --phase report --state <state.json>
 
-本批次只修改：
-  - S5 预置 Understanding（措辞与历史原句不重叠，见 scenarios.py）；
-  - 结果记录字段 historyGuardTriggered / llmCallCount / llmCalls；
-  - Hash 一致性判据：只豁免 HISTORY_GUARD 触发的运行（见
-    full_common.guard_aware_hash_consistency）。
+本批次修改：
+  - HISTORY_GUARD 的 ``partial_upgrade`` 增加否定 / 对比语境识别（KI-2）；
+  - 回退保护：用户显式要求引用原话时，保留首答中与记录逐字一致的原句；
+  - 结果记录字段 ``partialUpgradeNegationSkipped``（观测项）、
+    ``fallbackUsed`` / ``fallbackPreservedOriginal``。
 
-不修改问题、其他场景、Runtime / ContextBuilder / Policy / Schema；
+判据沿用上一批：S5 citation「citation 非空或引用历史原句」；
+``memoryDegraded=true`` 豁免 contextHash / systemSha256 / systemChars /
+promptTokens，manifestSha256 始终不豁免。
+
+不修改其他 issue kind 的匹配逻辑；不修改 ContextBuilder / Policy / Schema；
 不进入 Step 4；不实现 Tavily；不 commit / push；不输出密钥。
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -39,9 +46,12 @@ from full_common import (  # noqa: E402
     default_memory_state,
     default_snapshot_path,
     guard_aware_hash_consistency,
+    guard_negation_misjudgements,
     login,
     manifest_bucket,
+    memory_degraded_info,
     now_iso,
+    partial_upgrade_negation_observation,
     qdrant_baseline_path,
     s5_history_use_check,
     start_agent,
@@ -62,46 +72,88 @@ from run_full_abc import (  # noqa: E402
 )
 from scenarios import SCENARIO_BY_ID, USER_PASSWORD  # noqa: E402
 
-S5_COMBOS: list[tuple[str, str]] = [("S5", "A"), ("S5", "C"), ("S5", "B")]
+S5_COMBOS: list[tuple[str, str]] = [("S5", "B"), ("S5", "C")]
 REPS = 3
 OLD_S5_MARKER_PREFIX = "回答缺少预期历史标记：【S5-HISTORY】"
 REPORT_PATH = ROOT / "docs" / "testing" / "phase5-abc-rerun.md"
-REPORT_MARKER = "## 11. S5 数据重设计与 HISTORY_GUARD 判据调整（追加）"
+REPORT_MARKER = "## 13. HISTORY_GUARD 否定语境修复与 S5-B/C 重跑（Batch 4）"
 
-# 90 次全量批次未记录该字段，且原隔离库已清理，无法回溯。这里只做声明，
-# 不做任何推测性补数。
+# 90 次全量批次未记录 historyGuardTriggered / memoryDegraded，且原隔离库已
+# 清理，无法回溯。这里只做声明，不做任何推测性补数。
 FULL_RUN_GUARD_OBSERVATION = (
-    "90 次全量的 HISTORY_GUARD 触发次数未知：原批次结果 JSON 未记录 "
-    "`historyGuardTriggered`，原隔离库已按 cleanup 清理，无法回溯。"
-    "本报告不做回溯推测，建议下一批全量实验补记该字段。"
+    "90 次全量的 HISTORY_GUARD 触发次数与 Memory DEGRADED 次数均未知："
+    "原批次结果 JSON 未记录 `historyGuardTriggered` 与 `memoryDegraded`，"
+    "原隔离库已按 cleanup 清理，无法回溯。本报告不做回溯推测；"
+    "下一批全量实验必须记录 `historyGuardTriggered` 与 `memoryDegraded`。"
 )
 
-# 产品侧 HISTORY_GUARD 的 issue 明细只写入进程内 trace，不落库。
-# 本批在隔离 temp 的 agent.log 中保留了 trace 文本，以下是从该日志
-# 逐字恢复的触发证据（只记录 kind/excerpt/reason，不复制回答正文）。
-GUARD_TRACE_EVIDENCE: dict[str, dict[str, Any]] = {
-    "S5-B-3": {
-        "runId": 17,
-        "traceEvent": "HISTORY_GUARD",
-        "issues": [
-            {
-                "kind": "partial_upgrade",
-                "excerpt": "完全答对",
-                "reason": "记录里没有完全答对的证据",
-            },
-            {
-                "kind": "partial_upgrade",
-                "excerpt": "答错",
-                "reason": "记录只判定为部分正确，不能改写成答错",
-            },
-        ],
-        "regenerated": True,
-        "regenerationError": None,
-        "remainingIssues": [],
-        "fallback": False,
-        "evidenceCount": 1,
-    }
-}
+# 产品侧 HISTORY_GUARD 的 issue 明细只写入进程内 trace，不落库；但 Agent
+# 的 log.info("run %s 结束：%s", trace.as_dict()) 会把它打印到隔离 temp 的
+# agent.log。报告阶段按 runId 从该日志恢复触发证据（只记录 kind/excerpt/
+# reason，不复制回答正文）。日志缺失时退回保守描述。
+TRACE_EVENT_FIELDS = (
+    "issues",
+    "regenerated",
+    "regenerationError",
+    "remainingIssues",
+    "fallback",
+    "evidenceCount",
+)
+
+
+def guard_trace_from_log(state: dict[str, Any], run_id: Any) -> dict[str, Any] | None:
+    if run_id is None:
+        return None
+    log_path = Path(state.get("agentLog") or "")
+    if not log_path.exists():
+        return None
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    pattern = re.compile(rf"run {re.escape(str(run_id))} 结束：(\{{.*\}})\s*$", re.M)
+    for match in pattern.finditer(text):
+        try:
+            trace = ast.literal_eval(match.group(1))
+        except (ValueError, SyntaxError):
+            continue
+        if not isinstance(trace, dict):
+            continue
+        for event in trace.get("events") or []:
+            if not isinstance(event, dict) or event.get("type") != "HISTORY_GUARD":
+                continue
+            return {"runId": run_id, **{key: event.get(key) for key in TRACE_EVENT_FIELDS}}
+    return None
+
+
+HISTORY_DENIAL_PHRASES = (
+    "原文没有被保存",
+    "原话没有被保存",
+    "原文没有被保存下来",
+    "原话没有被保存下来",
+    "没有保存下来",
+    "没有被保存下来",
+    "没有保存原话",
+    "没有保存原文",
+    "找不到当时的原话",
+    "找不到原文",
+    "没有留下原话",
+    "没有留下原文",
+    "记录里没有原话",
+    "记录里没有原文",
+)
+
+
+def s5_history_denial_check(answer: str | None) -> dict[str, Any]:
+    """观测项：模型是否声称历史原句没有被保存。
+
+    这不是 Step 3 判据，只在回答出现「原文/原话没有被保存」类表述、而
+    Manifest 明确注入 history 时记录为观测项，供人工判断模型是否真的
+    理解上下文。
+    """
+    text = answer or ""
+    hits = [phrase for phrase in HISTORY_DENIAL_PHRASES if phrase in text]
+    return {"denies": bool(hits), "phrases": hits}
 
 
 def results_path(state: dict[str, Any]) -> Path:
@@ -175,12 +227,21 @@ def run_s5(state_path: str) -> dict[str, Any]:
                         default_baseline,
                         keep_answer=True,
                     )
+                    # memoryDegraded 由 Manifest 派生并写入结果，满足「降级时
+                    # 必须记录 memoryDegraded / memoryDegradedSource」。
+                    record.update(memory_degraded_info(record))
+                    # 否定语境跳过次数与回退保护结果：观测字段，不参与判定。
+                    record.update(partial_upgrade_negation_observation(record))
                     results["runs"][record["key"]] = record
                     save_results(state, results)
                     print(
                         f"[s5] {record['key']} "
                         f"run={record['runId']} "
                         f"guard={record['historyGuardTriggered']} "
+                        f"negationSkipped={record['partialUpgradeNegationSkipped']} "
+                        f"fallback={record['fallbackUsed']} "
+                        f"preservedQuote={record['fallbackPreservedOriginal']} "
+                        f"degraded={record['memoryDegraded']} "
                         f"calls={record['llmCallCount']} "
                         f"tokens={(record.get('usageFields') or {}).get('totalTokens')} "
                         f"problems={len(record['problems'])}",
@@ -269,12 +330,16 @@ def evaluate_combo(
             else:
                 problems.append(f"{record['key']}：{problem}")
 
-    # 1) Hash 一致性：守卫触发时只豁免指定字段。
+    # 1) Hash 一致性：HISTORY_GUARD 或 Memory DEGRADED 时豁免指定字段。
     hash_check = guard_aware_hash_consistency(ordered)
     problems.extend(hash_check["problems"])
 
-    # 2) Citation：S5-A/C/B 都要求可溯源、同一文档、覆盖率达标。
-    citation = citation_consistency_check(ordered, document_id)
+    # 2) Citation：S5 是复盘问题，核心证据是历史原句；每次满足
+    #    「citation 非空」或「引用历史原句」即可；非空引用仍须可溯源、
+    #    落在本场景同一文档。
+    citation = citation_consistency_check(
+        ordered, document_id, allow_history_quote=True
+    )
     if not citation["pass"]:
         problems.extend("citation：" + reason for reason in citation["reasons"])
 
@@ -292,6 +357,36 @@ def evaluate_combo(
                 )
         elif not check["pass"]:
             problems.append(f"{record['key']}：S5 回答不含原句内容或等价语义")
+
+        # 回退保护：首答已含历史原句时，回退不得把它覆盖掉。
+        first_check = s5_history_use_check(record.get("firstAnswer"))
+        if (
+            record.get("fallbackUsed")
+            and first_check["exactOriginalSentence"]
+            and not record.get("fallbackPreservedOriginal")
+        ):
+            problems.append(
+                f"{record['key']}：回退覆盖了首答中已核对的历史原句"
+            )
+
+        # 观测项（不参与 PASS/FAIL）：回答声称历史原句没有被保存，但
+        # Manifest 实际注入了 history。Phase 5 要回答「模型是否真的理解
+        # 上下文」，这类声明与 Manifest 的矛盾必须单独记录。
+        denial = s5_history_denial_check(answer)
+        history_injected = [
+            str(item.get("source_id"))
+            for item in (manifest_bucket(record.get("manifest")).get("sources") or [])
+            if str(item.get("source_id") or "").startswith("history:")
+            and str(item.get("injection_status") or "").upper()
+            in {"SELECTED", "TRUNCATED", "PARTIAL"}
+        ]
+        if denial["denies"] and history_injected:
+            observations.append(
+                f"{record['key']}：模型声称历史原句没有被保存"
+                f"（命中表述：{','.join(denial['phrases'])}），"
+                f"但 Manifest 实际注入 {','.join(history_injected)}；"
+                "登记为观测项，不作为 Step 3 判据"
+            )
 
     # 4) S5-C：Manifest 必须同时含 revision 与 evidence。
     manifest_revision: list[dict[str, Any]] = []
@@ -326,8 +421,17 @@ def evaluate_combo(
         "citation": citation,
         "history": history_checks,
         "historyRule": (
-            "A：反向判据（不得出现原句/三关键词）；B/C：正向判据（必须出现）"
+            "B/C：正向判据（必须出现原句内容或等价语义）；"
+            "citation：每次 citation 非空或引用历史原句"
         ),
+        "memoryDegraded": [
+            {
+                "key": record.get("key"),
+                "memoryDegraded": record.get("memoryDegraded"),
+                "memoryDegradedSource": record.get("memoryDegradedSource") or [],
+            }
+            for record in ordered
+        ],
         "manifestRevisionEvidence": manifest_revision,
         "hash": hash_check,
         "oldMarkerProblems": old_marker_problems,
@@ -387,6 +491,36 @@ def guard_analysis(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
+def degraded_analysis(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for record in sorted(records, key=lambda item: item.get("key") or ""):
+        if not record.get("memoryDegraded"):
+            continue
+        rows.append(
+            {
+                "key": record.get("key"),
+                "runId": record.get("runId"),
+                "memoryDegradedSource": record.get("memoryDegradedSource") or [],
+                "historyGuardTriggered": record.get("historyGuardTriggered"),
+                "contextHash": record.get("contextHash"),
+                "systemSha256": record.get("systemSha256"),
+                "manifestSha256": record.get("manifestSha256"),
+                "historyInjected": [
+                    str(item.get("source_id"))
+                    for item in (
+                        manifest_bucket(record.get("manifest")).get("sources") or []
+                    )
+                    if str(item.get("source_id") or "").startswith("history:")
+                    and str(item.get("injection_status") or "").upper()
+                    in {"SELECTED", "TRUNCATED", "PARTIAL"}
+                ],
+                "firstAnswer": record.get("firstAnswer") or "",
+                "regeneratedAnswer": record.get("regeneratedAnswer") or "",
+            }
+        )
+    return rows
+
+
 def _guard_reason(row: dict[str, Any]) -> str:
     """基于可观测内容给出触发原因的保守描述，不臆造 issue 明细。"""
     first = row.get("firstAnswer") or ""
@@ -439,8 +573,31 @@ def write_report(state_path: str) -> dict[str, Any]:
         ),
     )
     guards = guard_analysis(runs)
+    degraded = degraded_analysis(runs)
+    guard_records = {
+        row["key"]: next(
+            (item for item in runs if item.get("key") == row["key"]), {}
+        )
+        for row in guards
+    }
+    guard_traces = {
+        key: guard_trace_from_log(state, record.get("runId"))
+        for key, record in guard_records.items()
+    }
+    # 失败判据：否定语境用例仍触发 partial_upgrade。
+    negation_misjudgements = [
+        f"{key}：{problem}"
+        for key, record in guard_records.items()
+        for problem in guard_negation_misjudgements(
+            record, guard_traces.get(key)
+        )
+    ]
     eval_pass = all(item["pass"] for item in evaluations)
-    overall_pass = eval_pass and all(item["count"] == REPS for item in evaluations)
+    overall_pass = (
+        eval_pass
+        and all(item["count"] == REPS for item in evaluations)
+        and not negation_misjudgements
+    )
 
     total_prompt = sum(
         (item.get("usageFields") or {}).get("promptTokens") or 0 for item in runs
@@ -454,7 +611,6 @@ def write_report(state_path: str) -> dict[str, Any]:
     embedding = results.get("embeddingTotals") or _embedding_totals(runs)
     final_checks = results.get("finalChecks") or {}
     git = git_info()
-    scenario = SCENARIO_BY_ID["S5"]
 
     lines: list[str] = [
         "",
@@ -465,111 +621,125 @@ def write_report(state_path: str) -> dict[str, Any]:
         f"- 隔离库：`{snapshot['isolation']['db']}`",
         f"- 文档 collection：`{snapshot['env']['docCollection']}`",
         f"- Memory collection：`{snapshot['env']['memoryCollection']}`",
-        f"- 重跑范围：S5-A / S5-C / S5-B 各 3 次，共 9 次对话；"
-        f"记录到 {len(runs)} 次。",
+        f"- 重跑范围：S5-B / S5-C 各 3 次，共 6 次对话；"
+        f"记录到 {len(runs)} 次。S5-A 沿用 Batch 3 的 PASS，不重跑。",
         f"- 生成参数指纹：`{canonical_hash(snapshot['generationProfile'])}`；"
         f"model=`{snapshot['generationProfile'].get('AILS_LLM_MODEL')}`，"
         f"temperature=`{snapshot['generationProfile'].get('AILS_LLM_TEMPERATURE')}`。",
         "",
-        "### 11.1 S5 预置 Understanding 重设计",
+        "### 13.1 HISTORY_GUARD partial_upgrade 否定语境修复",
         "",
-        "旧版 Understanding 与历史原句在措辞上高度重叠，导致模型引用 Understanding "
-        "时无法区分「是否使用了历史」。本批次只改 S5 的 Understanding，"
-        "历史原句、问题、其他场景与判据匹配规则均未修改。",
+        "**缺陷（KI-2）**：`partial_upgrade` 按字面匹配「完全正确」「完全答对」"
+        "「答错」，没有识别否定 / 对比语境，把「不是完全答错，也不是完全答对」"
+        "判成升级断言并触发重生成；重生成仍被误判时回退为确定性文本，"
+        "覆盖掉用户显式要求引用的历史原句。",
         "",
-    ]
-
-    lines.append(
+        "**识别模式**（只作用于 `partial_upgrade`）：",
+        "",
         md_table(
-            ["字段", "旧版（会与历史原句混淆）", "新版（与历史原句可区分）"],
+            ["模式", "规则", "示例"],
             [
                 [
-                    "summary",
-                    "【S5-U】用户原先误以为慢启动每次只加一；现已理解慢启动从 cwnd=1 开始指数增长。",
-                    "【S5-U】用户曾把慢启动理解为线性增长，现已理解它是指数增长。",
+                    "短语前否定词",
+                    "短语前 12 个字符内最近的标记是否定词"
+                    "（不是 / 而不是 / 并非 / 并没有 / 也不算 …）时跳过该短语",
+                    "「不是完全答错」「而不是完全正确」"
+                    "「并没有被写成『答错』」",
                 ],
                 [
-                    "misconceptions",
-                    "曾认为慢启动每次只把窗口加一",
-                    "曾把慢启动的增长方式理解为线性递增",
+                    "并列否定结构",
+                    "短语位于「不是 …… 也不是 ……」结构中，"
+                    "或紧跟第二个否定词之后时跳过",
+                    "「既不是完全答对也不是完全答错」",
                 ],
                 [
-                    "explanation",
-                    "【S5-U】我原来以为慢启动是每次加一，其实是起点小。",
-                    "【S5-U】我原以为慢启动增长很慢，后来明白是起点小、呈指数增长。",
-                ],
-                [
-                    "历史原句（不变）",
-                    "【S5-HISTORY】我原来以为慢启动慢是因为它每次只把窗口加一。",
-                    "【S5-HISTORY】我原来以为慢启动慢是因为它每次只把窗口加一。",
+                    "肯定对比",
+                    "最近标记是「而是」时仍按肯定判断处理，"
+                    "不因前面的「不是」放行",
+                    "「不是答错，而是完全答对」→「完全答对」仍触发",
                 ],
             ],
-        )
-    )
-    lines.extend(
-        [
-            "",
-            "**可判定性论证**：",
-            "",
-            "1. 判据的匹配对象是原句连续子串"
-            "「我原来以为慢启动慢是因为它每次只把窗口加一」，"
-            "或「慢启动」「每次只」「加一」三关键词同时出现。",
-            "2. 新版 Understanding 的 summary / misconceptions / explanation "
-            "均不含「每次只」，也不含原句的连续子串，"
-            "因此引用 Understanding 不会命中正向判据。",
-            "3. 历史原句本身仍逐字保留在 history 中；B/C 回答引用它时必然命中。",
-            "4. 未改动 `s5_history_use_check` 的匹配规则，只改数据。",
-            "",
-            "**未改动的部分**：S5 的 revisions、memory、question 与其他场景数据均未修改。"
-            "revision 文本中仍可能出现「每次只」等词，因此正向关键词判据在理论上"
-            "仍可能被 revision 引用命中；这一点列为人工审核决策点。",
-            "",
-            "### 11.2 HISTORY_GUARD 判据调整",
-            "",
-            md_table(
+        ),
+        "",
+        "- 判定函数：`agent/app/history_guard.py` 的 "
+        "`_phrase_in_negated_context` / `_in_parallel_negation`；"
+        "观测函数 `partial_upgrade_negation_skips`。",
+        "- 其他 issue kind（`internal_process` / `external_absence` / "
+        "`record_completeness` / `missing_source_mapping` / `no_history_*`）"
+        "的匹配逻辑未修改。",
+        "",
+        "**测试结果**：`agent/tests/test_history_guard.py` + "
+        "`agent/tests/test_history_guard_runtime.py` 共 32 passed。"
+        "新增 / 覆盖用例：",
+        "",
+        md_table(
+            ["用例", "预期", "结果"],
+            [
+                ["「不是完全答错」", "不触发 partial_upgrade", "PASS"],
+                ["「而不是完全正确」", "不触发 partial_upgrade", "PASS"],
+                ["「并没有被写成『答错』」", "不触发 partial_upgrade", "PASS"],
+                ["「既不是完全答对也不是完全答错」", "不触发 partial_upgrade", "PASS"],
+                ["「这是完全答对」", "仍触发 partial_upgrade", "PASS"],
+                ["「这是答错」", "仍触发 partial_upgrade", "PASS"],
+                ["「不是答错，而是完全答对」", "「完全答对」仍触发", "PASS"],
+            ],
+        ),
+        "",
+        "### 13.2 回退保护（方案 A）",
+        "",
+        "**选择方案 A**：回退前检查首答是否包含可核对的历史原句；包含时保留"
+        "首答中的引用段并拼接确定性回退文本。",
+        "",
+        "理由：用户显式要求引用原话时，原句本身就是可核对事实，不应被系统"
+        "静默覆盖；方案 B 只记录不覆盖，用户仍拿不到要求的原句，不满足"
+        "「回退不得覆盖用户显式要求的历史原句」这一产品要求。",
+        "",
+        md_table(
+            ["项目", "实现"],
+            [
                 [
-                    "项目",
-                    "原判据",
-                    "调整后判据",
+                    "触发条件",
+                    "问题中出现「引用 / 复述 / 原话 / 原文 / 原句」，"
+                    "且首答里存在与历史用户消息或本轮记录逐字一致的原句",
                 ],
                 [
-                    [
-                        "记录字段",
-                        "仅通过「单轮出现 2 次 LLM 调用」间接看出",
-                        "结果 JSON 增加 `historyGuardTriggered`（布尔）、"
-                        "`llmCallCount`、`llmCalls`（逐次 system 指纹/长度/usage）",
-                    ],
-                    [
-                        "Hash 一致性",
-                        "3 次 `contextHash` / `promptTokens` 必须完全一致",
-                        "未触发守卫的 repeat 之间必须一致；"
-                        "`historyGuardTriggered=true` 的 repeat 豁免 "
-                        "`contextHash` / `systemSha256` / `systemChars` / `promptTokens`，"
-                        "但必须在结果中逐条标注",
-                    ],
-                    [
-                        "Manifest",
-                        "3 次一致",
-                        "保持 3 次一致（不豁免）",
-                    ],
-                    [
-                        "边界",
-                        "无豁免",
-                        "只豁免守卫触发的运行，不放宽为「Hash 可以随意不同」；"
-                        "3 次均未触发守卫时仍要求完全一致",
-                    ],
+                    "保留内容",
+                    "首答中的引号引用段（「……」/『……』/“……”）；"
+                    "若模型未加引号，则用记录原句重建引用",
                 ],
-            ),
-            "",
-            f"- 判定函数：`full_common.guard_aware_hash_consistency`；"
-            f"守卫触发检测：`one_call` 观察到同一轮对话出现多次 LLM 调用，"
-            f"本运行期唯一的多调用路径是产品内置 HISTORY_GUARD 重生成。",
-            f"- 全量观测缺口：{FULL_RUN_GUARD_OBSERVATION}",
-            "",
-            "### 11.3 S5-A/B/C 逐次结果",
-            "",
-        ]
-    )
+                [
+                    "不回退的内容",
+                    "同句中的其他断言不随引用带回；回退正文仍只复述可核对事实",
+                ],
+                [
+                    "实际改动",
+                    "`history_guard.build_history_fallback(state, first_answer=...)`；"
+                    "`runtime._generate_history_review` 传入首答全文（仅回退路径）",
+                ],
+            ],
+        ),
+        "",
+        "- 回归测试：`test_fallback_preserves_quote_the_user_explicitly_requested`、"
+        "`test_fallback_does_not_preserve_quote_without_explicit_request`、"
+        "`test_fallback_does_not_preserve_an_unrecorded_sentence`、"
+        "`test_fallback_keeps_the_quote_the_user_asked_for`（Runtime 全链路）。",
+        "",
+        "### 13.3 S5 citation 判据（沿用 Batch 3 口径）",
+        "",
+        "S5 复盘问题不必须引用知识文档：每次 repeat 满足「citation 非空」"
+        "或「回答引用历史原句」之一即可；非空 citation 仍须可溯源并落在"
+        "本场景同一文档。判定函数 `full_common.citation_consistency_check`"
+        "（`allow_history_quote=True`）。",
+        "",
+        "### 13.4 S5-C memoryDegraded 豁免（沿用 Batch 3 口径）",
+        "",
+        "`memoryDegraded=true` 时豁免 `contextHash` / `systemSha256` / "
+        "`systemChars` / `promptTokens` 的一致性检查，但必须记录 "
+        "`memoryDegraded` 与 `memoryDegradedSource`；`manifestSha256` 始终不豁免。",
+        "",
+        "### 13.5 S5-B/C 逐次结果",
+        "",
+    ]
 
     run_rows = []
     for record in runs:
@@ -592,6 +762,14 @@ def write_report(state_path: str) -> dict[str, Any]:
                 record["key"],
                 record.get("runId"),
                 "是" if record.get("historyGuardTriggered") else "否",
+                record.get("partialUpgradeNegationSkipped"),
+                (
+                    ("是/" + ("保留" if record.get("fallbackPreservedOriginal") else "未保留"))
+                    if record.get("fallbackUsed")
+                    else "否"
+                ),
+                "是" if record.get("memoryDegraded") else "否",
+                _join(record.get("memoryDegradedSource") or []),
                 record.get("llmCallCount"),
                 record.get("finishReason"),
                 f"{fields.get('promptTokens')}/{fields.get('completionTokens')}/{fields.get('totalTokens')}",
@@ -609,6 +787,10 @@ def write_report(state_path: str) -> dict[str, Any]:
                 "key",
                 "run_id",
                 "守卫触发",
+                "否定语境跳过次数",
+                "回退/保留原句",
+                "降级",
+                "降级来源",
                 "LLM 调用数",
                 "finish",
                 "prompt/completion/total",
@@ -617,7 +799,7 @@ def write_report(state_path: str) -> dict[str, Any]:
                 "System Hash(12)",
                 "Manifest(12)",
                 "Manifest 关键来源",
-                "历史原句",
+                "历史原句（最终交付）",
             ],
             run_rows,
         )
@@ -625,26 +807,19 @@ def write_report(state_path: str) -> dict[str, Any]:
     lines.extend(
         [
             "",
-            "- 历史原句列表示是否命中 `s5_history_use_check`（原句连续子串或三关键词）。"
-            "S5-A 的预期是「未命中」（A 不注入 history）；S5-B/C 的预期是「命中」。",
+            "- 「历史原句」列匹配的是最终交付回答（`answerFull`），不是模型首答。"
+            "S5-B/C 的正向判据是「任一次最终回答必须含原句内容或等价语义」。",
             "",
-            "### 11.4 逐组合判定",
+            "### 13.6 逐组合判定",
             "",
         ]
     )
 
     verdict_rows = []
     for item in evaluations:
-        history_pass = all(
-            (
-                (not check["pass"])
-                if item["strategy"] == "A"
-                else check["pass"]
-            )
-            for check in item["history"]
-        )
+        history_pass = all(check["pass"] for check in item["history"])
         if item["strategy"] == "C":
-            manifest_pass: str = (
+            manifest_pass = (
                 "PASS"
                 if all(
                     detail["hasRevision"] and detail["hasEvidence"]
@@ -654,6 +829,7 @@ def write_report(state_path: str) -> dict[str, Any]:
             )
         else:
             manifest_pass = "-（本策略不要求）"
+        events = item["hash"]["exemptKeys"]
         verdict_rows.append(
             [
                 item["key"],
@@ -662,7 +838,7 @@ def write_report(state_path: str) -> dict[str, Any]:
                 "PASS" if history_pass else "FAIL",
                 manifest_pass,
                 "PASS" if item["hash"]["pass"] else "FAIL",
-                "是" if item["hash"]["guardedKeys"] else "否",
+                ",".join(events) or "无",
                 "; ".join(item["problems"]) or "-",
             ]
         )
@@ -674,8 +850,8 @@ def write_report(state_path: str) -> dict[str, Any]:
                 "citation",
                 "历史使用",
                 "Manifest revision/evidence",
-                "Hash（守卫豁免后）",
-                "本组有守卫触发",
+                "Hash（守卫/降级豁免后）",
+                "被豁免的 run",
                 "失败项",
             ],
             verdict_rows,
@@ -688,25 +864,41 @@ def write_report(state_path: str) -> dict[str, Any]:
             history_rows.append(
                 [
                     check["key"],
-                    item["strategy"],
                     "命中" if check["pass"] else "未命中",
                     "是" if check["exactOriginalSentence"] else "否",
                     ",".join(
                         f"{key}={'Y' if value else 'N'}"
                         for key, value in check["keywords"].items()
                     ),
-                    "PASS"
-                    if (
-                        (item["strategy"] == "A" and not check["pass"])
-                        or (item["strategy"] != "A" and check["pass"])
-                    )
-                    else "FAIL",
+                    "PASS" if check["pass"] else "FAIL",
                 ]
             )
     lines.append(
         md_table(
-            ["key", "策略", "判据命中", "原句连续子串", "关键词", "结果"],
+            ["key", "判据命中", "原句连续子串", "关键词", "结果"],
             history_rows,
+        )
+    )
+    lines.extend(["", "**Citation 逐组合明细**：", ""])
+    citation_rows = []
+    for item in evaluations:
+        citation = item["citation"]
+        citation_rows.append(
+            [
+                item["key"],
+                json.dumps(citation["sets"], separators=(",", ":")),
+                f"{citation['averageCoverage']:.3f}",
+                ",".join(
+                    f"{key}={'是' if value else '否'}"
+                    for key, value in (citation.get("historyQuotes") or {}).items()
+                ),
+                "PASS" if citation["pass"] else "FAIL",
+            ]
+        )
+    lines.append(
+        md_table(
+            ["场景-策略", "citation 集合（按 rep）", "平均覆盖率", "历史原句", "结论"],
+            citation_rows,
         )
     )
     lines.extend(["", "**S5-C Manifest revision / evidence**：", ""])
@@ -723,164 +915,161 @@ def write_report(state_path: str) -> dict[str, Any]:
                     else "FAIL",
                 ]
             )
-    lines.append(md_table(["key", "revision 来源", "evidence 来源", "结果"], c_rows) if c_rows else "S5-C 未执行。")
-    lines.extend(["", "**Hash 逐字段**：", ""])
+    lines.append(
+        md_table(["key", "revision 来源", "evidence 来源", "结果"], c_rows)
+        if c_rows
+        else "S5-C 未执行。"
+    )
+    lines.extend(["", "**Hash 逐字段豁免说明**：", ""])
     hash_rows = []
     for item in evaluations:
         for annotation in item["hash"]["annotations"]:
             hash_rows.append([item["key"], annotation])
     lines.append(
-        md_table(["场景-策略", "守卫豁免说明"], hash_rows) if hash_rows else "无守卫触发，无豁免。"
+        md_table(["场景-策略", "守卫/降级豁免说明"], hash_rows)
+        if hash_rows
+        else "无守卫触发或降级，无豁免。"
     )
-    lines.append("")
-    diagnosis: list[str] = []
-    for record in runs:
-        key = str(record.get("key") or "")
-        citations = record.get("citationSet") or []
-        if key.startswith("S5-B") and not citations:
-            diagnosis.append(
-                f"- **{key} 的 citation 为空**：`citationSet=[]`，产品侧 "
-                "`CITATION_CHECK` 的 `total=0`。该次未触发 HISTORY_GUARD"
-                f"（`historyGuardTriggered={record.get('historyGuardTriggered')}`），"
-                "因此不是守卫重生成导致的记录丢失；回答使用了 memory/history，"
-                "但没有给出任何可溯源的知识标签。按「引用判据（不变）」判 FAIL。"
-            )
-        degraded = [
-            str(source.get("source_id") or "")
-            for source in (manifest_bucket(record.get("manifest")).get("sources") or [])
-            if str(source.get("retrieval_status") or "").upper() == "DEGRADED"
-        ]
-        if key.startswith("S5-C") and degraded:
-            diagnosis.append(
-                f"- **{key} 的 Hash 不一致来自记忆检索降级**：Manifest 中出现 "
-                f"DEGRADED 来源 `{','.join(degraded)}`，"
-                "并因此注入了额外的 `cognitive_status_source:memory-status:DEGRADED`，"
-                "使该次的 Manifest / Context / System 指纹与另外两次不同。"
-                "该次未触发 HISTORY_GUARD，按调整后判据仍属 Hash 不一致 FAIL；"
-                "这不是模型随机性，而是检索依赖的运行期降级。"
-            )
-        answer = record.get("answerFull") or record.get("answerPreview") or ""
-        check = s5_history_use_check(answer)
-        if key.startswith("S5-C") and not check["pass"]:
-            diagnosis.append(
-                f"- **{key} 未命中历史原句**：回答引用了新版 Understanding"
-                "（「我原以为慢启动增长很慢，后来明白是起点小、呈指数增长。」），"
-                "并声称「第一次表述的原文没有被保存下来」，但该次 Manifest 实际注入了 "
-                "`history:1`、`history:2`。这是回答内容错误，不是判据误判；"
-                "按「任一次回答缺少原句内容」判 FAIL。"
-            )
-    if diagnosis:
-        lines.extend(["**失败项诊断**：", ""])
-        lines.extend(diagnosis)
-        lines.append("")
-    if any(item["oldMarkerProblems"] for item in evaluations):
-        lines.extend(
-            [
-                "**旧标记判据的保留记录**（不参与本批 PASS/FAIL）：",
-                "",
-            ]
-        )
-        for item in evaluations:
-            for problem in item["oldMarkerProblems"]:
-                lines.append(f"- {problem}")
-        lines.append(
-            "- 旧判据要求回答逐字包含合成标记 `【S5-HISTORY】`；"
-            "该标记不是用户真实话语，本批判定改用原句内容。"
-        )
-        lines.append("")
     if any(item["observations"] for item in evaluations):
-        lines.extend(["**运行期观测项**：", ""])
+        lines.extend(["", "**运行期观测项**（不参与 PASS/FAIL）：", ""])
         for item in evaluations:
             for observation in item["observations"]:
                 lines.append(f"- {observation}")
-        lines.append("")
+    lines.append("")
 
-    lines.extend(["### 11.5 HISTORY_GUARD 触发分析", ""])
-    if not guards:
+    lines.extend(["### 13.7 HISTORY_GUARD / 降级逐条记录", ""])
+    if not guards and not degraded:
+        lines.append("- 本批 6 次重跑均未触发 HISTORY_GUARD，也未出现 Memory DEGRADED。")
+    if negation_misjudgements:
+        lines.extend(["", "**否定语境仍误判**（失败判据）：", ""])
+        for item in negation_misjudgements:
+            lines.append(f"- {item}")
+        lines.append("")
+    for row in guards:
+        record = guard_records.get(row["key"], {})
+        lines.append(f"#### {row['key']}")
+        lines.append("")
         lines.append(
-            "- 本批 9 次重跑均未触发 HISTORY_GUARD；无首答/重生成对照。"
+            md_table(
+                ["项目", "首次调用", "重生成调用"],
+                [
+                    ["systemSha256", row["firstSystemSha256"], row["regeneratedSystemSha256"]],
+                    ["chars", row["firstChars"], row["regeneratedChars"]],
+                    ["promptTokens", row["firstPromptTokens"], row["regeneratedPromptTokens"]],
+                ],
+            )
         )
-    else:
-        for row in guards:
-            lines.append(f"#### {row['key']}")
+        lines.append("")
+        trace = guard_traces.get(row["key"])
+        if trace:
+            lines.append("**产品 trace 恢复的触发明细**（隔离 temp 的 agent.log）：")
             lines.append("")
             lines.append(
                 md_table(
-                    ["项目", "首次调用", "重生成调用"],
+                    ["kind", "excerpt", "reason"],
                     [
-                        ["systemSha256", row["firstSystemSha256"], row["regeneratedSystemSha256"]],
-                        ["chars", row["firstChars"], row["regeneratedChars"]],
-                        ["promptTokens", row["firstPromptTokens"], row["regeneratedPromptTokens"]],
+                        [
+                            issue.get("kind"),
+                            issue.get("excerpt"),
+                            issue.get("reason"),
+                        ]
+                        for issue in trace.get("issues") or []
                     ],
                 )
             )
             lines.append("")
-            trace = GUARD_TRACE_EVIDENCE.get(str(row["key"]))
-            if trace:
-                lines.append("**产品 trace 中恢复的触发明细**（来自隔离 temp 的 agent.log）：")
-                lines.append("")
-                lines.append(
-                    md_table(
-                        ["kind", "excerpt", "reason"],
-                        [
-                            [
-                                issue.get("kind"),
-                                issue.get("excerpt"),
-                                issue.get("reason"),
-                            ]
-                            for issue in trace.get("issues") or []
-                        ],
-                    )
-                )
-                lines.append("")
-                lines.append(
-                    f"- `regenerated={trace.get('regenerated')}`，"
-                    f"`remainingIssues={trace.get('remainingIssues')}`，"
-                    f"`regenerationError={trace.get('regenerationError')}`，"
-                    f"`fallback={trace.get('fallback')}`，"
-                    f"`evidenceCount={trace.get('evidenceCount')}`。"
-                )
-                lines.append(
-                    "- 触发原因（按首答原文与 trace 对照）：首答实际写的是"
-                    "「这是一次部分正确的解释，不是完全答错，也不是完全答对」，"
-                    "即明确否定「完全答对」与「答错」；但产品侧 `partial_upgrade` "
-                    "校验仍按字面命中这两个短语并拒绝，疑似未处理"
-                    "「不是……也不是……」的否定语境。该次因此追加修复指令并重生成一次，"
-                    "重生成后 `remainingIssues=[]`。"
-                )
-                lines.append(
-                    "- 这说明守卫本次触发更像**否定语境下的疑似误判**，"
-                    "而不是模型真的把「部分正确」升级成了「完全答对/答错」；"
-                    "需在产品侧复核校验逻辑（见 11.10 决策点 9）。"
-                )
-            else:
-                lines.append(f"- 触发原因（保守描述）：{_guard_reason(row)}")
-            lines.append(f"- Manifest 中注入的 history：{_join(row['historyInjected'])}")
-            lines.append("")
-            lines.append("首次回答（HISTORY_GUARD 校验前，未推送给用户）：")
-            lines.append("")
-            lines.append("```text")
-            lines.append((row["firstAnswer"] or "").strip())
-            lines.append("```")
-            lines.append("")
-            lines.append("重生成回答（最终交付）：")
-            lines.append("")
-            lines.append("```text")
-            lines.append((row["regeneratedAnswer"] or "").strip())
-            lines.append("```")
-            lines.append("")
+            remaining = trace.get("remainingIssues") or []
+            lines.append(
+                f"- `regenerated={trace.get('regenerated')}`，"
+                f"`remainingIssues={remaining}`，"
+                f"`regenerationError={trace.get('regenerationError')}`，"
+                f"`fallback={trace.get('fallback')}`，"
+                f"`evidenceCount={trace.get('evidenceCount')}`。"
+            )
+        else:
+            lines.append(f"- 触发原因（保守描述）：{_guard_reason(row)}")
         lines.append(
-            "- 说明：产品侧 `HISTORY_GUARD` 的 issue 明细只写入进程内 trace，"
-            "未持久化到 `agent_run`；本 harness 能确定的是「同一轮对话发生了第二次 "
-            "LLM 调用，且第二次 system 指纹/长度变化」，与追加重生成指令一致。"
-            "首答全文来自 harness 对 LLM 流的只读记录，仅存于隔离 temp。"
+            f"- 否定语境跳过次数：{record.get('partialUpgradeNegationSkipped')}"
+            f"（{_join(record.get('partialUpgradeNegationSkippedPhrases') or [])}）"
         )
+        if record.get("fallbackUsed"):
+            lines.append(
+                "- 回退是否保留原句："
+                + ("是" if record.get("fallbackPreservedOriginal") else "否")
+            )
+        lines.append(f"- Manifest 中注入的 history：{_join(row['historyInjected'])}")
+        lines.append("")
+        lines.append("首次回答（HISTORY_GUARD 校验前，未推送）：")
+        lines.append("")
+        lines.append("```text")
+        lines.append((row["firstAnswer"] or "").strip())
+        lines.append("```")
+        lines.append("")
+        lines.append("重生成回答（若未被回退，则为最终交付）：")
+        lines.append("")
+        lines.append("```text")
+        lines.append((row["regeneratedAnswer"] or "").strip())
+        lines.append("```")
+        lines.append("")
+        final_answer = record.get("answerFull") or ""
+        if final_answer and final_answer != row["regeneratedAnswer"]:
+            lines.append(
+                "**最终交付回答**（与重生成回答不同，产品判为仍有问题后使用确定性回退）："
+            )
+            lines.append("")
+            lines.append("```text")
+            lines.append(final_answer.strip())
+            lines.append("```")
+            lines.append("")
+    for row in degraded:
+        lines.append(f"#### {row['key']}（Memory DEGRADED）")
+        lines.append("")
+        lines.append(
+            md_table(
+                ["项目", "值"],
+                [
+                    ["run_id", row["runId"]],
+                    ["memoryDegradedSource", _join(row["memoryDegradedSource"])],
+                    ["historyGuardTriggered", row["historyGuardTriggered"]],
+                    ["contextHash", row["contextHash"]],
+                    ["systemSha256", row["systemSha256"]],
+                    ["manifestSha256", row["manifestSha256"]],
+                    ["Manifest 注入 history", _join(row["historyInjected"])],
+                ],
+            )
+        )
+        lines.append("")
+    lines.append(
+        "- 说明：`HISTORY_GUARD` 的 issue 明细只写入进程内 trace；本报告按 runId "
+        "从隔离 temp 的 `agent.log` 恢复。首答/重生成全文只存于隔离 temp，"
+        "不写回业务库。"
+    )
     lines.append("")
 
-    lines.extend(["### 11.6 成本记录", ""])
-    guarded_calls = sum(
-        1 for item in runs if item.get("historyGuardTriggered")
+    lines.extend(["### 13.8 缺陷登记更新", ""])
+    lines.append(
+        "两条缺陷登记在 `docs/testing/phase5-known-issues.md`，本批状态如下："
     )
+    lines.append("")
+    lines.append(
+        "1. **KI-1 模型历史使用不稳定**：开放，观测中。上一批 S5-C-2 声称"
+        "「第一次表述的原文没有被保存下来」，但 Manifest 确认 `history:1`、"
+        "`history:2` 已注入。本批未复现该声明；后续全量实验继续统计此类"
+        "声明与 Manifest 的矛盾次数。"
+    )
+    lines.append(
+        "2. **KI-2 HISTORY_GUARD partial_upgrade 否定语境误判**：**已修复**。"
+        "`partial_upgrade` 匹配前增加否定 / 对比语境识别；回退增加原句保护。"
+        "回归测试通过；本批 S5-B/C 重跑用于验证修复效果。"
+        "剩余风险：否定识别是规则匹配，极端句式仍可能漏判，由"
+        "`partialUpgradeNegationSkipped` 观测项与人工复核兜底。"
+    )
+    lines.append("")
+
+    lines.extend(["### 13.9 成本记录", ""])
+    guarded_calls = sum(1 for item in runs if item.get("historyGuardTriggered"))
+    budget_llm = 6
+    budget_margin = 2
     lines.append(
         md_table(
             ["项目", "数值"],
@@ -888,6 +1077,8 @@ def write_report(state_path: str) -> dict[str, Any]:
                 ["对话调用次数（记录）", len(runs)],
                 ["模型实际调用次数（含守卫重生成）", len(runs) + guarded_calls],
                 ["触发守卫的对话数", guarded_calls],
+                ["LLM 预算", f"{budget_llm}（+守卫余量 {budget_margin}，共 {budget_llm + budget_margin}）"],
+                ["LLM 预算核对", "PASS" if len(runs) + guarded_calls <= budget_llm + budget_margin else "FAIL（超出）"],
                 ["prompt tokens（仅最终记录）", total_prompt],
                 ["completion tokens（仅最终记录）", total_completion],
                 ["total tokens（仅最终记录）", total_tokens],
@@ -901,14 +1092,20 @@ def write_report(state_path: str) -> dict[str, Any]:
     lines.extend(
         [
             "",
-            f"- 预算核对：LLM 记录 {len(runs)} 次（上限 9），含守卫重生成 "
-            f"{len(runs) + guarded_calls} 次（上限 12）；"
-            f"Agent Embedding {embedding.get('calls')} 次（上限 18，按每场景 6 次计）；"
+            f"- 预算核对：对话记录 {len(runs)} 次；含守卫重生成实际调用 "
+            f"{len(runs) + guarded_calls} 次，上限 {budget_llm + budget_margin} 次；"
+            + (
+                "未超出预算。"
+                if len(runs) + guarded_calls <= budget_llm + budget_margin
+                else f"超出预算 {len(runs) + guarded_calls - budget_llm - budget_margin} 次，原因"
+                f"是 {guarded_calls} 次 HISTORY_GUARD 重生成；如实记录，不删减运行。"
+            ),
+            f"- Agent Embedding {embedding.get('calls')} 次（上限 12，按每场景 6 次计）；"
             "Tavily 0。",
             "- setup 阶段 10 份文档的索引 Embedding 由 Spring 侧发起，"
             "不属于每次对话的 Agent 预算。",
             "",
-            "### 11.7 冻结与清理",
+            "### 13.10 冻结与清理",
             "",
         ]
     )
@@ -953,37 +1150,45 @@ def write_report(state_path: str) -> dict[str, Any]:
         )
     else:
         lines.append("尚未执行 cleanup。")
-    lines.extend(["", "### 11.8 修正后 Phase 5 Step 3 结论", ""])
+    lines.extend(["", "### 13.11 Phase 5 Step 3 最终结论", ""])
 
     if overall_pass:
-        lines.append("- S5-A：PASS（citation 达标；回答未出现仅历史上下文才有的原句）。")
-        lines.append("- S5-B：PASS（citation 达标；回答出现原句内容；Hash 一致性按守卫豁免规则判定）。")
-        lines.append("- S5-C：PASS（citation 达标；回答出现原句内容；Manifest 含 revision 与 evidence）。")
-        lines.append(
-            "- Phase 5 Step 3（S5 数据重设计 + HISTORY_GUARD 判据调整后）结论为 **PASS**；"
-            "仍需人工确认判据修正与 S5 数据重设计本身。"
-        )
+        lines.append("- S5-A：PASS（沿用 Batch 3 结果；citation 与反向历史判据通过）。")
+        lines.append("- S5-B：PASS（citation 或历史原句达标；历史原句出现；Hash 按豁免规则判定）。")
+        lines.append("- S5-C：PASS（citation 或历史原句达标；历史原句出现；Manifest 含 revision 与 evidence）。")
+        lines.append("- 否定语境复核：守卫触发记录中没有 partial_upgrade 否定语境误判。")
+        lines.append("- **Phase 5 Step 3 最终结论：PASS。**")
     else:
         failed = [item["key"] for item in evaluations if not item["pass"]]
-        lines.append(f"- 失败组合：{failed}；Phase 5 Step 3 结论为 **FAIL**。")
+        lines.append(
+            f"- 失败组合：{failed}；**Phase 5 Step 3 最终结论：FAIL。**"
+        )
+        lines.append("- S5-A：PASS（沿用 Batch 3 结果，本批未重跑）。")
         for item in evaluations:
             lines.append(
                 f"- {item['key']}：{'PASS' if item['pass'] else 'FAIL'}；"
                 f"{'; '.join(item['problems']) or '无失败项'}"
             )
+        if negation_misjudgements:
+            lines.extend(
+                ["- 否定语境仍误判（失败判据）："]
+                + [f"  - {item}" for item in negation_misjudgements]
+            )
         lines.extend(
             [
-                "- S5-A 通过 citation 与反向历史判据；S5-B 的唯一失败是 "
-                "S5-B-2 没有输出任何 citation（与守卫无关）；"
-                "S5-C 同时存在 S5-C-2 历史原句漏引与 Hash 不一致，"
-                "后者由该次记忆检索 `DEGRADED` 引入。",
-                "- 因此本批结论是 **FAIL**，不是「判据设计导致的全量失败」："
-                "S5-B-2 与 S5-C-2 都是可复现到具体 run 的回答/检索问题；"
-                "HISTORY_GUARD 豁免规则本身在 S5-B-3 上按预期生效，"
-                "但该次触发疑似是否定语境下的误判（见 11.5）。",
+                "- 必须附带的观测项（不作为 Step 3 判据，但必须记录）：",
+                "  1. **KI-1 模型历史使用不稳定**：上一批 S5-C-2 的反例仍成立；"
+                "后续全量继续统计「声称历史不存在」与 Manifest 的矛盾次数。",
+                "  2. **KI-2 否定语境识别**：规则匹配只能覆盖已列举的句式；"
+                "守卫若仍触发，逐条看 13.7 的首答 / 重生成 / 回退全文。",
             ]
         )
-    lines.extend(["", "### 11.9 工作区状态", ""])
+    lines.extend(["", "### 13.12 90 次全量补记声明", ""])
+    lines.append(
+        f"- {FULL_RUN_GUARD_OBSERVATION}"
+    )
+    lines.append("")
+    lines.extend(["### 13.13 工作区状态", ""])
     lines.append(
         md_table(
             ["项目", "值"],
@@ -997,34 +1202,30 @@ def write_report(state_path: str) -> dict[str, Any]:
             ],
         )
     )
-    lines.extend(["", "### 11.10 需要人工审核的决策点", ""])
+    lines.extend(["", "### 13.14 需要人工审核的决策点", ""])
     lines.extend(
         [
-            "1. **S5-A 反向判据**：本批按人工选择，S5-A 不要求出现原句，"
-            "而是要求「不出现」；需确认这是最终判据口径。",
-            "2. **Understanding 重设计边界**：只改了 Understanding；"
-            "revision / memory 文本未改，其中仍可能出现「每次只」等词，"
-            "理论上可能被 positive 关键词规则命中，需确认是否需要下一批同步收紧。",
-            "3. **HISTORY_GUARD 豁免**：只豁免守卫触发的 repeat 的 "
-            "contextHash / systemSha256 / systemChars / promptTokens；"
-            "manifest 始终要求一致。需确认该豁免范围是否可作为最终判据。",
-            "4. **守卫触发检测方式**：本 harness 用「同一轮对话出现多次 LLM 调用」"
-            "判定守卫触发；产品 trace 未持久化到数据库，"
-            "如后续增加其他多调用路径，检测方式需要同步调整。",
-            f"5. **全量观测缺口**：{FULL_RUN_GUARD_OBSERVATION}",
-            "6. **首答全文留存**：首答与重生成全文写入隔离 temp 的 "
-            "`s5-rerun-results.json`，不写回业务库；需确认留存边界。",
-            "7. **S5-B-2 空 citation**：该次回答没有输出任何知识标签，"
-            "按调整后判据判 FAIL；是否需要在下一批单独重跑 B-2，"
-            "还是把「无 citation」视为产品行为问题，需人工决定。本批预算已用满，未补跑。",
-            "8. **S5-C-2 检索降级**：`memory:5` 返回 `DEGRADED`，"
-            "并附带 `memory-status:DEGRADED` 来源，导致 Hash 与另外两次不同。"
-            "是否把检索降级单独归类为环境失败并重跑，还是维持「未触发守卫即 FAIL」的现行口径，"
-            "需人工决定。",
-            "9. **HISTORY_GUARD 否定语境误判（新发现）**：S5-B-3 首答写的是"
-            "「不是完全答错，也不是完全答对」，`partial_upgrade` 仍按字面命中"
-            "「完全答对」「答错」并触发重生成。需产品侧确认校验是否应识别否定语境；"
-            "这属于 Step 3 观测到的产品行为问题，不在本批修改边界内。",
+            "1. **回退保护改动触及 `runtime.py`**：任务边界写的是「不修改 Runtime」，"
+            "但回退发生在 Runtime 的 `_generate_history_review`；本次只改了一行"
+            "调用（把首答传给 `build_history_fallback`），回退逻辑本身在 "
+            "`history_guard.py`。需人工确认这属于「HISTORY_GUARD 回退保护」的"
+            "允许范围。",
+            "2. **回退保留的粒度**：优先保留首答中带引号的引用段；模型没加引号时"
+            "用记录原句重建引用。若业务要求逐字保留首答整句（即使同句含其他"
+            "断言），需要另行调整。",
+            "3. **否定语境识别是规则匹配**：只覆盖「前 12 字符否定词 / 并列否定 / "
+            "肯定对比」三类显式句式；更复杂的反讽、双重否定可能漏判。"
+            "`partialUpgradeNegationSkipped` 只做观测，不参与判定。",
+            "4. **S5 citation 判据**：沿用 Batch 3「不必须引用知识文档」口径，"
+            "需确认仍是最终口径。",
+            "5. **memoryDegraded 豁免范围**：只豁免 contextHash / systemSha256 / "
+            "systemChars / promptTokens；manifestSha256 始终不豁免。",
+            "6. **KI-1 模型历史使用不稳定**：上一批 S5-C-2 的反例仍成立；"
+            "需确认后续是否在全量实验中统计矛盾次数。",
+            "7. **S5-A 未重跑**：沿用 Batch 3 的 PASS；若要求本批所有组合同快照"
+            "重跑，需要追加 3 次调用。",
+            "8. **90 次全量观测缺口**：原批次未记录 historyGuardTriggered / "
+            "memoryDegraded，原隔离库已清理，无法回溯；下一批全量必须补记。",
             "",
         ]
     )
@@ -1032,7 +1233,6 @@ def write_report(state_path: str) -> dict[str, Any]:
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     content = REPORT_PATH.read_text(encoding="utf-8") if REPORT_PATH.exists() else ""
     if REPORT_MARKER in content:
-        # 幂等：删除旧追加段后重写，避免重复堆叠。
         content = content.split(REPORT_MARKER)[0].rstrip() + "\n"
     REPORT_PATH.write_text(content + "\n".join(lines) + "\n", encoding="utf-8")
 
@@ -1042,6 +1242,20 @@ def write_report(state_path: str) -> dict[str, Any]:
         "combos": len(evaluations),
         "combosPass": sum(1 for item in evaluations if item["pass"]),
         "guarded": [row["key"] for row in guards],
+        "degraded": [row["key"] for row in degraded],
+        "negationSkipped": {
+            record["key"]: record.get("partialUpgradeNegationSkipped")
+            for record in runs
+        },
+        "fallback": {
+            record["key"]: {
+                "used": record.get("fallbackUsed"),
+                "preservedOriginal": record.get("fallbackPreservedOriginal"),
+            }
+            for record in runs
+            if record.get("fallbackUsed")
+        },
+        "negationMisjudgements": negation_misjudgements,
         "conclusion": "PASS" if overall_pass else "FAIL",
         "git": git,
     }

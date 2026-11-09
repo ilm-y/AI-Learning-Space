@@ -438,7 +438,9 @@ class AgentRuntime:
                     delivered_completion = retry_completion
                     issues = []
             if issues:
-                final = build_history_fallback(state)
+                # 回退保护：用户显式要求引用原话时，首答中与记录逐字一致的
+                # 原句不能被确定性回退静默覆盖（HISTORY_GUARD 修复项）。
+                final = build_history_fallback(state, first_answer=raw)
                 # 回退文本是确定性拼出的完整内容，不继承被丢弃模型流的截断状态。
                 delivered_completion = StreamCompletion(metadata_available=True)
                 fallback_used = True

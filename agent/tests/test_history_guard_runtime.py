@@ -257,6 +257,36 @@ async def test_review_falls_back_to_records_when_retry_is_still_unsupported(sett
     assert guard["remainingIssues"]
 
 
+QUOTE_REVIEW_QUESTION = REVIEW_QUESTION + "请引用我当时的原话。"
+QUOTE_BAD_ANSWER = (
+    "你当时的原话是「TLB 就是页表本身，它缓存的是整个页表」，"
+    "而且你完全靠自己理解了过来。"
+)
+
+
+async def test_fallback_keeps_the_quote_the_user_asked_for(settings) -> None:
+    """KI-2 回退保护：首答里的可核对原句不能被确定性回退覆盖。"""
+    llm = ScriptedLLM([[QUOTE_BAD_ANSWER], [QUOTE_BAD_ANSWER]])
+    runtime, prepared = await _prepared(
+        settings, llm, question=QUOTE_REVIEW_QUESTION
+    )
+
+    try:
+        output = "".join([delta async for delta in runtime.generate(prepared)])
+    finally:
+        await runtime.aclose()
+
+    assert len(llm.calls) == 2
+    assert "TLB 就是页表本身，它缓存的是整个页表" in output
+    assert "「TLB 就是页表本身，它缓存的是整个页表」" in output
+    # 同句中的无依据断言不随原句一起回退。
+    assert "完全靠自己" not in output
+
+    guard = _history_guard(prepared)
+    assert guard["fallback"] is True
+    assert guard["regenerated"] is True
+
+
 async def test_review_without_trajectory_never_denies_the_past(settings) -> None:
     llm = ScriptedLLM(
         [

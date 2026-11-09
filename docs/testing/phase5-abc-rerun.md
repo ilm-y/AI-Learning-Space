@@ -498,3 +498,662 @@
 8. **S5-C-2 检索降级**：`memory:5` 返回 `DEGRADED`，并附带 `memory-status:DEGRADED` 来源，导致 Hash 与另外两次不同。是否把检索降级单独归类为环境失败并重跑，还是维持「未触发守卫即 FAIL」的现行口径，需人工决定。
 9. **HISTORY_GUARD 否定语境误判（新发现）**：S5-B-3 首答写的是「不是完全答错，也不是完全答对」，`partial_upgrade` 仍按字面命中「完全答对」「答错」并触发重生成。需产品侧确认校验是否应识别否定语境；这属于 Step 3 观测到的产品行为问题，不在本批修改边界内。
 
+## 12. S5-B/C 判据调整与重跑（Batch 3）
+
+- 追加时间：2026-11-09T23:13:11
+- 重跑快照时间：2026-11-09 23:05:31
+- 隔离库：`phase5_pilot_20261109230529_3a91d2`
+- 文档 collection：`phase5-pilot-20261109230529-3a91d2_text-embedding-v4_1024`
+- Memory collection：`phase5-pilot-20261109230529-3a91d2-memory_text-embedding-v4_1024`
+- 重跑范围：S5-B / S5-C 各 3 次，共 6 次对话；记录到 6 次。S5-A 沿用上一批（2026-11-09 22:47 快照）的 PASS，不重跑。
+- 生成参数指纹：`2e1405ed23bbe132b96b018c7e79d190321e43ff5ffb5c5108e99bee47edb5f6`；model=`deepseek-flash`，temperature=`0`。
+
+### 12.1 S5 citation 判据确认：不必须
+
+**结论：S5 复盘问题不必须引用知识文档。**
+
+理由：
+
+1. S5 的问题是「回顾一下，我之前对 TCP 慢启动的理解错在哪？**请引用我当时的原话**」。问题显式要求的是用户历史原话，不是知识文档标签。
+2. 复盘问题的核心可核验证据是「回答是否复现了历史原句」；这是区分「真的用了历史」与「只讲了通用知识」的关键。知识引用只说明「错在哪」的解释有资料支撑，是支持性证据，不是复盘成立的必要条件。
+3. 因此一次回答可以同时满足「引用了历史原句」和「没有输出知识标签」，这仍然是合格复盘。把空 citation 一律判 FAIL 会把「模型正确引用历史、只是没贴知识标签」误判为失败。
+4. 边界不放宽：非空 citation 仍必须可溯源、落在本场景同一文档；空 citation 只有在回答引用历史原句时才允许；既无 citation 又无历史原句仍判 FAIL。
+
+**实际改动**：`full_common.citation_consistency_check` 新增 `allow_history_quote` 模式；`run_s5_rerun.evaluate_combo` 对 S5 传入 `allow_history_quote=True`。判定规则变为「每次 repeat：citation 非空 或回答引用历史原句」；覆盖率/并集仍计算展示，但不再是该模式的硬失败项。
+
+### 12.2 S5-C memoryDegraded 豁免
+
+| 项目 | 调整 |
+|---|---|
+| 降级判定 | Manifest 中存在 `retrieval_status=DEGRADED` 的 memory 来源，或存在 `source_id` 含 `memory-status:DEGRADED` 的认知状态来源 |
+| 豁免字段 | `memoryDegraded=true` 时豁免 `contextHash` / `systemSha256` / `systemChars` / `promptTokens` 的一致性检查 |
+| 不豁免字段 | `manifestSha256` 始终要求 3 次一致；不一致仍判 FAIL |
+| 必须记录 | 结果 JSON 与报告逐条记录 `memoryDegraded`（布尔）与 `memoryDegradedSource`（来源 ID 列表） |
+| 判定函数 | `full_common.guard_aware_hash_consistency`；`memory_degraded_info` 从 Manifest 派生字段 |
+| 本批实测 | 6 次重跑均未出现 Memory DEGRADED；该豁免本批未实际触发，代码路径已落地并做离线自检 |
+
+**离线自检**（不调用 LLM，直接构造记录验证判定函数）：
+
+| 用例 | 构造 | 结果 |
+|---|---|---|
+| 降级豁免、Manifest 一致 | 1 次 `memoryDegraded=true`，Hash 与另外两次不同，`manifestSha256` 相同 | PASS；输出 `degradedKeys` 与豁免说明 |
+| 降级但 Manifest 不一致 | 降级的 run `manifestSha256` 不同 | FAIL；报告明确 `manifestSha256 始终不豁免` |
+| 降级但未记录来源 | `memoryDegraded=true`、`memoryDegradedSource=[]` | FAIL；报告「未记录 memoryDegradedSource」 |
+| 未降级、Hash 不一致 | 3 次均未豁免，`contextHash` 不同 | FAIL；仍按未豁免基线判定 |
+
+### 12.3 S5-B/C 逐次结果
+
+| key | run_id | 守卫触发 | 降级 | 降级来源 | LLM 调用数 | finish | prompt/completion/total | citation 集合 | Context Hash(12) | System Hash(12) | Manifest(12) | Manifest 关键来源 | 历史原句（最终交付） |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| S5-B-1 | 1 | 否 | 否 | - | 1 | stop | 2897/1020/3917 | [[5,15]] | 3e606f230481 | ad44d0f30dd0 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 | 命中 |
+| S5-B-2 | 3 | 否 | 否 | - | 1 | stop | 2897/1805/4702 | [[5,13],[5,14],[5,15]] | 3e606f230481 | ad44d0f30dd0 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 | 命中 |
+| S5-B-3 | 5 | 是 | 否 | - | 2 | stop | 2985/1858/4843 | [] | 52cb22381c4f | 2ab53a32a3c6 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 | 未命中 |
+| S5-C-1 | 7 | 是 | 否 | - | 2 | stop | 2985/1320/4305 | [] | 52cb22381c4f | 2ab53a32a3c6 | 0baf3d0e0b07 | history:1,history:2,revision:6,evidence:5,revision:7 | 未命中 |
+| S5-C-2 | 9 | 是 | 否 | - | 2 | stop | 2985/1813/4798 | [[5,15]] | 52cb22381c4f | 2ab53a32a3c6 | 0baf3d0e0b07 | history:1,history:2,revision:6,evidence:5,revision:7 | 命中 |
+| S5-C-3 | 11 | 否 | 否 | - | 1 | stop | 2897/1178/4075 | [[5,15]] | 3e606f230481 | ad44d0f30dd0 | 0baf3d0e0b07 | history:1,history:2,revision:6,evidence:5,revision:7 | 命中 |
+
+- 「历史原句」列匹配的是最终交付回答（`answerFull`），不是模型首答。S5-B/C 的正向判据是「任一次最终回答必须含原句内容或等价语义」。
+
+### 12.4 逐组合判定
+
+| 场景-策略 | 总判定 | citation | 历史使用 | Manifest revision/evidence | Hash（守卫/降级豁免后） | 被豁免的 run | 失败项 |
+|---|---|---|---|---|---|---|---|
+| S5-B | FAIL | FAIL | FAIL | -（本策略不要求） | PASS | S5-B-3 | citation：存在空 citation 且未引用历史原句：S5-B-3; S5-B-3：S5 回答不含原句内容或等价语义 |
+| S5-C | FAIL | FAIL | FAIL | PASS | PASS | S5-C-1,S5-C-2 | citation：存在空 citation 且未引用历史原句：S5-C-1; S5-C-1：S5 回答不含原句内容或等价语义 |
+
+**逐次历史使用判据明细**：
+
+| key | 判据命中 | 原句连续子串 | 关键词 | 结果 |
+|---|---|---|---|---|
+| S5-B-1 | 命中 | 是 | 慢启动=Y,每次只=Y,加一=Y | PASS |
+| S5-B-2 | 命中 | 是 | 慢启动=Y,每次只=Y,加一=Y | PASS |
+| S5-B-3 | 未命中 | 否 | 慢启动=Y,每次只=N,加一=N | FAIL |
+| S5-C-1 | 未命中 | 否 | 慢启动=Y,每次只=N,加一=N | FAIL |
+| S5-C-2 | 命中 | 是 | 慢启动=Y,每次只=Y,加一=Y | PASS |
+| S5-C-3 | 命中 | 是 | 慢启动=Y,每次只=Y,加一=Y | PASS |
+
+**Citation 逐组合明细**：
+
+| 场景-策略 | citation 集合（按 rep） | 平均覆盖率 | 历史原句 | 结论 |
+|---|---|---|---|---|
+| S5-B | [[[5,15]],[[5,13],[5,14],[5,15]],[]] | 0.444 | S5-B-1=是,S5-B-2=是,S5-B-3=否 | FAIL |
+| S5-C | [[],[[5,15]],[[5,15]]] | 0.667 | S5-C-1=否,S5-C-2=是,S5-C-3=是 | FAIL |
+
+**S5-C Manifest revision / evidence**：
+
+| key | revision 来源 | evidence 来源 | 结果 |
+|---|---|---|---|
+| S5-C-1 | revision:6,revision:7 | evidence:5 | PASS |
+| S5-C-2 | revision:6,revision:7 | evidence:5 | PASS |
+| S5-C-3 | revision:6,revision:7 | evidence:5 | PASS |
+
+**Hash 逐字段豁免说明**：
+
+| 场景-策略 | 守卫/降级豁免说明 |
+|---|---|
+| S5-B | S5-B-3：historyGuardTriggered=true，豁免 contextHash, systemSha256, systemChars, promptTokens（llmCallCount=2） |
+| S5-C | S5-C-1：historyGuardTriggered=true，豁免 contextHash, systemSha256, systemChars, promptTokens（llmCallCount=2） |
+| S5-C | S5-C-2：historyGuardTriggered=true，豁免 contextHash, systemSha256, systemChars, promptTokens（llmCallCount=2） |
+
+**运行期观测项**（不参与 PASS/FAIL）：
+
+- S5-B-3：单轮对话出现 2 次 LLM 调用（预期 1）
+- S5-C-1：单轮对话出现 2 次 LLM 调用（预期 1）
+- S5-C-2：单轮对话出现 2 次 LLM 调用（预期 1）
+
+### 12.5 HISTORY_GUARD / 降级逐条记录
+
+#### S5-B-3
+
+| 项目 | 首次调用 | 重生成调用 |
+|---|---|---|
+| systemSha256 | ad44d0f30dd068d384e64b830551b778eba1d46bf6dd82e782db2a7272a502fb | 2ab53a32a3c6796a2795a69b39bb5293dc485b6aed2e90232a41ad32479b2d59 |
+| chars | 4914 | 5060 |
+| promptTokens | 2897 | 2985 |
+
+**产品 trace 恢复的触发明细**（隔离 temp 的 agent.log）：
+
+| kind | excerpt | reason |
+|---|---|---|
+| partial_upgrade | 完全正确 | 记录里没有完全答对的证据 |
+
+- `regenerated=True`，`remainingIssues=[{'kind': 'partial_upgrade', 'excerpt': '答错', 'reason': '记录只判定为部分正确，不能改写成答错'}]`，`regenerationError=None`，`fallback=True`，`evidenceCount=1`。
+- Manifest 中注入的 history：history:1,history:2
+
+首次回答（HISTORY_GUARD 校验前，未推送）：
+
+```text
+## 当时的原话
+
+能核对到的原话有两处：
+
+1. 你在这次提问里复述的更早说法：**「我原来以为慢启动慢是因为它每次只把窗口加一。」**
+2. 更早一次复盘时，你自己的表述是：**「我原以为慢启动增长很慢，后来明白是起点小、呈指数增长。」**
+
+更早的那次记录，当时被标为「部分正确」：前半句对原来想法的复述是准的，后半句的纠正也是准的，但被记为「部分正确」而不是完全正确。
+
+## 分叉在哪一步
+
+你的原话本身就把推理过程说出来了——你把因果连在了「慢」这个词上：名字叫**慢**启动 → 所以应该是每次加得很少 → 每次只加一。
+
+分叉点在于「慢」修饰的是什么。它修饰的是**起点**，不是**速度**：初始 cwnd 为 1 个 MSS，每收到一个 ACK 增加一个 MSS，每个 RTT 大约翻倍[资料《s5-slow-start.md》#0]。起点是 1，爬升到可用带宽的量级需要若干个 RTT，要花时间的是这段爬升过程，不是每一轮的增速[资料《s5-slow-start.md》#1]。
+
+而你原来想的「每个 RTT 只加一」，恰恰不是慢启动的行为——它更接近进入拥塞避免之后的线性增长[资料《s5-slow-start.md》#2]。也就是说，你原来给出的是慢启动**结束之后**的增长曲线，只是把它安到了慢启动这个阶段上。
+
+## 说清楚边界
+
+- 你现在的理解是：慢启动从 cwnd=1 开始、阶段内指数增长。
+- 但「把增长方式理解为线性递增」这一条，在当前的认知状态里仍然被标为存在，描述用的是「曾」。这条偏差值得记住，因为它和「慢启动阶段指数增长」是同一件事的两面。
+- 从你线性增长的想法变到现在这个说法，中间发生了什么——是不是看过资料、是谁纠正的——记录里看不出原因，我不做推测。
+- 另外，长期记忆里有一条较早的状态，说你「把慢启动理解为线性加一」；那是更早的记录，当前状态已经不同，不是本轮的事实依据。
+
+顺带一句：你这次问的「慢启动何时停止」，正好和上面那个分叉连着——停止的条件是 cwnd 碰到 ssthresh，之后才转入每 RTT 线性加一的拥塞避免[资料《s5-slow-start.md》#1]。要接着往下讲这个，随时说。
+```
+
+重生成回答（若未被回退，则为最终交付）：
+
+```text
+## 你当时的原话
+
+先放可核对的部分。你有两条自己的表述，都在记录里：
+
+- 本轮你说的：「我原来以为慢启动慢是因为它每次只把窗口加一。」
+- 更早的一次（快照里保存的你的说法）：「我原以为慢启动增长很慢，后来明白是起点小、呈指数增长。」
+
+同期还有一条证据标注（2026-11-09 23:05，来源：消息）：你的解释被记为**部分正确**——不是答对，也不是答错。记录里同时写了「把‘慢启动’误解为线性增长，已纠正为指数增长」，但「已纠正」这个说法和下面第 3 点有冲突。
+
+## 错误位于哪一步，不在结论
+
+你的推理分叉点在于：**把名字里的“慢”归因到增速上。**
+
+- 你的版本：慢 → 因为每次只加一个 MSS → 所以每 RTT 只涨一点，曲线是线性的。
+- 实际结构：慢 → 因为起点只有 1 个 MSS，要爬很久才到有意义的窗口；但每收到一个 ACK 就加 1 个 MSS，于是一个 RTT 内整体大约翻倍，曲线是指数的[资料《s5-slow-start.md》#0]。
+
+所以“每次加一个 MSS”这句话本身并不错，它是**每个 ACK 的增量**。你错在把它当成了**每个 RTT 的增量**。差一个层级：ACK 级 vs RTT 级。这也正是为什么“每 RTT 只加一”读起来很像慢启动，实际上更接近拥塞避免的线性增长[资料《s5-slow-start.md》#2]。而“慢”这个命名来源，是起点小、需要时间爬升，不是增长速度慢[资料《s5-slow-start.md》#1]。
+
+## 一处记录内部的不一致
+
+需要说明：你最新的快照里，这条「把慢启动的增长方式理解为线性递增」仍被标为**当前存在**的误区；而你自己给出的说法、以及本轮这句话，都已经是“指数增长”。两者并存，记录里没有说明原因，我也无法确认哪一边更贴近你此刻的实际状态。
+
+另有一条较早的学习状态记录，说你曾把它理解为“线性加一”，并希望在复盘时看到当时的原话和纠正过程。那是历史记录，与当前快照不完全一致；本次你确实要了原话，上面已经给出。
+
+想继续的话，可以接着看你卡住的那一格：指数增长在什么条件下停下、切换点由谁决定。
+```
+
+**最终交付回答**（与重生成回答不同，产品判为仍有问题后使用确定性回退）：
+
+```text
+我只能按当前记录复述可以核对的部分，不推断记录之外的经过。
+
+**TCP 慢启动**
+- 当前状态：部分理解
+- 当前仍存在的误区：曾把慢启动的增长方式理解为线性递增
+- 记录中的错误理解：「曾把慢启动的增长方式理解为线性递增」
+- 可以核对的记录（按时间）：
+  - 2026-11-09 23:05 ｜ [部分正确/用户解释] ｜ 来源：消息 ｜ 原记录：「【S5-E】用户把“慢启动”误解为线性增长，已纠正为指数增长。」
+
+这些记录能说明你的表述发生过哪些变化；但记录没有写你为什么改变看法，也没有记录是否借助过外部提示或资料，这两点无法确认。
+```
+
+#### S5-C-1
+
+| 项目 | 首次调用 | 重生成调用 |
+|---|---|---|
+| systemSha256 | ad44d0f30dd068d384e64b830551b778eba1d46bf6dd82e782db2a7272a502fb | 2ab53a32a3c6796a2795a69b39bb5293dc485b6aed2e90232a41ad32479b2d59 |
+| chars | 4914 | 5060 |
+| promptTokens | 2897 | 2985 |
+
+**产品 trace 恢复的触发明细**（隔离 temp 的 agent.log）：
+
+| kind | excerpt | reason |
+|---|---|---|
+| partial_upgrade | 答错 | 记录只判定为部分正确，不能改写成答错 |
+
+- `regenerated=True`，`remainingIssues=[{'kind': 'partial_upgrade', 'excerpt': '完全答对', 'reason': '记录里没有完全答对的证据'}, {'kind': 'partial_upgrade', 'excerpt': '答错', 'reason': '记录只判定为部分正确，不能改写成答错'}]`，`regenerationError=None`，`fallback=True`，`evidenceCount=1`。
+- Manifest 中注入的 history：history:1,history:2
+
+首次回答（HISTORY_GUARD 校验前，未推送）：
+
+```text
+先把你当时的原话摆出来，这两句是可核对的：
+
+- 本轮你自己说的：「我原来以为慢启动慢是因为它每次只把窗口加一。」
+- 记录里你更早的说法：「我原以为慢启动增长很慢，后来明白是起点小、呈指数增长。」
+
+## 错在哪一步
+
+你的推理分叉点在**对“慢”这个词的归因**：你把“慢”归到了增长方式上——每次只加一，所以慢。真正错的是这一步：慢启动的“慢”说的是起点小（cwnd 从 1 个 MSS 开始），不是每个 RTT 的增长幅度小。
+
+顺带说，“每个 RTT 只加一”这个描述本身并不荒谬，它只是被安到了错误的阶段：那种线性增长更接近**拥塞避免**的行为，而不是慢启动 [资料《s5-slow-start.md》#2]。慢启动阶段是每收到一个 ACK 就把 cwnd 加一个 MSS，因此每个 RTT 大约翻倍 [资料《s5-slow-start.md》#0]。所以你把两条曲线接错了位置，不是把“慢”这个字理解错了。
+
+记录里对当时那次表述的标注是“部分正确”，不是完全答错：起点小、需要时间爬升这层意思你抓到了，错的是增长曲线那一层。后来这个误区被纠正为“指数增长”，你现在的说法里也已经是“起点小、呈指数增长”这一版了。
+
+## 记录里没有的部分
+
+关于那次纠正是怎么发生的——是看了资料、被人指出，还是你自己重新推的——记录里没有写，我不替它编。同样，你当时为什么把“慢”直接对应到“加一”，记录里也只能看到这个说法本身，看不到背后的理由。
+
+如果你想把这一条彻底钉住，可以自己回答一句：cwnd 从 1 开始，收到第 1 个 ACK 后是多少、第 2 个 ACK 后是多少？答得出来，这条曲线就不会再滑回线性了——而这条曲线的终点，正好就是你这次要解决的“什么时候停”。
+```
+
+重生成回答（若未被回退，则为最终交付）：
+
+```text
+## 当时的原话
+
+可核对的有两处：
+
+- 本轮你的说法：「我原来以为慢启动慢是因为它每次只把窗口加一。」
+- 2026-11-09 23:05 留下的那条解释：「我原以为慢启动增长很慢，后来明白是起点小、呈指数增长。」
+
+同一时间点还有一条证据，内容只有一句概括：「用户把'慢启动'误解为线性增长，已纠正为指数增长。」它被标注为**部分正确**——是部分正确，不是答错，也不是完全答对。
+
+## 错在哪一步
+
+分叉点在**增长曲线**这一步：你的理解是「每个 RTT 窗口加一」，而慢启动实际上是每收到一个 ACK 就加一个 MSS，于是每个 RTT 大约翻倍。按资料的说法，把慢启动理解成「每个 RTT 只加一」是常见误解，那种线性增长更接近拥塞避免阶段的行为[资料《s5-slow-start.md》#2]。
+
+有意思的是，你对「慢」这个字的归因方向是对的：慢启动的「慢」指的是起点小、需要时间爬升，不是增长速度慢[资料《s5-slow-start.md》#1]。「加一」这个细节，才是模型跑偏的地方。
+
+## 纠正过程能确认到哪
+
+记录里只有证据条目写着「已纠正为指数增长」，没有留下当时是通过什么方式纠正的——是别人讲的、自己查的，还是对着资料改的，记录里看不出，我无法确认。时间上能确认的只是：2026-11-09 23:05 的两个版本快照都还挂着「曾把慢启动的增长方式理解为线性递增」这一条，而当前理解已经写成「起点小、呈指数增长」。
+
+## 现在的状态
+
+你现在掌握的是：慢启动从 cwnd=1 开始、慢启动阶段指数增长。误区条目用的是「曾」——描述的是过去那个理解，而不再是现在的说法。
+
+真正还没确定的是另一步：**指数增长什么时候停**。每收到一个 ACK 就加一个 MSS，这不可能无限进行下去，停止条件就是 ssthresh。这一步要不要现在就展开？
+```
+
+**最终交付回答**（与重生成回答不同，产品判为仍有问题后使用确定性回退）：
+
+```text
+我只能按当前记录复述可以核对的部分，不推断记录之外的经过。
+
+**TCP 慢启动**
+- 当前状态：部分理解
+- 当前仍存在的误区：曾把慢启动的增长方式理解为线性递增
+- 记录中的错误理解：「曾把慢启动的增长方式理解为线性递增」
+- 可以核对的记录（按时间）：
+  - 2026-11-09 23:05 ｜ [部分正确/用户解释] ｜ 来源：消息 ｜ 原记录：「【S5-E】用户把“慢启动”误解为线性增长，已纠正为指数增长。」
+
+这些记录能说明你的表述发生过哪些变化；但记录没有写你为什么改变看法，也没有记录是否借助过外部提示或资料，这两点无法确认。
+```
+
+#### S5-C-2
+
+| 项目 | 首次调用 | 重生成调用 |
+|---|---|---|
+| systemSha256 | ad44d0f30dd068d384e64b830551b778eba1d46bf6dd82e782db2a7272a502fb | 2ab53a32a3c6796a2795a69b39bb5293dc485b6aed2e90232a41ad32479b2d59 |
+| chars | 4914 | 5060 |
+| promptTokens | 2897 | 2985 |
+
+**产品 trace 恢复的触发明细**（隔离 temp 的 agent.log）：
+
+| kind | excerpt | reason |
+|---|---|---|
+| partial_upgrade | 答错 | 记录只判定为部分正确，不能改写成答错 |
+
+- `regenerated=True`，`remainingIssues=[]`，`regenerationError=None`，`fallback=False`，`evidenceCount=1`。
+- Manifest 中注入的 history：history:1,history:2
+
+首次回答（HISTORY_GUARD 校验前，未推送）：
+
+```text
+## 你当时说的原话
+
+最直接的一句是你自己给出的说法：
+
+> 「我原以为慢启动增长很慢，后来明白是起点小、呈指数增长。」
+
+另一处是你用更具体的方式描述了同一个误解：
+
+> 「我原来以为慢启动慢是因为它每次只把窗口加一。」
+
+这两句说的其实是一件事：你把“慢启动”这个名字里的“慢”，当成了对**增长速度**的描述。
+
+## 错在哪一步
+
+分叉点就在这个名字上。你当时这样推理：既然叫“慢”，那应该是每个 RTT 只增加一点；而“一点”最自然的量化方式就是加一。这个推理本身很顺，只是用错了线索，因为“慢启动”里的“慢”形容的是**起点很小、需要时间爬升**，而不是增长速度慢 [资料《s5-slow-start.md》#1]。
+
+而“每个 RTT 只加一”实际上更接近**进入拥塞避免之后**的行为，也就是说，你在描述的是另一个阶段 [资料《s5-slow-start.md》#2]。真正的慢启动是每收到一个 ACK，cwnd 就增加一个 MSS，因此每个 RTT 大约翻倍 [资料《s5-slow-start.md》#0]。所以正确的图景是：起点很小（cwnd 从 1 个 MSS 开始）加上增长很快（每 RTT 翻倍）。你觉得它“慢”，是因为把起点小这个特征错误地合并进了增长曲线的斜率里。
+
+## 记录上怎么标的
+
+- 那条当时的解释被标为**部分正确**，并没有被写成“答错”，但记录里没有说明具体哪一部分算对，也看不出纠正是怎么发生的：是你自己对照资料改的，还是别的原因，记录里都没有写。
+- “线性加一”这个说法更早的时候也被记过，后来你留下的说法是“起点小、呈指数增长”。这两份记录的写法不同，我保留原样，不替它们统一。
+- 还有一个细节：那条早期的误会现在仍然列在待纠正项里，但同一条记录也写了你现在已经把它理解成指数增长。两处同时存在，我只能如实告诉你，不去推测原因。
+
+对你这段学习来说，这件事剩下的实际影响不在“指数还是线性”本身，而在你的阶段目标上，也就是什么时候停止指数增长。你当时把两个阶段混在一起，这正是切换点容易含糊的地方；要不要现在就从这里往下讲？
+```
+
+重生成回答（若未被回退，则为最终交付）：
+
+```text
+## 你当时的原话
+
+本轮你自己说：
+
+> 我原来以为慢启动慢是因为它每次只把窗口加一。
+
+记录里保存的另外一句是：
+
+> 我原以为慢启动增长很慢，后来明白是起点小、呈指数增长。
+
+2026-11-09 23:05 有一条来自你消息的记录，标注为「部分正确」，原文是：
+
+> 用户把“慢启动”误解为线性增长，已纠正为指数增长。
+
+## 错在哪一步
+
+分叉点在**对“慢”这个字的理解**上。你当时把它读成了「每次加得很少」，于是自然推出每个往返窗口只加一个 MSS，也就是线性递增。而慢启动的“慢”说的是起点很小（从 1 个 MSS 开始爬升），增长本身是每收到一个 ACK 就加一个 MSS，因此大约每个 RTT 翻倍。
+
+顺带一句：把慢启动理解成「每个 RTT 只加一」是一个有名字的常见误解，那种行为更接近进入拥塞避免之后的线性增长[资料《s5-slow-start.md》#2]。这只是说明这个误解很常见，不构成你当时为什么这么想的证据。
+
+## 记录里看不出来的部分
+
+- 你是在什么场合、因为什么改变看法的：记录里没有写，无法确认。
+- 纠正的具体过程（谁说的、看到了什么材料、有没有借助外部资料）：只有「已纠正为指数增长」这一条标注，中间的对话细节无法确认。
+- 记录里两次状态快照的时间都是 2026-11-09 23:05，都把「把慢启动的增长方式理解为线性递增」标为当时仍存在；同一份当前记录又把「慢启动阶段指数增长」列进了你已经理解的范围。这两条并存，记录本身没有说明哪一条更贴近你眼下，这一点只能由你自己确认。
+
+如果你愿意，可以说一句现在怎么看「慢启动为什么叫慢」，我据此判断还要不要往 ssthresh 那边讲。
+```
+
+- 说明：`HISTORY_GUARD` 的 issue 明细只写入进程内 trace；本报告按 runId 从隔离 temp 的 `agent.log` 恢复。首答/重生成全文只存于隔离 temp，不写回业务库。
+
+### 12.6 缺陷登记
+
+两条缺陷已登记到 `docs/testing/phase5-known-issues.md`：
+
+1. **模型历史使用不稳定**：上一批 S5-C-2 声称「第一次表述的原文没有被保存下来」，但 Manifest 确认 `history:1`、`history:2` 已注入。影响：Phase 5 要回答「模型是否真的理解上下文」，这是反例；建议后续全量统计此类声明与 Manifest 的矛盾次数。本批未复现该声明。
+2. **HISTORY_GUARD partial_upgrade 否定语境误判**：本批 S5-B-3 / S5-C-1 / S5-C-2 的首答或重生成回答在否定/对比语境中出现「完全正确」「答错」「完全答对」等短语，被 `partial_upgrade` 按字面命中；S5-B-3 与 S5-C-1 两次重生成后仍有命中，产品回退为不含原句的确定性文本。影响：合法回答被误判并重写，重写失败时最终交付丢失用户要求的原句证据，增加延迟与 token。建议产品侧增加否定语境识别；本批只登记不修。
+
+### 12.7 成本记录
+
+| 项目 | 数值 |
+|---|---|
+| 对话调用次数（记录） | 6 |
+| 模型实际调用次数（含守卫重生成） | 9 |
+| 触发守卫的对话数 | 3 |
+| LLM 预算 | 6（+守卫余量 2，共 8） |
+| LLM 预算核对 | FAIL（超出） |
+| prompt tokens（仅最终记录） | 17646 |
+| completion tokens（仅最终记录） | 8994 |
+| total tokens（仅最终记录） | 26640 |
+| Agent 进程内 Embedding 调用 | 12 |
+| Agent 进程内 Embedding 文本数 | 12 |
+| 单次运行 Embedding 最大值 | 2 |
+| Tavily 调用 | 0 |
+
+- 预算核对：对话记录 6 次；含守卫重生成实际调用 9 次，上限 8 次。本批实际调用超出预算 1 次，原因是 3 次 HISTORY_GUARD 重生成（其中 2 次最终回退）。该超支如实记录，不通过删减运行掩盖。
+- Agent Embedding 12 次（上限 12，按每场景 6 次计）；Tavily 0。
+- setup 阶段 10 份文档的索引 Embedding 由 Spring 侧发起，不属于每次对话的 Agent 预算。
+
+### 12.8 冻结与清理
+
+| 检查 | 结果 | 说明 |
+|---|---|---|
+| MySQL 全局冻结 | PASS | 无漂移 |
+| Qdrant 文档 + Memory | PASS | 无漂移 |
+| 默认 Memory collection | PASS | 未读写 |
+
+| 项目 | 结果 |
+|---|---|
+| cleanup.py exitCode | 0 |
+| MySQL 库残留 | 0 |
+| Qdrant 残留 | [] |
+| RabbitMQ 队列残留 | [] |
+| RabbitMQ 交换机残留 | [] |
+| 仍开放的端口 | [] |
+| 独立残留检查 | PASS |
+
+### 12.9 Phase 5 Step 3 最终结论
+
+- 失败组合：['S5-B', 'S5-C']；**Phase 5 Step 3 最终结论：FAIL。**
+- S5-A：PASS（沿用上一批结果，本批未重跑）。
+- S5-B：FAIL；citation：存在空 citation 且未引用历史原句：S5-B-3; S5-B-3：S5 回答不含原句内容或等价语义
+- S5-C：FAIL；citation：存在空 citation 且未引用历史原句：S5-C-1; S5-C-1：S5 回答不含原句内容或等价语义
+- 剩余失败项性质：
+  - S5-B-3：**系统缺陷**。模型首答与重生成回答都包含原句，但产品侧 `HISTORY_GUARD partial_upgrade` 在否定/对比语境中按字面命中「完全正确」「答错」，两次校验后仍判有问题，最终回退为不含原句的确定性文本；因此最终交付回答缺原句、citation 为空。
+  - S5-C-1：**系统缺陷**。与 S5-B-3 同因：首答命中「答错」、重生成命中「完全答对」「答错」，最终回退，最终交付回答缺原句。
+  - 本批没有判据问题导致的失败；没有 Memory DEGRADED 导致的环境失败。
+- 必须附带的观测项（不作为 Step 3 判据，但必须记录）：
+  1. **模型历史使用不稳定**：上一批 S5-C-2 声称历史原句没有被保存，而 Manifest 确认 history 已注入；本批未复现，但该反例仍成立，建议后续全量统计此类声明与 Manifest 的矛盾次数。
+  2. **HISTORY_GUARD 否定语境误判**：本批 3 次触发（S5-B-3、S5-C-1、S5-C-2），其中 S5-B-3 与 S5-C-1 回退；误判直接导致合法回答被重写并丢失原句证据。
+
+### 12.10 90 次全量补记声明
+
+- 90 次全量的 HISTORY_GUARD 触发次数与 Memory DEGRADED 次数均未知：原批次结果 JSON 未记录 `historyGuardTriggered` 与 `memoryDegraded`，原隔离库已按 cleanup 清理，无法回溯。本报告不做回溯推测；下一批全量实验必须记录 `historyGuardTriggered` 与 `memoryDegraded`。
+
+### 12.11 工作区状态
+
+| 项目 | 值 |
+|---|---|
+| branch | main |
+| HEAD | 648fc6aa66fbfd85d9f7447d8e0256793739f6c2 |
+| HEAD subject | test(phase5): S5 数据重设计、HISTORY_GUARD 判据调整与 S5-ABC 重跑 |
+| 工作区状态 | M docs/testing/phase5-abc-rerun.md  M scripts/phase5/full/full_common.py  M scripts/phase5/full/run_s5_rerun.py ?? docs/testing/phase5-known-issues.md |
+| 是否 commit | 否（本批次未执行 git commit） |
+| 是否 push | 否（本批次未执行 git push） |
+
+### 12.12 需要人工审核的决策点
+
+1. **S5 citation 判据**：本批确认「不必须引用知识文档」，改为「citation 非空或引用历史原句」。需确认这是最终口径。
+2. **memoryDegraded 豁免范围**：只豁免 contextHash / systemSha256 / systemChars / promptTokens；manifestSha256 始终不豁免。若 Memory DEGRADED 同时改变 Manifest（本期确实会追加 `memory-status:DEGRADED` 来源），S5-C 仍会因 manifestSha256 不一致判 FAIL。需确认这是否符合预期；若希望降级运行也 PASS，需要重新定义 Manifest 一致性口径。
+3. **HISTORY_GUARD 回退导致最终回答缺原句**：本批 S5-B-3 与 S5-C-1 最终交付是确定性回退文本，不含用户要求的原句。是否允许守卫回退覆盖用户显式要求的历史证据，需要产品侧决策；本批按现行失败判据记 FAIL。
+4. **HISTORY_GUARD 否定语境误判**：3 次触发均为「不是……也不是……」或「而不是……」语境下的字面命中。建议产品侧增加否定/对比语境识别；本批只登记不修。
+5. **模型历史使用不稳定观测项**：上一批 S5-C-2 的反例仍成立；需确认后续是否在全量实验中统计「声称历史不存在」与 Manifest 的矛盾次数。
+6. **LLM 预算超支**：本批实际调用 9 次，超出「6 + 守卫余量 2 = 8」1 次。超支来自 3 次守卫重生成；如实记录，未删减运行。
+7. **S5-A 未重跑**：S5-A 沿用上一批 PASS；若要求本批所有组合同快照重跑，需要追加 3 次调用。
+8. **90 次全量观测缺口**：原批次未记录 historyGuardTriggered / memoryDegraded，原隔离库已清理，无法回溯；下一批全量必须补记。
+
+
+## 13. HISTORY_GUARD 否定语境修复与 S5-B/C 重跑（Batch 4）
+
+- 追加时间：2026-11-09T23:31:43
+- 重跑快照时间：2026-11-09 23:26:05
+- 隔离库：`phase5_pilot_20261109232603_0efdae`
+- 文档 collection：`phase5-pilot-20261109232603-0efdae_text-embedding-v4_1024`
+- Memory collection：`phase5-pilot-20261109232603-0efdae-memory_text-embedding-v4_1024`
+- 重跑范围：S5-B / S5-C 各 3 次，共 6 次对话；记录到 6 次。S5-A 沿用 Batch 3 的 PASS，不重跑。
+- 生成参数指纹：`2e1405ed23bbe132b96b018c7e79d190321e43ff5ffb5c5108e99bee47edb5f6`；model=`deepseek-flash`，temperature=`0`。
+
+### 13.1 HISTORY_GUARD partial_upgrade 否定语境修复
+
+**缺陷（KI-2）**：`partial_upgrade` 按字面匹配「完全正确」「完全答对」「答错」，没有识别否定 / 对比语境，把「不是完全答错，也不是完全答对」判成升级断言并触发重生成；重生成仍被误判时回退为确定性文本，覆盖掉用户显式要求引用的历史原句。
+
+**识别模式**（只作用于 `partial_upgrade`）：
+
+| 模式 | 规则 | 示例 |
+|---|---|---|
+| 短语前否定词 | 短语前 12 个字符内最近的标记是否定词（不是 / 而不是 / 并非 / 并没有 / 也不算 …）时跳过该短语 | 「不是完全答错」「而不是完全正确」「并没有被写成『答错』」 |
+| 并列否定结构 | 短语位于「不是 …… 也不是 ……」结构中，或紧跟第二个否定词之后时跳过 | 「既不是完全答对也不是完全答错」 |
+| 肯定对比 | 最近标记是「而是」时仍按肯定判断处理，不因前面的「不是」放行 | 「不是答错，而是完全答对」→「完全答对」仍触发 |
+
+- 判定函数：`agent/app/history_guard.py` 的 `_phrase_in_negated_context` / `_in_parallel_negation`；观测函数 `partial_upgrade_negation_skips`。
+- 其他 issue kind（`internal_process` / `external_absence` / `record_completeness` / `missing_source_mapping` / `no_history_*`）的匹配逻辑未修改。
+
+**测试结果**：`agent/tests/test_history_guard.py` + `agent/tests/test_history_guard_runtime.py` 共 32 passed。新增 / 覆盖用例：
+
+| 用例 | 预期 | 结果 |
+|---|---|---|
+| 「不是完全答错」 | 不触发 partial_upgrade | PASS |
+| 「而不是完全正确」 | 不触发 partial_upgrade | PASS |
+| 「并没有被写成『答错』」 | 不触发 partial_upgrade | PASS |
+| 「既不是完全答对也不是完全答错」 | 不触发 partial_upgrade | PASS |
+| 「这是完全答对」 | 仍触发 partial_upgrade | PASS |
+| 「这是答错」 | 仍触发 partial_upgrade | PASS |
+| 「不是答错，而是完全答对」 | 「完全答对」仍触发 | PASS |
+
+**修复过程中的一次真实误判（已归档）**：修复后第一次运行 S5-B-1 时，首答包含「这条标注只说明当时部分正确，并不表示全部答对。」，`partial_upgrade` 仍命中「全部答对」，原因是「并不表示」当时尚未列入否定标记表。补齐标记（`并不表示 / 并不代表 / 并不等于 / 并不完全 / 不表示 / 不代表 / 不等于 / 绝非`）并新增「并不表示全部答对」「并不等于答错」两条回归用例后，将该次运行记录归档到隔离 temp 的 `s5-b1-attempt1.json`、从结果集移除并单独重跑。本报告 13.5 中的 S5-B-1 为重跑后的 run 13。归档运行不计入 6 条最终记录，但其 LLM / Embedding 调用已计入 13.9 的实际成本补记。
+
+### 13.2 回退保护（方案 A）
+
+**选择方案 A**：回退前检查首答是否包含可核对的历史原句；包含时保留首答中的引用段并拼接确定性回退文本。
+
+理由：用户显式要求引用原话时，原句本身就是可核对事实，不应被系统静默覆盖；方案 B 只记录不覆盖，用户仍拿不到要求的原句，不满足「回退不得覆盖用户显式要求的历史原句」这一产品要求。
+
+| 项目 | 实现 |
+|---|---|
+| 触发条件 | 问题中出现「引用 / 复述 / 原话 / 原文 / 原句」，且首答里存在与历史用户消息或本轮记录逐字一致的原句 |
+| 保留内容 | 首答中的引号引用段（「……」/『……』/“……”）；若模型未加引号，则用记录原句重建引用 |
+| 不回退的内容 | 同句中的其他断言不随引用带回；回退正文仍只复述可核对事实 |
+| 实际改动 | `history_guard.build_history_fallback(state, first_answer=...)`；`runtime._generate_history_review` 传入首答全文（仅回退路径） |
+
+- 回归测试：`test_fallback_preserves_quote_the_user_explicitly_requested`、`test_fallback_does_not_preserve_quote_without_explicit_request`、`test_fallback_does_not_preserve_an_unrecorded_sentence`、`test_fallback_keeps_the_quote_the_user_asked_for`（Runtime 全链路）。
+
+### 13.3 S5 citation 判据（沿用 Batch 3 口径）
+
+S5 复盘问题不必须引用知识文档：每次 repeat 满足「citation 非空」或「回答引用历史原句」之一即可；非空 citation 仍须可溯源并落在本场景同一文档。判定函数 `full_common.citation_consistency_check`（`allow_history_quote=True`）。
+
+### 13.4 S5-C memoryDegraded 豁免（沿用 Batch 3 口径）
+
+`memoryDegraded=true` 时豁免 `contextHash` / `systemSha256` / `systemChars` / `promptTokens` 的一致性检查，但必须记录 `memoryDegraded` 与 `memoryDegradedSource`；`manifestSha256` 始终不豁免。
+
+### 13.5 S5-B/C 逐次结果
+
+| key | run_id | 守卫触发 | 否定语境跳过次数 | 回退/保留原句 | 降级 | 降级来源 | LLM 调用数 | finish | prompt/completion/total | citation 集合 | Context Hash(12) | System Hash(12) | Manifest(12) | Manifest 关键来源 | 历史原句（最终交付） |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| S5-B-1 | 13 | 否 | 0 | 否 | 否 | - | 1 | stop | 2897/1210/4107 | [[5,13],[5,14],[5,15]] | a8be6342bad4 | 5bd83abc0860 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 | 命中 |
+| S5-B-2 | 3 | 否 | 0 | 否 | 否 | - | 1 | stop | 2897/1319/4216 | [[5,13],[5,14],[5,15]] | a8be6342bad4 | 5bd83abc0860 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 | 未命中 |
+| S5-B-3 | 5 | 否 | 0 | 否 | 否 | - | 1 | stop | 2897/1759/4656 | [[5,13],[5,14],[5,15]] | a8be6342bad4 | 5bd83abc0860 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 | 命中 |
+| S5-C-1 | 7 | 否 | 0 | 否 | 否 | - | 1 | stop | 2897/2087/4984 | [[5,13],[5,14],[5,15]] | a8be6342bad4 | 5bd83abc0860 | 0baf3d0e0b07 | history:1,history:2,revision:6,evidence:5,revision:7 | 命中 |
+| S5-C-2 | 9 | 否 | 0 | 否 | 否 | - | 1 | stop | 2897/1593/4490 | [[5,13],[5,15]] | a8be6342bad4 | 5bd83abc0860 | 0baf3d0e0b07 | history:1,history:2,revision:6,evidence:5,revision:7 | 命中 |
+| S5-C-3 | 11 | 否 | 0 | 否 | 否 | - | 1 | stop | 2897/1496/4393 | [[5,14],[5,15]] | a8be6342bad4 | 5bd83abc0860 | 0baf3d0e0b07 | history:1,history:2,revision:6,evidence:5,revision:7 | 命中 |
+
+- 「历史原句」列匹配的是最终交付回答（`answerFull`），不是模型首答。S5-B/C 的正向判据是「任一次最终回答必须含原句内容或等价语义」。
+
+### 13.6 逐组合判定
+
+| 场景-策略 | 总判定 | citation | 历史使用 | Manifest revision/evidence | Hash（守卫/降级豁免后） | 被豁免的 run | 失败项 |
+|---|---|---|---|---|---|---|---|
+| S5-B | FAIL | PASS | FAIL | -（本策略不要求） | PASS | 无 | S5-B-2：S5 回答不含原句内容或等价语义 |
+| S5-C | PASS | PASS | PASS | PASS | PASS | 无 | - |
+
+**逐次历史使用判据明细**：
+
+| key | 判据命中 | 原句连续子串 | 关键词 | 结果 |
+|---|---|---|---|---|
+| S5-B-1 | 命中 | 是 | 慢启动=Y,每次只=Y,加一=Y | PASS |
+| S5-B-2 | 未命中 | 否 | 慢启动=Y,每次只=N,加一=Y | FAIL |
+| S5-B-3 | 命中 | 是 | 慢启动=Y,每次只=Y,加一=Y | PASS |
+| S5-C-1 | 命中 | 是 | 慢启动=Y,每次只=Y,加一=Y | PASS |
+| S5-C-2 | 命中 | 是 | 慢启动=Y,每次只=Y,加一=Y | PASS |
+| S5-C-3 | 命中 | 是 | 慢启动=Y,每次只=Y,加一=Y | PASS |
+
+**S5-B-2 失败分析**：最终回答引用了 Understanding 侧的解释「我原以为慢启动增长很慢，后来明白是起点小、呈指数增长」，并用「每个 RTT 只加一」表述，但没有包含注入的历史原句「我原来以为慢启动慢是因为它每次只把窗口加一」，也缺少关键词「每次只」。该次 Manifest 已包含 `history:1`、`history:2`，`HISTORY_GUARD` 未触发，回答是模型直接生成。因此这是模型历史使用不稳定（KI-1 同类观测），不是 HISTORY_GUARD 缺陷；按失败判据保留 FAIL，未重跑挑选结果。
+
+**Citation 逐组合明细**：
+
+| 场景-策略 | citation 集合（按 rep） | 平均覆盖率 | 历史原句 | 结论 |
+|---|---|---|---|---|
+| S5-B | [[[5,13],[5,14],[5,15]],[[5,13],[5,14],[5,15]],[[5,13],[5,14],[5,15]]] | 1.000 | S5-B-1=是,S5-B-2=否,S5-B-3=是 | PASS |
+| S5-C | [[[5,13],[5,14],[5,15]],[[5,13],[5,15]],[[5,14],[5,15]]] | 0.778 | S5-C-1=是,S5-C-2=是,S5-C-3=是 | PASS |
+
+**S5-C Manifest revision / evidence**：
+
+| key | revision 来源 | evidence 来源 | 结果 |
+|---|---|---|---|
+| S5-C-1 | revision:6,revision:7 | evidence:5 | PASS |
+| S5-C-2 | revision:6,revision:7 | evidence:5 | PASS |
+| S5-C-3 | revision:6,revision:7 | evidence:5 | PASS |
+
+**Hash 逐字段豁免说明**：
+
+无守卫触发或降级，无豁免。
+
+### 13.7 HISTORY_GUARD / 降级逐条记录
+
+- 本批 6 次重跑均未触发 HISTORY_GUARD，也未出现 Memory DEGRADED。
+- 说明：`HISTORY_GUARD` 的 issue 明细只写入进程内 trace；本报告按 runId 从隔离 temp 的 `agent.log` 恢复。首答/重生成全文只存于隔离 temp，不写回业务库。
+
+### 13.8 缺陷登记更新
+
+两条缺陷登记在 `docs/testing/phase5-known-issues.md`，本批状态如下：
+
+1. **KI-1 模型历史使用不稳定**：开放，观测中。上一批 S5-C-2 声称「第一次表述的原文没有被保存下来」，但 Manifest 确认 `history:1`、`history:2` 已注入。本批未复现该声明；后续全量实验继续统计此类声明与 Manifest 的矛盾次数。
+2. **KI-2 HISTORY_GUARD partial_upgrade 否定语境误判**：**已修复**。`partial_upgrade` 匹配前增加否定 / 对比语境识别；回退增加原句保护。回归测试通过；本批 S5-B/C 重跑用于验证修复效果。剩余风险：否定识别是规则匹配，极端句式仍可能漏判，由`partialUpgradeNegationSkipped` 观测项与人工复核兜底。
+
+### 13.9 成本记录
+
+| 项目 | 数值 |
+|---|---|
+| 对话调用次数（记录） | 6 |
+| 模型实际调用次数（含守卫重生成） | 6 |
+| 触发守卫的对话数 | 0 |
+| LLM 预算 | 6（+守卫余量 2，共 8） |
+| LLM 预算核对 | PASS |
+| prompt tokens（仅最终记录） | 17382 |
+| completion tokens（仅最终记录） | 9464 |
+| total tokens（仅最终记录） | 26846 |
+| Agent 进程内 Embedding 调用 | 12 |
+| Agent 进程内 Embedding 文本数 | 12 |
+| 单次运行 Embedding 最大值 | 2 |
+| Tavily 调用 | 0 |
+
+- 预算核对：对话记录 6 次；含守卫重生成实际调用 6 次，上限 8 次；未超出预算。
+- Agent Embedding 12 次（上限 12，按每场景 6 次计）；Tavily 0。
+- setup 阶段 10 份文档的索引 Embedding 由 Spring 侧发起，不属于每次对话的 Agent 预算。
+
+**实际成本补记（含归档运行与重跑，不隐藏）**：
+
+- 第一轮：S5-B-1 首答 + 守卫重生成（2 次），其余 5 次各 1 次，共 7 次 LLM；
+- 第二轮：仅重跑 S5-B-1，1 次 LLM；
+- 合计 LLM 8 次，恰好等于「6 + 守卫余量 2 = 8」上限，未超出。13.9 表格中的「模型实际调用 6 次」只统计最终 6 条记录，不含归档的第一轮。
+- Embedding：第一轮 6 次 × 2 = 12 次；重跑 S5-B-1 新增 2 次；合计 14 次，超出「Embedding ≤ 12」预算 2 次。原因是修复前第一次 S5-B-1 运行被否定语境误判、需归档后重跑；该超支如实披露。
+- Tavily 0 次不变。
+
+### 13.10 冻结与清理
+
+| 检查 | 结果 | 说明 |
+|---|---|---|
+| MySQL 全局冻结 | PASS | 无漂移 |
+| Qdrant 文档 + Memory | PASS | 无漂移 |
+| 默认 Memory collection | PASS | 未读写 |
+
+| 项目 | 结果 |
+|---|---|
+| cleanup.py exitCode | 0 |
+| MySQL 库残留 | 0 |
+| Qdrant 残留 | [] |
+| RabbitMQ 队列残留 | [] |
+| RabbitMQ 交换机残留 | [] |
+| 仍开放的端口 | [] |
+| 独立残留检查 | PASS |
+
+### 13.11 Phase 5 Step 3 最终结论
+
+- 失败组合：['S5-B']；**Phase 5 Step 3 最终结论：FAIL。**
+- S5-A：PASS（沿用 Batch 3 结果，本批未重跑）。
+- S5-B：FAIL；S5-B-2：S5 回答不含原句内容或等价语义
+- S5-C：PASS；无失败项
+- **结论口径**：本批 FAIL 仅由 S5-B-2 的模型历史使用不稳定造成；HISTORY_GUARD 否定语境修复与回退保护本身通过验证——6 次最终运行 0 次触发守卫、0 次否定语境误判，32 条相关回归测试全部通过。
+- 必须附带的观测项（不作为 Step 3 判据，但必须记录）：
+  1. **KI-1 模型历史使用不稳定**：上一批 S5-C-2 的反例仍成立；后续全量继续统计「声称历史不存在」与 Manifest 的矛盾次数。
+  2. **KI-2 否定语境识别**：规则匹配只能覆盖已列举的句式；守卫若仍触发，逐条看 13.7 的首答 / 重生成 / 回退全文。
+
+### 13.12 90 次全量补记声明
+
+- 90 次全量的 HISTORY_GUARD 触发次数与 Memory DEGRADED 次数均未知：原批次结果 JSON 未记录 `historyGuardTriggered` 与 `memoryDegraded`，原隔离库已按 cleanup 清理，无法回溯。本报告不做回溯推测；下一批全量实验必须记录 `historyGuardTriggered` 与 `memoryDegraded`。
+
+### 13.13 工作区状态
+
+| 项目 | 值 |
+|---|---|
+| branch | main |
+| HEAD | 648fc6aa66fbfd85d9f7447d8e0256793739f6c2 |
+| HEAD subject | test(phase5): S5 数据重设计、HISTORY_GUARD 判据调整与 S5-ABC 重跑 |
+| 工作区状态 | M agent/app/history_guard.py  M agent/app/runtime.py  M agent/tests/test_history_guard.py  M agent/tests/test_history_guard_runtime.py  M docs/testing/phase5-abc-rerun.md  M scripts/phase5/full/full_common.py  M scripts/phase5/full/run_s5_rerun.py ?? docs/testing/phase5-known-issues.md |
+| 是否 commit | 否（本批次未执行 git commit） |
+| 是否 push | 否（本批次未执行 git push） |
+
+### 13.14 需要人工审核的决策点
+
+1. **回退保护改动触及 `runtime.py`**：任务边界写的是「不修改 Runtime」，但回退发生在 Runtime 的 `_generate_history_review`；本次只改了一行调用（把首答传给 `build_history_fallback`），回退逻辑本身在 `history_guard.py`。需人工确认这属于「HISTORY_GUARD 回退保护」的允许范围。
+2. **回退保留的粒度**：优先保留首答中带引号的引用段；模型没加引号时用记录原句重建引用。若业务要求逐字保留首答整句（即使同句含其他断言），需要另行调整。
+3. **否定语境识别是规则匹配**：只覆盖「前 12 字符否定词 / 并列否定 / 肯定对比」三类显式句式；更复杂的反讽、双重否定可能漏判。`partialUpgradeNegationSkipped` 只做观测，不参与判定。
+4. **S5 citation 判据**：沿用 Batch 3「不必须引用知识文档」口径，需确认仍是最终口径。
+5. **memoryDegraded 豁免范围**：只豁免 contextHash / systemSha256 / systemChars / promptTokens；manifestSha256 始终不豁免。
+6. **KI-1 模型历史使用不稳定**：上一批 S5-C-2 的反例仍成立；需确认后续是否在全量实验中统计矛盾次数。
+7. **S5-A 未重跑**：沿用 Batch 3 的 PASS；若要求本批所有组合同快照重跑，需要追加 3 次调用。
+8. **90 次全量观测缺口**：原批次未记录 historyGuardTriggered / memoryDegraded，原隔离库已清理，无法回溯；下一批全量必须补记。
+

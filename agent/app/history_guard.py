@@ -131,6 +131,29 @@ _ABSOLUTE_CORRECT_RE = re.compile(
 )
 _WRONG_ANSWER_RE = re.compile(r"(答错|回答错误|答错了)")
 
+# partial_upgrade 的否定 / 对比语境识别。
+#
+# 「不是完全答错，也不是完全答对」这类句子在语义上正是否认绝对判断，
+# 但字面包含「答错」「完全答对」。如果直接按字面命中，会把合法复盘
+# 判成「把部分正确升级成答错 / 完全答对」，触发无谓重生成，重生成仍
+# 被误判时还会回退掉用户显式要求引用的原句。
+#
+# 判定规则（只作用于 partial_upgrade，不影响其他 issue kind）：
+#   1. 短语前 12 个字符内最近的一个标记是否定词（不是 / 并非 / 并没有 /
+#      也不算 …），则该短语不参与判定；
+#   2. 若最近标记是肯定对比「而是」，则该短语仍按肯定判断处理；
+#   3. 「不是 …… 也不是 ……」并列否定结构内的短语同样跳过。
+_NEGATION_MARKERS_RE = re.compile(
+    r"不是|并非|并没有|并未|并不表示|并不代表|并不等于|并不完全"
+    r"|没有|不表示|不代表|不等于|也不算|不算|谈不上|不能算|称不上|绝非"
+)
+_CONTRAST_MARKERS_RE = re.compile(r"而是")
+_PARALLEL_NEGATION_RE = re.compile(
+    r"(?P<first>不是|并非)[^。！？!?\n]{0,40}(?P<second>也不是|也并非|也并不)"
+)
+_NEGATION_WINDOW = 12
+_SENTENCE_BOUNDARY_CHARS = "。！？!?\n"
+
 # 「记录没有写 / 无法确认是否借助过外部资料」是对记录状态的真实说明，
 # 不是「没有借助」的断言。它可能包含「没有……外部资料」的字面片段。
 _RECORD_UNCERTAINTY_RE = re.compile(
@@ -268,17 +291,99 @@ def retry_instruction(issues: list[HistoryIssue]) -> str:
     return "\n".join(lines)
 
 
-def build_history_fallback(state: AgentState) -> str:
+def build_history_fallback(
+    state: AgentState, *, first_answer: str | None = None
+) -> str:
     """校验仍不通过时的确定性回退：只复述记录里可核对的事实。
 
     不包含任何内部 id、证据编号或模型推断，因此它一定不会比原始回答更不可靠。
+
+    ``first_answer`` 是首答全文。用户在本轮问题里显式要求「引用当时的原话 /
+    原文」时，首答里与历史记录逐字一致的原句不能被回退文本静默覆盖：
+    这些句子本来就是可核对的事实，回退时优先保留它们，再拼接确定性文本。
+    没有显式引用要求、或首答里找不到与记录一致的句子时，行为与原来一致。
     """
+    base = _base_history_fallback(state)
+    if not first_answer or not _quote_requested(state.user_message):
+        return base
+    quote = _preserved_quote_segment(state, first_answer)
+    if not quote:
+        return base
+    return (
+        "你要求我引用当时的原话。下面先保留本次回答里与历史记录逐字一致的原句：\n\n"
+        f"{quote}\n\n"
+        "以下只复述记录里可核对的事实：\n\n"
+        f"{base}"
+    )
+
+
+def _base_history_fallback(state: AgentState) -> str:
     if state.trajectories:
         return _trajectory_fallback(state.trajectories)
     evidences = _recorded_evidences(state)
     if evidences:
         return _evidence_only_fallback(evidences)
     return _no_history_fallback(state)
+
+
+_QUOTE_REQUEST_RE = re.compile(r"引用|复述|原话|原文|原句")
+_SYNTHETIC_MARKER_RE = re.compile(r"【[^】]*】")
+_QUOTED_SEGMENT_RE = re.compile(
+    r"「[^」]{2,}」|『[^』]{2,}』|“[^”]{2,}”|\"[^\"]{2,}\""
+)
+_QUOTE_EDGE_PUNCT = "。，、；：！？!?.,;:…"
+# 太短的片段（例如单个概念名）不构成「用户要引用的一句原话」。
+_MIN_QUOTE_CHARS = 8
+
+
+def _quote_requested(question: str | None) -> bool:
+    """用户问题是否显式要求引用历史原话 / 原文。"""
+    return bool(_QUOTE_REQUEST_RE.search(question or ""))
+
+
+def _normalise_quote(text: str) -> str:
+    """引用匹配用归一化：去掉空白 / 引号与合成标记（如 【S5-HISTORY】）。"""
+    return _normalise(
+        _SYNTHETIC_MARKER_RE.sub("", text or "")
+    ).strip(_QUOTE_EDGE_PUNCT)
+
+
+def _quote_candidates(state: AgentState) -> list[str]:
+    """可以逐字引用的历史原句：历史用户消息 + 本轮可核对记录。"""
+    texts: list[str] = []
+    for message in state.history:
+        if not message.is_user():
+            continue
+        texts.extend(_sentences(message.content or ""))
+    texts.extend(_recorded_corpus(state))
+    candidates = [_normalise_quote(text) for text in texts]
+    return [item for item in candidates if len(item) >= _MIN_QUOTE_CHARS]
+
+
+def _preserved_quote_segment(state: AgentState, first_answer: str) -> str:
+    """首答中逐字引用了可核对历史原句的片段。
+
+    优先保留首答里带引号的引用段（真实回答通常写成「……」）。若模型
+    没有加引号、只是在句子里复述了记录原句，则用记录里的原句重建引用，
+    避免把同句中的其他无依据断言一起带回回退文本。
+    """
+    candidates = _quote_candidates(state)
+    if not candidates:
+        return ""
+    segments: list[str] = []
+    covered: set[str] = set()
+    for match in _QUOTED_SEGMENT_RE.finditer(first_answer):
+        span = match.group(0)
+        normalised = _normalise_quote(span)
+        matched = [item for item in candidates if item in normalised]
+        if matched:
+            segments.append(span)
+            covered.update(matched)
+    answer_normalised = _normalise_quote(first_answer)
+    for item in candidates:
+        if item not in covered and item in answer_normalised:
+            segments.append(f"「{item}」")
+    return "\n".join(dict.fromkeys(segments))
 
 
 # ---------- 检查 ----------
@@ -387,23 +492,25 @@ def _check_record_facts(state: AgentState, text: str) -> list[HistoryIssue]:
             )
 
     correctness = {evidence.correctness for evidence in evidences}
-    if _ABSOLUTE_CORRECT_RE.search(text) and EvidenceCorrectness.CORRECT not in correctness:
+    absolute_matches = _effective_partial_upgrade_matches(text, _ABSOLUTE_CORRECT_RE)
+    if absolute_matches and EvidenceCorrectness.CORRECT not in correctness:
         issues.append(
             HistoryIssue(
                 "partial_upgrade",
-                _excerpt(_ABSOLUTE_CORRECT_RE.search(text).group(0)),
+                _excerpt(absolute_matches[0].group(0)),
                 "记录里没有完全答对的证据",
             )
         )
+    wrong_matches = _effective_partial_upgrade_matches(text, _WRONG_ANSWER_RE)
     if (
-        _WRONG_ANSWER_RE.search(text)
+        wrong_matches
         and EvidenceCorrectness.INCORRECT not in correctness
         and EvidenceCorrectness.PARTIAL in correctness
     ):
         issues.append(
             HistoryIssue(
                 "partial_upgrade",
-                _excerpt(_WRONG_ANSWER_RE.search(text).group(0)),
+                _excerpt(wrong_matches[0].group(0)),
                 "记录只判定为部分正确，不能改写成答错",
             )
         )
@@ -422,6 +529,70 @@ def _check_record_facts(state: AgentState, text: str) -> list[HistoryIssue]:
             )
         )
     return issues
+
+
+def _effective_partial_upgrade_matches(
+    text: str, pattern: re.Pattern[str]
+) -> list[re.Match[str]]:
+    """返回真正构成「升级」的匹配，排除否定 / 对比语境中的字面命中。"""
+    return [
+        match
+        for match in pattern.finditer(text)
+        if not _phrase_in_negated_context(text, match.start(), match.end())
+    ]
+
+
+def _phrase_in_negated_context(text: str, start: int, end: int) -> bool:
+    """短语是否处于否定 / 对比语境。
+
+    只看同一句内、短语前 ``_NEGATION_WINDOW`` 个字符里**最近**的标记：
+    「不是 / 并非 / 并没有 / 也不算」是否定；「而是」是肯定对比。
+    这样既能识别「不是完全答错」，也不会把「不是完全答错，而是完全
+    答对」里的后半句一起放行。
+    """
+    sentence_start = 0
+    for char in _SENTENCE_BOUNDARY_CHARS:
+        sentence_start = max(sentence_start, text.rfind(char, 0, start) + 1)
+    window = text[max(sentence_start, start - _NEGATION_WINDOW) : start]
+    negation_end = max(
+        (match.end() for match in _NEGATION_MARKERS_RE.finditer(window)),
+        default=-1,
+    )
+    contrast_end = max(
+        (match.end() for match in _CONTRAST_MARKERS_RE.finditer(window)),
+        default=-1,
+    )
+    if negation_end > contrast_end:
+        return True
+    return _in_parallel_negation(text, start, end)
+
+
+def _in_parallel_negation(text: str, start: int, end: int) -> bool:
+    """短语是否位于「不是 …… 也不是 ……」并列否定结构中。"""
+    for match in _PARALLEL_NEGATION_RE.finditer(text):
+        # 两个否定词之间的部分（「不是 A，也不是 B」里的 A）。
+        if match.start() <= start < match.end():
+            return True
+        # 第二个否定词之后紧跟的并列项（B）。
+        second_end = match.end("second")
+        if second_end <= start <= second_end + _NEGATION_WINDOW:
+            return True
+    return False
+
+
+def partial_upgrade_negation_skips(text: str | None) -> list[str]:
+    """观测用：列出因否定 / 对比语境被跳过的字面短语。
+
+    返回值只用于实验记录（``partialUpgradeNegationSkipped``），
+    不参与判定。它回答「否定语境识别实际拦下了多少次字面命中」。
+    """
+    value = text or ""
+    skipped: list[str] = []
+    for pattern in (_ABSOLUTE_CORRECT_RE, _WRONG_ANSWER_RE):
+        for match in pattern.finditer(value):
+            if _phrase_in_negated_context(value, match.start(), match.end()):
+                skipped.append(match.group(0))
+    return skipped
 
 
 def _check_no_history(

@@ -1773,54 +1773,211 @@ GUARD_EXEMPT_FIELDS = (
 )
 
 
+def memory_degraded_info(record: dict[str, Any]) -> dict[str, Any]:
+    """从 Manifest 判定本轮 Memory 检索是否降级。
+
+    判定依据（满足其一即视为 ``memoryDegraded=true``）：
+
+    1. Manifest 中存在 ``retrieval_status=DEGRADED`` 的 memory 来源；
+    2. Manifest 中存在 ``source_id`` 含 ``memory-status:DEGRADED`` 的
+       认知状态来源（ContextBuilder 在 Memory 状态非 SUCCESS 时注入）。
+
+    ``memoryDegradedSource`` 记录可定位的来源 ID，供报告逐条留痕。
+    本函数只读 Manifest，不修改 Runtime / ContextBuilder / Schema。
+    """
+    sources = manifest_bucket(record.get("manifest")).get("sources") or []
+    degraded_memory: list[str] = []
+    cognitive_markers: list[str] = []
+    for source in sources:
+        source_id = str(source.get("source_id") or "")
+        source_type = str(source.get("type") or "")
+        status = str(source.get("retrieval_status") or "").upper()
+        if status == "DEGRADED" and (
+            source_id.startswith("memory:") or source_type.startswith("memory")
+        ):
+            degraded_memory.append(source_id)
+        if "memory-status:DEGRADED" in source_id:
+            cognitive_markers.append(source_id)
+    details = sorted(set(degraded_memory + cognitive_markers))
+    return {
+        "memoryDegraded": bool(details),
+        "memoryDegradedSource": details,
+    }
+
+
+def partial_upgrade_negation_observation(record: dict[str, Any]) -> dict[str, Any]:
+    """观测：HISTORY_GUARD 否定语境识别跳过的字面命中次数与回退保护结果。
+
+    产品侧的跳过计数只存在于进程内校验，不落库；这里用产品同一个
+    ``partial_upgrade_negation_skips`` 对本次实际进入校验的回答文本重放，
+    只作观测记录，不参与 PASS/FAIL。
+
+    ``fallbackUsed``：守卫触发且最终交付既不是首答也不是重生成回答，
+    说明使用了确定性回退。
+
+    ``fallbackPreservedOriginal``：回退时最终交付是否仍含历史原句。
+    用于验证「用户显式要求引用的原句不被回退覆盖」。
+    """
+    from app.history_guard import partial_upgrade_negation_skips
+
+    first = record.get("firstAnswer")
+    regenerated = record.get("regeneratedAnswer")
+    texts: list[str] = []
+    if isinstance(first, str):
+        texts.append(first)
+    if isinstance(regenerated, str) and regenerated != first:
+        texts.append(regenerated)
+    if not texts:
+        answer = record.get("answerFull") or record.get("answerPreview") or ""
+        if answer:
+            texts.append(answer)
+    skipped: list[str] = []
+    for text in texts:
+        skipped.extend(partial_upgrade_negation_skips(text))
+
+    final_answer = record.get("answerFull") or ""
+    fallback_used = (
+        bool(record.get("historyGuardTriggered"))
+        and bool(final_answer)
+        and final_answer not in {first, regenerated}
+    )
+    return {
+        "partialUpgradeNegationSkipped": len(skipped),
+        "partialUpgradeNegationSkippedPhrases": skipped,
+        "fallbackUsed": fallback_used,
+        "fallbackPreservedOriginal": (
+            s5_history_use_check(final_answer)["exactOriginalSentence"]
+            if fallback_used
+            else None
+        ),
+    }
+
+
+def guard_negation_misjudgements(
+    record: dict[str, Any], trace: dict[str, Any] | None
+) -> list[str]:
+    """检查产品 trace 里的 partial_upgrade 是否仍是否定语境误判。
+
+    ``issues`` 来自首答、``remainingIssues`` 来自重生成回答；若某个
+    ``partial_upgrade`` 的 excerpt 在对应回答里被否定语境识别跳过，
+    说明修复没有覆盖到它，属于功能缺陷，必须让本批判 FAIL。
+    """
+    if not trace:
+        return []
+    from app.history_guard import partial_upgrade_negation_skips
+
+    first_skips = set(
+        partial_upgrade_negation_skips(record.get("firstAnswer") or "")
+    )
+    retry_skips = set(
+        partial_upgrade_negation_skips(record.get("regeneratedAnswer") or "")
+    )
+    problems: list[str] = []
+    checks = (
+        ("首答", trace.get("issues") or [], first_skips),
+        ("重生成", trace.get("remainingIssues") or [], retry_skips),
+    )
+    for stage, issues, skips in checks:
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            if issue.get("kind") != "partial_upgrade":
+                continue
+            excerpt = str(issue.get("excerpt") or "")
+            if excerpt and excerpt in skips:
+                problems.append(
+                    f"否定语境仍误判 partial_upgrade（{stage}）：「{excerpt}」"
+                )
+    return problems
+
+
 def guard_aware_hash_consistency(records: list[dict[str, Any]]) -> dict[str, Any]:
-    """HISTORY_GUARD 触发时的 Hash 一致性判据。
+    """HISTORY_GUARD / Memory DEGRADED 触发时的 Hash 一致性判据。
 
-    规则（只豁免守卫触发，不放宽整体一致性）：
+    规则（只豁免已记录的运行期事件，不放宽整体一致性）：
 
-    1. 每条记录都必须有布尔字段 ``historyGuardTriggered``；
-    2. ``manifestSha256`` 在 3 次 repeat 之间必须一致（不豁免）；
-    3. 未触发守卫的 repeat 之间，``contextHash`` / ``systemSha256`` /
+    1. 每条记录都必须有布尔字段 ``historyGuardTriggered`` 与
+       ``memoryDegraded``；
+    2. ``manifestSha256`` 在 3 次 repeat 之间必须一致（始终不豁免）；
+    3. 未被豁免的 repeat 之间，``contextHash`` / ``systemSha256`` /
        ``systemChars`` / ``promptTokens`` 必须一致；
-    4. ``historyGuardTriggered=true`` 的 repeat 豁免上述字段差异，但必须在
-       结果中标注（本函数输出 ``guardedKeys`` 与逐条豁免说明）；
-    5. 若 3 次全部触发守卫，则没有「未触发」基线，Hash 相等性不适用，
-       记为观测项而不是静默 PASS。
+    4. ``historyGuardTriggered=true`` 或 ``memoryDegraded=true`` 的 repeat
+       豁免上述字段差异，但必须在结果中标注（本函数输出 ``guardedKeys``、
+       ``degradedKeys`` 与逐条豁免说明）；
+    5. 若 3 次全部被豁免，则没有未被豁免的基线，Hash 相等性不适用，
+       记为观测项而不是静默 PASS；
+    6. ``memoryDegraded=true`` 时必须同时记录 ``memoryDegradedSource``，
+       否则记为判据失败（降级未被留痕）。
     """
     ordered = sorted(records, key=lambda item: int(item.get("rep") or 0))
     problems: list[str] = []
     annotations: list[str] = []
-    missing = [
+    missing_guard = [
         record.get("key")
         for record in ordered
         if not isinstance(record.get("historyGuardTriggered"), bool)
     ]
-    if missing:
-        problems.append(f"未记录 historyGuardTriggered：{missing}")
+    if missing_guard:
+        problems.append(f"未记录 historyGuardTriggered：{missing_guard}")
+    missing_degraded = [
+        record.get("key")
+        for record in ordered
+        if not isinstance(record.get("memoryDegraded"), bool)
+    ]
+    if missing_degraded:
+        problems.append(f"未记录 memoryDegraded：{missing_degraded}")
 
     guarded = [
         record for record in ordered if record.get("historyGuardTriggered") is True
     ]
-    unguarded = [
-        record for record in ordered if record.get("historyGuardTriggered") is False
+    degraded = [
+        record for record in ordered if record.get("memoryDegraded") is True
     ]
+    exempt = [
+        record
+        for record in ordered
+        if record.get("historyGuardTriggered") is True
+        or record.get("memoryDegraded") is True
+    ]
+    unexempt = [
+        record
+        for record in ordered
+        if not (
+            record.get("historyGuardTriggered") is True
+            or record.get("memoryDegraded") is True
+        )
+    ]
+
+    for record in degraded:
+        sources = record.get("memoryDegradedSource") or []
+        if not sources:
+            problems.append(
+                f"{record.get('key')}：memoryDegraded=true 但未记录 "
+                "memoryDegradedSource"
+            )
 
     manifest_values = [record.get("manifestSha256") for record in ordered]
     if len(set(manifest_values)) != 1:
-        problems.append(f"一致性：manifestSha256 不一致 {manifest_values}")
+        problems.append(
+            f"一致性：manifestSha256 不一致 {manifest_values}"
+            "（manifestSha256 始终不豁免）"
+        )
 
     field_values: dict[str, list[Any]] = {}
-    if unguarded:
+    if unexempt:
         for field in GUARD_EXEMPT_FIELDS:
-            values = [record.get(field) for record in unguarded]
+            values = [record.get(field) for record in unexempt]
             field_values[field] = values
             if len(set(values)) != 1:
                 problems.append(
-                    f"一致性：{field} 在未触发守卫的 "
-                    f"{len(unguarded)} 次之间不一致 {values}"
+                    f"一致性：{field} 在未被豁免的 "
+                    f"{len(unexempt)} 次之间不一致 {values}"
                 )
     else:
-        annotations.append("3 次均触发 HISTORY_GUARD，未建立未触发基线，Hash 相等性不适用")
+        annotations.append(
+            "3 次均被 HISTORY_GUARD / Memory DEGRADED 豁免，"
+            "未建立未豁免基线，Hash 相等性不适用"
+        )
 
     for record in guarded:
         annotations.append(
@@ -1828,17 +1985,30 @@ def guard_aware_hash_consistency(records: list[dict[str, Any]]) -> dict[str, Any
             f"豁免 {', '.join(GUARD_EXEMPT_FIELDS)}（llmCallCount="
             f"{record.get('llmCallCount')}）"
         )
+    for record in degraded:
+        annotations.append(
+            f"{record.get('key')}：memoryDegraded=true，"
+            f"来源 {','.join(record.get('memoryDegradedSource') or []) or '-'}，"
+            f"豁免 {', '.join(GUARD_EXEMPT_FIELDS)}"
+        )
 
     return {
         "rule": (
-            "未触发守卫的 repeat 之间必须 Hash 一致；守卫触发的 repeat "
+            "未触发守卫且未降级的 repeat 之间必须 Hash 一致；"
+            "historyGuardTriggered=true 或 memoryDegraded=true 的 repeat "
             "豁免 contextHash/systemSha256/systemChars/promptTokens，但必须标注；"
             "manifestSha256 始终要求一致"
         ),
         "guardedKeys": [record.get("key") for record in guarded],
-        "unguardedKeys": [record.get("key") for record in unguarded],
+        "degradedKeys": [record.get("key") for record in degraded],
+        "exemptKeys": [record.get("key") for record in exempt],
+        "unguardedKeys": [record.get("key") for record in unexempt],
         "manifestValues": manifest_values,
         "unguardedValues": field_values,
+        "memoryDegradedSources": {
+            record.get("key"): record.get("memoryDegradedSource") or []
+            for record in degraded
+        },
         "annotations": annotations,
         "problems": problems,
         "pass": not problems,
@@ -1847,17 +2017,25 @@ def guard_aware_hash_consistency(records: list[dict[str, Any]]) -> dict[str, Any
 
 
 def citation_consistency_check(
-    records: list[dict[str, Any]], expected_document_id: int
+    records: list[dict[str, Any]],
+    expected_document_id: int,
+    *,
+    allow_history_quote: bool = False,
 ) -> dict[str, Any]:
     """3 次 repeat 的 citation 一致性（修正后判据）。
 
-    必须同时满足：
+    默认必须同时满足：
       1. 每次 repeat 至少 1 条引用（不允许空引用集合）；
       2. 所有引用可溯源（调用方已通过 citation_traceability 校验）；
       3. 所有引用都指向本场景的同一份 Knowledge 文档；
       4. 3 次引用并集至少覆盖 2 个 chunk（避免「只复读同一个 chunk」）；
       5. 覆盖率达标：平均覆盖率 >= 2/3 且每次 repeat 覆盖率 >= 1/3；
          或 3 次中至少 2 次的 citation 集合完全相同（顺序无关）。
+
+    ``allow_history_quote=True``（S5 复盘场景专用）：引用不是复盘问题的
+    核心证据，历史原句才是。因此每次 repeat 满足「citation 非空」或
+    「回答引用了历史原句」之一即可；非空引用仍必须可溯源且落在本场景
+    同一文档。覆盖率与并集仍计算并展示，但不作为该模式的硬性失败项。
 
     覆盖率定义：``c_r = |C_r| / |U|``，其中 ``U = C_1 ∪ C_2 ∪ C_3``。
     """
@@ -1866,17 +2044,36 @@ def citation_consistency_check(
         {(int(pair[0]), int(pair[1])) for pair in (item.get("citationSet") or [])}
         for item in items
     ]
+    history_quotes = [
+        bool(
+            s5_history_use_check(
+                item.get("answerFull") or item.get("answerPreview") or ""
+            )["pass"]
+        )
+        for item in items
+    ]
     trace_ok = all(
         bool((item.get("citationTrace") or {}).get("traceable")) for item in items
     )
     non_empty = all(bool(current) for current in sets)
+    if allow_history_quote:
+        content_ok = all(
+            bool(current) or quote
+            for current, quote in zip(sets, history_quotes)
+        )
+    else:
+        content_ok = non_empty
     union: set[tuple[int, int]] = set()
     for current in sets:
         union |= current
     coverages = [len(current) / len(union) if union else 0.0 for current in sets]
     average_coverage = sum(coverages) / len(coverages) if coverages else 0.0
     documents = sorted({doc for current in sets for doc, _ in current})
-    same_document = bool(union) and documents == [int(expected_document_id)]
+    if allow_history_quote:
+        # 全部空引用且均引用历史原句时，没有文档可检查；有引用时必须同文档。
+        same_document = documents == [int(expected_document_id)] if union else True
+    else:
+        same_document = bool(union) and documents == [int(expected_document_id)]
     identical = [json.dumps(sorted(current)) for current in sets]
     identical_reps = max((identical.count(value) for value in set(identical)), default=0)
     coverage_ok = (
@@ -1885,46 +2082,67 @@ def citation_consistency_check(
     )
     identical_ok = identical_reps >= 2
     reasons: list[str] = []
-    if not non_empty:
+    if allow_history_quote:
+        empty_without_quote = [
+            item.get("key")
+            for item, current, quote in zip(items, sets, history_quotes)
+            if not current and not quote
+        ]
+        if empty_without_quote:
+            reasons.append(
+                "存在空 citation 且未引用历史原句：" + ", ".join(empty_without_quote)
+            )
+    elif not non_empty:
         reasons.append("存在空 citation 集合")
     if not trace_ok:
         reasons.append("存在不可溯源引用")
     if not same_document:
         reasons.append(f"引用未落在本场景文档 document={expected_document_id}：{documents}")
-    if len(union) < CITATION_MIN_UNION_CHUNKS:
-        reasons.append(f"引用并集 chunk 数 {len(union)} < {CITATION_MIN_UNION_CHUNKS}")
-    if not coverage_ok:
-        reasons.append(
-            "覆盖率不足：average="
-            f"{average_coverage:.3f}（阈值 {CITATION_MIN_AVERAGE_COVERAGE:.3f}），"
-            f"per-rep={[round(value, 3) for value in coverages]}"
-            f"（每轮阈值 {CITATION_MIN_REP_COVERAGE:.3f}）"
+    if not allow_history_quote:
+        if len(union) < CITATION_MIN_UNION_CHUNKS:
+            reasons.append(f"引用并集 chunk 数 {len(union)} < {CITATION_MIN_UNION_CHUNKS}")
+        if not coverage_ok:
+            reasons.append(
+                "覆盖率不足：average="
+                f"{average_coverage:.3f}（阈值 {CITATION_MIN_AVERAGE_COVERAGE:.3f}），"
+                f"per-rep={[round(value, 3) for value in coverages]}"
+                f"（每轮阈值 {CITATION_MIN_REP_COVERAGE:.3f}）"
+            )
+        if not (coverage_ok or identical_ok):
+            reasons.append("且没有 2/3 次 citation 集合完全相同")
+    coverage_blocker = (
+        False
+        if allow_history_quote
+        else (
+            len(union) < CITATION_MIN_UNION_CHUNKS
+            or not (coverage_ok or identical_ok)
         )
-    if not (coverage_ok or identical_ok):
-        reasons.append("且没有 2/3 次 citation 集合完全相同")
+    )
     return {
         "rule": (
-            "3 次 citation 非空、全部可溯源、全部指向本场景同一文档、并集 >= 2 chunk；"
+            "S5 复盘模式：每次（citation 非空或引用历史原句）、非空引用全部可溯源"
+            "且落在本场景同一文档"
+            if allow_history_quote
+            else "3 次 citation 非空、全部可溯源、全部指向本场景同一文档、并集 >= 2 chunk；"
             "且（平均覆盖率 >= 2/3 且每轮覆盖率 >= 1/3）或（>= 2 次集合完全相同）"
         ),
+        "mode": "history_quote_or_citation" if allow_history_quote else "strict",
         "expectedDocumentId": int(expected_document_id),
         "sets": [[list(pair) for pair in sorted(current)] for current in sets],
         "union": [list(pair) for pair in sorted(union)],
         "coverages": coverages,
         "averageCoverage": average_coverage,
         "identicalReps": identical_reps,
+        "historyQuotes": dict(
+            (item.get("key"), quote) for item, quote in zip(items, history_quotes)
+        ),
         "traceable": trace_ok,
         "nonEmpty": non_empty,
+        "contentOk": content_ok,
         "sameDocument": same_document,
         "coverageOk": coverage_ok,
         "identicalOk": identical_ok,
-        "pass": (
-            non_empty
-            and trace_ok
-            and same_document
-            and len(union) >= CITATION_MIN_UNION_CHUNKS
-            and (coverage_ok or identical_ok)
-        ),
+        "pass": content_ok and trace_ok and same_document and not coverage_blocker,
         "reasons": reasons,
     }
 

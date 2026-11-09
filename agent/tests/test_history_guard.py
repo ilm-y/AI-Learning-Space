@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from app.history_guard import (
     build_history_fallback,
     check_history_answer,
+    partial_upgrade_negation_skips,
     retry_instruction,
 )
 from app.schemas import (
@@ -21,7 +22,9 @@ from app.schemas import (
     EvidenceItem,
     EvidenceSourceItem,
     EvidenceType,
+    HistoryMessage,
     LearningTrajectory,
+    MessageRole,
     Misconception,
     MisconceptionStatus,
     Understanding,
@@ -227,6 +230,53 @@ def test_partial_cannot_be_upgraded_to_wrong_or_completely_correct() -> None:
     assert "partial_upgrade" in _kinds(issues)
 
 
+def _partial_only_state() -> AgentState:
+    evidences = [
+        _evidence(301, "TLB 是页表缓存", EvidenceCorrectness.PARTIAL),
+    ]
+    return _state(with_trajectory=True, evidences=evidences)
+
+
+def test_negated_partial_upgrade_phrases_are_not_flagged() -> None:
+    """KI-2：否定 / 对比语境里的「答错」「完全答对」不是升级断言。"""
+    answers = [
+        "不是完全答错。",
+        "这是部分正确，而不是完全正确。",
+        "记录并没有被写成『答错』。",
+        "既不是完全答对也不是完全答错。",
+        "这条标注只说明当时部分正确，并不表示全部答对。",
+        "部分正确并不等于答错。",
+    ]
+    for answer in answers:
+        issues = check_history_answer(answer, _partial_only_state())
+        assert "partial_upgrade" not in _kinds(issues), (answer, issues)
+
+
+def test_positive_partial_upgrade_phrases_still_flagged() -> None:
+    """否定识别不能把肯定判断一起放行。"""
+    answers = ["这是完全答对。", "这是答错。"]
+    for answer in answers:
+        issues = check_history_answer(answer, _partial_only_state())
+        assert "partial_upgrade" in _kinds(issues), (answer, issues)
+
+
+def test_contrast_after_negation_is_still_positive() -> None:
+    """「不是 A，而是 B」：A 跳过，B 仍按肯定判断。"""
+    issues = check_history_answer(
+        "这不是答错，而是完全答对。", _partial_only_state()
+    )
+    assert "partial_upgrade" in _kinds(issues)
+
+
+def test_negation_skip_observability_counts_literal_hits() -> None:
+    assert partial_upgrade_negation_skips("不是完全答错") == ["答错"]
+    assert partial_upgrade_negation_skips("既不是完全答对也不是完全答错") == [
+        "完全答对",
+        "答错",
+    ]
+    assert partial_upgrade_negation_skips("这是答错") == []
+
+
 def test_single_evidence_claim_is_checked_against_the_actual_count() -> None:
     issues = check_history_answer(
         "记录里唯一的证据就是这条批注。",
@@ -309,6 +359,54 @@ def test_no_history_fallback_refuses_to_deny_the_past() -> None:
     assert "无法确认你过去是否出现过这个误解" in fallback
     assert "不能断言你过去没有出现过" in fallback
     assert "你以前没有这个错误" not in fallback
+
+
+QUOTE_QUESTION = "回顾一下，我之前对 TCP 慢启动的理解错在哪？请引用我当时的原话。"
+HISTORY_ORIGINAL = "我原来以为慢启动慢是因为它每次只把窗口加一"
+
+
+def _quote_state() -> AgentState:
+    state = _state(with_trajectory=False)
+    state.user_message = QUOTE_QUESTION
+    state.history = [
+        HistoryMessage(
+            role=MessageRole.USER,
+            content=f"【S5-HISTORY】{HISTORY_ORIGINAL}。",
+        )
+    ]
+    return state
+
+
+def test_fallback_preserves_quote_the_user_explicitly_requested() -> None:
+    first = (
+        "你当时的原话是：「我原来以为慢启动慢是因为它每次只把窗口加一。」"
+        "你是完全靠自己纠正过来的。"
+    )
+    fallback = build_history_fallback(_quote_state(), first_answer=first)
+
+    assert HISTORY_ORIGINAL in fallback
+    assert "「我原来以为慢启动慢是因为它每次只把窗口加一。」" in fallback
+    # 同句里的无依据断言不随引用一起回退。
+    assert "完全靠自己" not in fallback
+    # 确定性回退正文仍然保留。
+    assert "不能断言你过去没有出现过" in fallback
+
+
+def test_fallback_does_not_preserve_quote_without_explicit_request() -> None:
+    first = f"你当时的原话是：「{HISTORY_ORIGINAL}。」"
+    state = _quote_state()
+    state.user_message = "我之前对 TLB 的理解错在哪里？"
+
+    fallback = build_history_fallback(state, first_answer=first)
+
+    assert HISTORY_ORIGINAL not in fallback
+
+
+def test_fallback_does_not_preserve_an_unrecorded_sentence() -> None:
+    first = "你当时说：「这是一句记录里没有、临时编出来的句子。」"
+    fallback = build_history_fallback(_quote_state(), first_answer=first)
+
+    assert "临时编出来的句子" not in fallback
 
 
 def _plain_evidence_state() -> AgentState:
