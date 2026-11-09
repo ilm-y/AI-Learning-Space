@@ -81,3 +81,20 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/agent
         run: python -m evaluation
+
+      # D4-5 离线上下文质量评测：确定性、无外部服务。
+      # 退出码 1 = 任一 C case 失败 / C 在要求指标上劣于 A/B / 安全探针失败。
+      # 报告 JSON 作为 artifact 保留，便于跨提交对比；xfail 不会被当作新失败。
+      - name: Context quality evaluation
+        working-directory: agent
+        run: >
+          python -m tests.eval.context_quality.run_context_quality_eval
+          --json context-quality-report.json
+
+      - name: Upload context quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: context-quality-report
+          path: agent/context-quality-report.json
+          if-no-files-found: ignore
