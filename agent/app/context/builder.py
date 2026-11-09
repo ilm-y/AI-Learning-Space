@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -244,6 +245,11 @@ class ContextSection:
     compression_reason: str | None = None
     # 最终注入状态：SELECTED / TRUNCATED / OMITTED / EXCLUDED。
     injection_status: str = ""
+    # 语义冗余保护的比较底稿：只含该条目的实质内容，不含区块标题/固定说明。
+    # 守卫规则（否定词 / 数字 / 实体）必须看正文，不能看渲染骨架 ——
+    # Understanding 的 full 档固定说明本身就含「没有」「不要」等词，
+    # 拿渲染文本做否定词比较会把正常冗余全部误拦。
+    guard_text: str = ""
 
     def __post_init__(self) -> None:
         self.estimated_tokens = estimate_tokens(self.content)
@@ -627,6 +633,7 @@ class ContextBuilder:
                     allow_truncate=True,
                     source_type="understanding",
                     retrieval_status=state.understanding_status,
+                    guard_text=_understanding_guard_text(understanding),
                     render_tier=lambda tier, item=understanding, conflict=has_learning_memory: (
                         _render_understanding(item, has_learning_memory=conflict, tier=tier)
                     ),
@@ -683,6 +690,7 @@ class ContextBuilder:
                     dedupe_key=f"memory:{memory.id}",
                     source_type="memory",
                     retrieval_status=state.memory_status,
+                    guard_text=memory.content or "",
                     render_tier=lambda tier, item=memory: _render_memory(item, tier=tier),
                 )
             )
@@ -788,6 +796,7 @@ class ContextBuilder:
                         dedupe_key=f"evidence:{evidence.id}",
                         source_type="related_evidence",
                         retrieval_status=state.cross_concept_evidence_status,
+                        guard_text=evidence.observation or "",
                         render_tier=lambda tier, item=evidence: _render_related_evidence(
                             item, tier=tier
                         ),
@@ -804,6 +813,7 @@ class ContextBuilder:
                     dedupe_key=f"evidence:{evidence.id}",
                     source_type="evidence",
                     retrieval_status=state.evidence_status,
+                    guard_text=evidence.observation or "",
                     render_tier=lambda tier, item=evidence: _render_evidence(
                         item, tier=tier
                     ),
@@ -1012,13 +1022,21 @@ class ContextBuilder:
         当前快照已经完整表达同一事实时，历史材料降为 structured，仍然保留
         来源与时间，供模型核对，而不是把两边合并成一条新事实。
         """
-        understanding_text = " ".join(
-            section.content
+        understanding_sections = [
+            section
             for section in sections
             if _kind(section) == "understanding" and not section.dropped
+        ]
+        understanding_text = " ".join(
+            section.content for section in understanding_sections
         )
         if not understanding_text:
             return
+        # 守卫规则看「实质内容」，不看渲染骨架：见 ContextSection.guard_text 说明。
+        understanding_guard_text = " ".join(
+            section.guard_text or section.content
+            for section in understanding_sections
+        )
         for section in sections:
             if section.dropped:
                 continue
@@ -1026,7 +1044,12 @@ class ContextBuilder:
                 continue
             if section.tier != TIER_FULL or section.render_tier is None:
                 continue
-            if not _is_semantically_redundant(section.content, understanding_text):
+            if not _is_semantically_redundant(
+                section.content,
+                understanding_text,
+                item_guard_text=section.guard_text or section.content,
+                current_guard_text=understanding_guard_text,
+            ):
                 continue
             content = section.render_tier(TIER_STRUCTURED)
             cost = estimate_tokens(content)
@@ -1570,15 +1593,79 @@ def _bigrams(text: str) -> set[str]:
     return {text[index : index + 2] for index in range(len(text) - 1)}
 
 
-def _is_semantically_redundant(item_text: str, current_text: str) -> bool:
+# ---------- KI-01：字符重合之外的保护性规则 ----------
+# 阈值 0.6 本身是 D4-3 的契约，不在这里改；下面只在「重合度高」之上加否决条件。
+# 宁可漏判冗余（只少省一点预算），也不要把语义相反的记录压成摘要。
+_NEGATION_MARKERS = (
+    "不等于", "不属于", "不表示", "不成立", "不认为", "不是", "并非", "并不",
+    "没有", "没能", "不会", "不能", "不要", "不再", "从不", "从未",
+    "尚未", "未能", "不具", "不含", "未", "没", "无", "非", "不",
+)
+# 这些词含「不 / 未 / 非」但不是否定判断。先屏蔽再扫描，避免把「不同」
+# 当成一次否定；漏掉真正的否定只会更保守，不会造成误压缩。
+_NEGATION_NEUTRAL_COMPOUNDS = (
+    "不同", "不断", "不仅", "不过", "不久", "不少", "部分", "非常", "未来", "无论",
+    # 数学 / 学习语境里的名词，含「不」但不是否定判断。
+    "不等式", "不确定",
+)
+_DATE_TIME_PATTERN = re.compile(
+    r"\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?(?:\s+\d{1,2}:\d{2})?"
+)
+_NUMBER_PATTERN = re.compile(r"\d+(?:\.\d+)?")
+_ENTITY_PATTERN = re.compile(r"[A-Z][A-Z0-9_-]{1,}")
+_QUOTED_PATTERN = re.compile(r"《[^》]*》|「[^」]*」|『[^』]*』|“[^”]*”|‘[^’]*’")
+
+
+def _negation_markers(text: str) -> set[str]:
+    cleaned = text
+    for compound in _NEGATION_NEUTRAL_COMPOUNDS:
+        cleaned = cleaned.replace(compound, "□")
+    return {marker for marker in _NEGATION_MARKERS if marker in cleaned}
+
+
+def _number_tokens(text: str) -> set[str]:
+    # 渲染文本里的「记录于 2026-01-01」「更新于 ...」是元数据，不是实质数字差异。
+    return set(_NUMBER_PATTERN.findall(_DATE_TIME_PATTERN.sub(" ", text)))
+
+
+def _entity_tokens(text: str) -> set[str]:
+    return set(_ENTITY_PATTERN.findall(text)) | set(_QUOTED_PATTERN.findall(text))
+
+
+def _has_protective_difference(item_text: str, current_text: str) -> bool:
+    """否定 / 数字 / 实体任一集合不同 → 保护，不判冗余。"""
+    return (
+        _negation_markers(item_text) != _negation_markers(current_text)
+        or _number_tokens(item_text) != _number_tokens(current_text)
+        or _entity_tokens(item_text) != _entity_tokens(current_text)
+    )
+
+
+def _is_semantically_redundant(
+    item_text: str,
+    current_text: str,
+    *,
+    item_guard_text: str | None = None,
+    current_guard_text: str | None = None,
+) -> bool:
     """保守的语义冗余判定：整段包含或字符 bigram 重合 ≥ 0.6。
 
     只用于「降低历史材料细节」，不用于删除；阈值刻意偏高，宁可漏判，
     也不要把只是同主题的 Memory / Evidence 当成当前认知的重复。
+
+    KI-01 保护规则：字符重合之外再看否定词 / 数字 / 实体。任何一项不同都
+    直接否决冗余判定。守卫使用调用方传入的实质内容（``guard_text``），
+    避免把 Understanding 的固定说明文字（其中含「没有」「不要」）误当成
+    事实层面的否定差异。
     """
     item = _normalize_overlap_text(item_text)
     current = _normalize_overlap_text(current_text)
     if len(item) < 8 or len(current) < 8:
+        return False
+    if _has_protective_difference(
+        item_guard_text if item_guard_text is not None else item_text,
+        current_guard_text if current_guard_text is not None else current_text,
+    ):
         return False
     if item in current:
         return True
@@ -1611,6 +1698,17 @@ def _render_session(session: SessionContext) -> str:
     if session.current_focus:
         lines.append(f"- 当前焦点：{session.current_focus}")
     return "\n".join(lines)
+
+
+def _understanding_guard_text(understanding: Understanding) -> str:
+    """语义冗余守卫用的实质内容：只拼事实字段，不拼渲染骨架。"""
+    parts = [understanding.concept_name or "", understanding.summary or ""]
+    parts.extend(understanding.known_parts)
+    parts.extend(item.text for item in understanding.misconceptions)
+    parts.extend(understanding.uncertain_parts)
+    if understanding.latest_user_explanation:
+        parts.append(understanding.latest_user_explanation)
+    return " ".join(part for part in parts if part)
 
 
 def _render_understanding(
@@ -1711,7 +1809,7 @@ def _render_memory(memory: MemoryItem, *, tier: str = TIER_FULL) -> str:
         notes.append("来源：长期记忆")
         content = _clip(memory.content, 50)
     elif tier == TIER_STRUCTURED:
-        content = _clip(memory.content, 120)
+        content = _clip_sentences(memory.content, 120)
     else:
         content = memory.content
     suffix = f"（{'；'.join(notes)}）" if notes else ""
@@ -1842,11 +1940,99 @@ def _format_time(value: datetime | None) -> str:
 
 
 def _clip(text: str | None, limit: int) -> str:
-    """压缩档的确定性截断：保留前 limit 个字符，明确标记还有省略。"""
+    """one_line 档的确定性截断：保留前 limit 个字符，明确标记还有省略。"""
     value = (text or "").strip()
     if len(value) <= limit:
         return value
     return value[:limit].rstrip() + "…"
+
+
+# structured 档按句子边界切，而不是从字符中间切。句号/分号/换行是主要边界，
+# 逗号只在「找不到更强边界」时兜底。
+_SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[。；;！!?？\n])")
+_SENTENCE_BOUNDARIES = set("。；;！!?？\n，,")
+
+
+def _split_sentences(text: str) -> list[str]:
+    return [segment for segment in _SENTENCE_SPLIT_PATTERN.split(text) if segment]
+
+
+def _has_protected_token(text: str) -> bool:
+    """含否定词 / 数字 / 实体的句子，在超长时必须优先保留。"""
+    return bool(
+        _negation_markers(text)
+        or _NUMBER_PATTERN.search(text)
+        or _ENTITY_PATTERN.search(text)
+        or _QUOTED_PATTERN.search(text)
+    )
+
+
+def _clip_sentences(text: str | None, limit: int) -> str:
+    """structured 档截断：按句边界取舍，优先保留关键否定 / 数字 / 实体句。
+
+    规则刻意保守：先选受保护句、首句、尾句，再用其余句子按原文顺序填满；
+    输出保持原文顺序，省略处用「…」标记，绝不从句子中间切开。
+    """
+    value = (text or "").strip()
+    if limit <= 0:
+        return "…"
+    if len(value) <= limit:
+        return value
+    segments = _split_sentences(value)
+    total = len(segments)
+    if total <= 1:
+        return _cut_at_boundary(value, limit)
+
+    def render(indices: set[int]) -> str:
+        parts: list[str] = []
+        previous: int | None = None
+        for index in sorted(indices):
+            if previous is not None and index != previous + 1:
+                parts.append("…")
+            parts.append(segments[index])
+            previous = index
+        if previous != total - 1:
+            parts.append("…")
+        return "".join(parts)
+
+    selected: set[int] = set()
+    # 否定句优先级最高：数字/实体可能出现在很多句子里（例如「第1条」「第2条」），
+    # 若与否定句同档，前面的普通句子会把预算吃光，反而挤掉安全关键的否定。
+    negation_priority = [
+        index
+        for index, segment in enumerate(segments)
+        if _negation_markers(segment)
+    ]
+    other_priority = [
+        index
+        for index, segment in enumerate(segments)
+        if index not in negation_priority and _has_protected_token(segment)
+    ]
+    priority = negation_priority + other_priority + [0, total - 1]
+    for index in dict.fromkeys(priority):
+        selected.add(index)
+        if len(render(selected)) > limit:
+            selected.discard(index)
+    for index in range(total):
+        if index in selected:
+            continue
+        selected.add(index)
+        if len(render(selected)) > limit:
+            selected.discard(index)
+    if selected:
+        rendered = render(selected)
+        if len(rendered) <= limit:
+            return rendered
+    return _cut_at_boundary(value, limit)
+
+
+def _cut_at_boundary(text: str, limit: int) -> str:
+    """单句仍然超限时的最后兜底：在最近边界处切，找不到才退化为头截断。"""
+    window = text[: max(1, limit - 1)]
+    for index in range(len(window) - 1, -1, -1):
+        if window[index] in _SENTENCE_BOUNDARIES:
+            return window[: index + 1].rstrip() + "…"
+    return window.rstrip() + "…"
 
 
 def _final_knowledge_state(
@@ -2154,7 +2340,7 @@ def _render_evidence(evidence, *, tier: str = TIER_FULL) -> str:
             "（来源：历史证据）"
         )
     if tier == TIER_STRUCTURED:
-        return f"- [{label}/{evidence_type}] {prefix}{_clip(evidence.observation, 120)}"
+        return f"- [{label}/{evidence_type}] {prefix}{_clip_sentences(evidence.observation, 120)}"
     return f"- [{label}/{evidence_type}] {prefix}{evidence.observation}"
 
 
@@ -2180,7 +2366,7 @@ def _render_related_evidence(evidence, *, tier: str = TIER_FULL) -> str:
     if tier == TIER_ONE_LINE:
         observation = _clip(observation, 50) + "（来源：相关概念历史证据）"
     elif tier == TIER_STRUCTURED:
-        observation = _clip(observation, 120)
+        observation = _clip_sentences(observation, 120)
     return (
         f"- [{label}/{evidence_type}] 关联依据：{via}{source}"
         f" ｜ 证据归属概念：#{evidence.concept_id} ｜ {prefix}{observation}"

@@ -7,7 +7,8 @@
 3. protected 区块超出总预算时，`used > effective` 是否如实记录、状态说明是否仍可见；
 4. 语义冗余阈值 0.6 的两个方向：
    - 改写（paraphrase）是否漏判（保守偏置）；
-   - 语义不同但字符重合高（例如否定句）是否被误判并在压缩中丢掉关键否定。
+   - 语义不同但字符重合高（例如否定句）是否被保护规则拦住、不再误判。
+     D4-7 修复前这里记录的是“已复现误判”；修复后必须保持“不误判、否定词保留”。
 """
 
 from __future__ import annotations
@@ -301,12 +302,14 @@ def probe_redundancy_threshold() -> ProbeResult:
         findings=[
             "改写方向：阈值 0.6 对词汇改写偏保守，可能漏判（只影响能否省预算，"
             "不会丢内容）。",
-            "误判方向：否定句与肯定句字符重合高，会被判为冗余；若原文较长，"
-            "structured 档的 120 字截断可能把关键否定截掉。这是已复现的已知限制，"
-            "本批按边界要求未修改生产 Builder。",
+            "否定方向：D4-7 在字符重合之外增加否定词 / 数字 / 实体保护规则；"
+            "语义相反但字符高度重合的两段不再被判冗余，Memory 保持 full 档，"
+            "“不是”不会在压缩中丢失。",
         ],
-        ok=not paraphrase_detected,
-        risk_confirmed=True,
+        # D4-7 修复后，两个方向都不再出现“错误压缩”：改写仍保守漏判，
+        # 否定方向不再误判；保护性截断也保证 structured 档优先保留关键否定句。
+        ok=not paraphrase_detected and not negation_detected and not negation_lost,
+        risk_confirmed=False,
     )
 
 

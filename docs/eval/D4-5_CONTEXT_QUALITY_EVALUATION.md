@@ -247,6 +247,25 @@ Failure Visibility 三项要求上不劣于 A/B，并且没有出现 pre-D4-3 �
 - 结论：这是当前字符级 bigram 阈值的已知边界。按本批边界未修改生产 Builder；
   建议后续以“否定词/实体保护 + 更细粒度语义判定”单独立项，且必须配合回归集。
 
+**D4-7 修复后探针更新（2026-11-09）**
+
+上面“已复现误判与关键否定丢失”的记录保留为修复前基线。D4-7 在**不改阈值 0.6** 的前提下，
+为冗余判定增加否定词 / 数字 / 实体保护规则，并把 structured 截断改为按句边界取舍、
+优先保留否定句。修复后同一探针的输出为：
+
+```text
+paraphrase_overlap: 0.222
+paraphrase_detected_as_redundant: False   # 改写方向仍保守漏判
+paraphrase_tier: full
+negation_overlap: 0.857                   # 字符重合仍 ≥ 0.6
+negation_detected_as_redundant: False     # 保护规则否决冗余判定
+negation_tier: full
+negation_token_lost_in_compressed_text: False
+```
+
+`tests/test_context_quality_eval.py::test_known_risk_redundancy_threshold` 的断言已相应更新为
+“不判冗余、否定词保留”；D4-5 全量评测仍为 21/21，C 指标不劣于 A/B。
+
 ---
 
 ## 7. 关键发现、缺口与后续建议

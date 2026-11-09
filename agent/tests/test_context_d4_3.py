@@ -20,7 +20,7 @@ import json
 from dataclasses import replace
 from datetime import datetime
 
-from app.context.builder import ContextBuilder
+from app.context.builder import ContextBuilder, _clip_sentences, _render_memory
 from app.context.policy import (
     RetrievalNeed,
     SourceDecision,
@@ -307,6 +307,90 @@ def test_semantic_redundancy_keeps_both_sides_but_lowers_detail() -> None:
     assert evidence_section.tier == "structured"
     assert "记录于 2026-01-01 09:00" in memory_section.content
     assert "2026-01-02 09:00" in evidence_section.content
+
+
+# ---------- KI-01：否定 / 数字 / 实体差异不判冗余 ----------
+
+
+def _guarded_understanding(summary: str) -> Understanding:
+    return Understanding(
+        id=501,
+        concept_id=CONCEPT_ID,
+        concept_name="TLB",
+        summary=summary,
+        status=UnderstandingStatus.PARTIAL,
+        updated_at=T1,
+    )
+
+
+def _guarded_context(summary: str, memory_content: str, memory_id: int = 450):
+    state = make_state(
+        "TLB 是什么？",
+        understandings=[_guarded_understanding(summary)],
+        understanding_status="SUCCESS",
+        memories=[memory(memory_id, memory_content)],
+        memory_status="SUCCESS",
+    )
+    state.retrieval_plan = plan_for("TLB 是什么？")
+    # 8000 预算隔离「类型额度压缩」与「语义冗余降档」，只验证冗余判定本身。
+    return ContextBuilder(
+        max_context_tokens=8000, output_reserve_ratio=0.0
+    ).build(state)
+
+
+def test_negation_difference_prevents_semantic_redundancy() -> None:
+    body = "TLB 缓存页表项，命中时无需再次访问内存。" * 20
+    context = _guarded_context(
+        body + "，变化率为正。",
+        body + "，不是变化率。",
+    )
+    memory_section = section(context, "memory:450")
+    assert memory_section.tier == "full"
+    assert memory_section.compression_reason != "redundant_with_understanding"
+    assert "不是" in memory_section.content
+
+
+def test_number_difference_prevents_semantic_redundancy() -> None:
+    body = "TLB 缓存页表项，命中时无需再次访问内存。" * 20
+    context = _guarded_context(
+        body + "，页表共 3 级。",
+        body + "，页表共 4 级。",
+    )
+    memory_section = section(context, "memory:450")
+    assert memory_section.tier == "full"
+    assert "4 级" in memory_section.content
+
+
+def test_entity_difference_prevents_semantic_redundancy() -> None:
+    body = "TLB 缓存页表项，命中时无需再次访问内存。" * 20
+    context = _guarded_context(
+        body + "，《甲书》有说明。",
+        body + "，《乙书》有说明。",
+    )
+    memory_section = section(context, "memory:450")
+    assert memory_section.tier == "full"
+    assert "《乙书》" in memory_section.content
+
+
+def test_structured_clip_prefers_sentences_with_negation() -> None:
+    value = (
+        "第一段说明导数用于分析函数在点附近的瞬时变化趋势。"
+        "第二段继续展开切线斜率与局部线性近似。"
+        "这条结论不是对所有函数都成立。"
+        "最后一段补充无关的排版说明。"
+    )
+    clipped = _clip_sentences(value, 60)
+    assert "不是" in clipped
+    assert len(clipped) <= 60
+    # 省略处用标记表示，不能把句子从中间切断后静默拼接。
+    assert "…" in clipped
+
+
+def test_structured_memory_rendering_keeps_negation_sentence() -> None:
+    body = "；".join(f"第{i}条说明导数与切线斜率的关系" for i in range(12))
+    text = body + "；这条结论不是对所有函数都成立；收尾说明"
+    rendered = _render_memory(memory(451, text), tier="structured")
+    assert "不是" in rendered
 
 
 # ===================== 6. 冲突：两边保留，来源与时间可核对 =====================

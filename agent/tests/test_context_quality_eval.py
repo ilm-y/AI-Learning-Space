@@ -161,11 +161,13 @@ def test_known_risk_redundancy_threshold() -> None:
     assert observations["paraphrase_tier"] == "full"
     assert observations["paraphrase_overlap"] < 0.6
 
-    # 语义相反但字符重合高：已复现的误判，且 structured 截断丢掉否定词。
-    assert observations["negation_detected_as_redundant"] is True
+    # 语义相反但字符重合高：D4-7 后由否定词保护规则拦住，不再判冗余，
+    # 也不再进入 structured 截断，因此“不是”必须保留。
+    # 重合率仍 ≥ 0.6，用来证明保护规则（而不是阈值变化）在起作用。
     assert observations["negation_overlap"] >= 0.6
-    assert observations["negation_tier"] == "structured"
-    assert observations["negation_token_lost_in_compressed_text"] is True
+    assert observations["negation_detected_as_redundant"] is False
+    assert observations["negation_tier"] == "full"
+    assert observations["negation_token_lost_in_compressed_text"] is False
 
 
 def test_cli_exit_code_and_json(tmp_path, capsys) -> None:
