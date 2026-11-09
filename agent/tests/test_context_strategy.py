@@ -97,20 +97,50 @@ def test_test_only_without_valid_env_id_is_still_rejected(strategy: str) -> None
     assert "AILS_TEST_ENV_ID" in str(excinfo.value)
 
 
-def test_collection_prefix_must_start_with_env_id() -> None:
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "ails_documents",
+        # 以 env_id 开头但追加了后缀：旧的 startswith 会放行，必须拒绝。
+        f"{ENV_ID}-other",
+        f"{ENV_ID}0",
+        f"{ENV_ID}_suffix",
+    ],
+)
+def test_collection_prefix_must_equal_env_id(prefix: str) -> None:
     with pytest.raises(ValidationError) as excinfo:
-        _isolated(qdrant_collection_prefix="ails_documents")
+        _isolated(qdrant_collection_prefix=prefix)
 
     message = str(excinfo.value)
     assert "AILS_QDRANT_COLLECTION_PREFIX" in message
     assert "AILS_MEMORY_COLLECTION_PREFIX" not in message
 
 
-def test_memory_prefix_must_start_with_env_id() -> None:
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "ails_memories",
+        # 以 env_id 开头但不是 `<env_id>-memory`：旧的 startswith 会放行。
+        ENV_ID,
+        f"{ENV_ID}-memory-extra",
+        f"{ENV_ID}-other",
+    ],
+)
+def test_memory_prefix_must_equal_env_id_plus_memory(prefix: str) -> None:
     with pytest.raises(ValidationError) as excinfo:
-        _isolated(memory_collection_prefix="ails_memories")
+        _isolated(memory_collection_prefix=prefix)
 
     assert "AILS_MEMORY_COLLECTION_PREFIX" in str(excinfo.value)
+
+
+def test_exact_prefix_pair_is_accepted() -> None:
+    settings = _isolated(
+        qdrant_collection_prefix=ENV_ID,
+        memory_collection_prefix=f"{ENV_ID}-memory",
+    )
+
+    assert settings.qdrant_collection_prefix == ENV_ID
+    assert settings.memory_collection_prefix == f"{ENV_ID}-memory"
 
 
 def test_non_loopback_host_is_rejected_for_experimental_strategy() -> None:

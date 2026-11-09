@@ -189,7 +189,8 @@ class Settings(BaseSettings):
     context_strategy: Literal["A", "B", "C"] = "C"
     # 显式声明「这是隔离测试进程」。默认 False，生产缺省即拒绝 A/B。
     test_only: bool = False
-    # 与 Pilot stamp 一致；A/B 时两个 collection 前缀都必须以它开头。
+    # 与 Pilot stamp 一致；A/B 时文档前缀必须逐字等于它，
+    # memory 前缀必须逐字等于它 + "-memory"（不使用 startswith）。
     test_env_id: str = ""
 
     @field_validator("internal_delegation_secret")
@@ -235,13 +236,18 @@ class Settings(BaseSettings):
                 "（应形如 phase5-pilot-YYYYmmddHHMMSS-abcdef）"
             )
         else:
-            if not self.qdrant_collection_prefix.startswith(env_id):
+            # 严格相等而不是 startswith：`<env>-other` 这类写法同样以 env_id
+            # 开头，却可能落到另一个实验的环境；`<env>-memory-extra` 也会绕过
+            # 记忆隔离命名约定。两个前缀必须逐字等于约定值。
+            if self.qdrant_collection_prefix != env_id:
                 problems.append(
-                    "AILS_QDRANT_COLLECTION_PREFIX 未以 AILS_TEST_ENV_ID 开头"
+                    "AILS_QDRANT_COLLECTION_PREFIX 必须等于 AILS_TEST_ENV_ID"
+                    "（不允许追加后缀）"
                 )
-            if not self.memory_collection_prefix.startswith(env_id):
+            if self.memory_collection_prefix != f"{env_id}-memory":
                 problems.append(
-                    "AILS_MEMORY_COLLECTION_PREFIX 未以 AILS_TEST_ENV_ID 开头"
+                    "AILS_MEMORY_COLLECTION_PREFIX 必须等于 "
+                    "AILS_TEST_ENV_ID + '-memory'（不允许追加后缀）"
                 )
 
         if self.qdrant_collection_prefix == _PRODUCTION_DOCUMENT_PREFIX:

@@ -27,6 +27,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from freeze_check import (
+    current_state,
+    default_baseline_path,
+    diff_baseline,
+)
 from snapshot_common import (
     EVIDENCE_OBSERVATION,
     HISTORY_ASSISTANT,
@@ -40,7 +45,10 @@ from snapshot_common import (
     UNDERSTANDING_SUMMARY,
     UNDERSTANDING_UNCERTAIN,
     assert_isolated_state,
+    combined_hash,
     connect_mysql,
+    generation_profile,
+    snapshot_hashes,
     write_json,
 )
 
@@ -260,7 +268,58 @@ def build_statements(snapshot: dict[str, Any]) -> list[Statement]:
     return statements
 
 
+def prune_scope(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """决策 2 的唯一删除范围：同一 conversation、snapshotTime 之后、非快照历史。
+
+    ``--prune-run-messages`` 只能按这个范围删除；三个条件缺一不可。范围为
+    空字典参数在这里不安全——调用方必须使用本函数，不能自行拼 SQL。
+    """
+    data = snapshot["dataset"]
+    return {
+        "conversation_id": int(data["conversationId"]),
+        "snapshot_time": str(snapshot["snapshotTime"]),
+        "history_message_ids": [int(value) for value in data["historyMessageIds"]],
+    }
+
+
+def prune_sql(scope: dict[str, Any], *, delete: bool) -> tuple[str, tuple[Any, ...]]:
+    """构造严格限定范围的 SELECT / DELETE；两者使用同一组条件。"""
+    history = scope["history_message_ids"]
+    placeholders = ",".join(["%s"] * len(history)) or "NULL"
+    params: tuple[Any, ...] = (
+        scope["conversation_id"],
+        scope["snapshot_time"],
+        *history,
+    )
+    if delete:
+        return (
+            f"DELETE FROM message WHERE conversation_id=%s AND created_at > %s "
+            f"AND id NOT IN ({placeholders})",
+            params,
+        )
+    return (
+        f"SELECT id FROM message WHERE conversation_id=%s AND created_at > %s "
+        f"AND id NOT IN ({placeholders}) ORDER BY id",
+        params,
+    )
+
+
+def is_prunable_message(row: dict[str, Any], scope: dict[str, Any]) -> bool:
+    """纯函数版范围判断，供测试与删除前复核使用。
+
+    ``row`` 至少含 ``id`` / ``conversation_id`` / ``created_at``。时间按字符串
+    ``YYYY-MM-DD HH:MM:SS`` 比较（MySQL DATETIME 的稳定表示）。
+    """
+    message_id = int(row["id"])
+    if message_id in scope["history_message_ids"]:
+        return False
+    if int(row["conversation_id"]) != scope["conversation_id"]:
+        return False
+    return str(row["created_at"]) > scope["snapshot_time"]
+
+
 def extra_messages(connection, snapshot: dict[str, Any]) -> list[int]:
+    """同一 conversation 内不属于快照历史的全部消息（仅用于报告）。"""
     data = snapshot["dataset"]
     message_ids = [int(value) for value in data["historyMessageIds"]]
     placeholders = ",".join(["%s"] * len(message_ids))
@@ -271,6 +330,40 @@ def extra_messages(connection, snapshot: dict[str, Any]) -> list[int]:
             (int(data["conversationId"]), *message_ids),
         )
         return [int(row["id"]) for row in cursor.fetchall()]
+
+
+def prunable_messages(connection, snapshot: dict[str, Any]) -> list[int]:
+    """严格范围内的可删除消息 ID。"""
+    sql, params = prune_sql(prune_scope(snapshot), delete=False)
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        return [int(row["id"]) for row in cursor.fetchall()]
+
+
+def check_against_baseline(
+    connection, snapshot: dict[str, Any], baseline: dict[str, Any]
+) -> dict[str, Any]:
+    """在调用方事务内计算冻结哈希并与基线比对（不另开连接）。"""
+    hashes = snapshot_hashes(connection, snapshot)
+    current = {
+        "tables": hashes,
+        "combined": combined_hash(hashes),
+        "generationProfile": generation_profile(),
+    }
+    return {**current, "problems": diff_baseline(baseline, current)}
+
+
+def load_baseline(snapshot_path: Path) -> dict[str, Any]:
+    path = default_baseline_path(snapshot_path)
+    if not path.exists():
+        raise SystemExit(f"基线不存在：{path}；先运行 freeze_check.py --write-baseline")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _print_problems(title: str, problems: list[str]) -> None:
+    print(f"{title} FAIL：")
+    for problem in problems:
+        print(f"- {problem}")
 
 
 def main() -> int:
@@ -304,37 +397,96 @@ def main() -> int:
         print("\n[dry-run] 未写库。确认后用 --apply 执行。")
         return 0
 
+    snapshot_path = Path(args.snapshot)
+    baseline = load_baseline(snapshot_path)
+    scope = prune_scope(snapshot)
+
     connection = connect_mysql(snapshot["isolation"]["db"])
     try:
         extras = extra_messages(connection, snapshot)
+        scoped = prunable_messages(connection, snapshot)
         print(f"\n快照对话中运行期追加的消息：{len(extras)} 条")
+        print(f"严格删除范围（同对话 + snapshotTime 之后 + 非快照历史）：{len(scoped)} 条")
         if extras and not args.prune_run_messages:
             print("WARN: 未加 --prune-run-messages，这些消息会保留，下一组历史将与快照不同。")
+        if args.prune_run_messages:
+            # 严格范围内应覆盖全部运行消息；若不相等，说明存在时间戳落在
+            # snapshotTime 同一秒的消息。不能扩大范围，直接 fail closed。
+            if set(extras) - set(scoped):
+                raise SystemExit(
+                    "删除范围校验失败：存在不属于严格范围的运行期消息 "
+                    f"{sorted(set(extras) - set(scoped))}；拒绝执行，需人工处理"
+                )
 
         connection.begin()
-        with connection.cursor() as cursor:
-            for sql, params in statements:
-                cursor.execute(sql, params)
-            if args.prune_run_messages and extras:
-                placeholders = ",".join(["%s"] * len(extras))
-                cursor.execute(
-                    f"DELETE FROM message WHERE id IN ({placeholders})", tuple(extras)
-                )
-        connection.commit()
-    except Exception:
-        connection.rollback()
-        raise
+        try:
+            # 前提 1：删除前先证明当前冻结表仍与基线一致。
+            before = check_against_baseline(connection, snapshot, baseline)
+            if before["problems"]:
+                connection.rollback()
+                _print_problems("删除前 freeze_check", before["problems"])
+                return 1
+
+            with connection.cursor() as cursor:
+                for sql, params in statements:
+                    cursor.execute(sql, params)
+                pruned = 0
+                if args.prune_run_messages and scoped:
+                    delete_sql, delete_params = prune_sql(scope, delete=True)
+                    cursor.execute(delete_sql, delete_params)
+                    pruned = int(cursor.rowcount)
+
+            # 前提 2：删除范围严格限定（上面的 SQL 与 scope 是唯一来源）。
+            # 前提 3：删除后再次在事务内计算冻结哈希。
+            after = check_against_baseline(connection, snapshot, baseline)
+            if after["problems"]:
+                connection.rollback()
+                _print_problems("删除后 freeze_check", after["problems"])
+                return 1
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
     finally:
         connection.close()
+
+    # 决策 1：restore 提交后立即用独立只读连接再跑一次 freeze_check。
+    post = current_state(snapshot)
+    post_problems = diff_baseline(baseline, post)
+    if post_problems:
+        _print_problems("restore 后原子性 freeze_check", post_problems)
+        if args.json_out:
+            write_json(
+                Path(args.json_out),
+                {"action": "apply", "problems": post_problems, "committed": True},
+            )
+        return 1
+
+    # 删除后确认严格范围内无残留；有残留说明运行期消息未被清掉，下一组历史会漂移。
+    verify_connection = connect_mysql(snapshot["isolation"]["db"])
+    try:
+        residual = prunable_messages(verify_connection, snapshot)
+    finally:
+        verify_connection.close()
+    if args.prune_run_messages and residual:
+        _print_problems(
+            "删除范围残留检查", [f"仍有 {len(residual)} 条严格范围内的消息：{residual}"]
+        )
+        return 1
 
     result = {
         "action": "apply",
         "statements": len(statements),
-        "prunedMessages": len(extras) if args.prune_run_messages else 0,
+        "beforeCombined": before["combined"],
+        "afterCombined": after["combined"],
+        "postCommitCombined": post["combined"],
+        "prunedMessages": pruned if args.prune_run_messages else 0,
         "keptRunMessages": 0 if args.prune_run_messages else len(extras),
+        "residualScopedMessages": len(residual),
+        "freezeCheck": "PASS",
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    print("下一步：python freeze_check.py <snapshot> --check")
+    print("原子性检查 PASS：commit 后冻结哈希与基线一致。")
     if args.json_out:
         write_json(Path(args.json_out), result)
     return 0
@@ -405,6 +557,28 @@ def self_test() -> dict[str, Any]:
         problems.append("dedupe_key 不稳定")
     if dedupe_key(11, 33, 66) == dedupe_key(11, 33, 67):
         problems.append("dedupe_key 未绑定来源消息")
+
+    # 决策 2：删除范围必须同时满足三个条件。
+    scope = prune_scope(snapshot)
+    delete_sql, delete_params = prune_sql(scope, delete=True)
+    if not delete_sql.startswith("DELETE FROM message"):
+        problems.append("prune 语句不在 message 表")
+    for fragment in ("conversation_id=%s", "created_at > %s", "id NOT IN"):
+        if fragment not in delete_sql:
+            problems.append(f"prune 语句缺少范围条件 {fragment}")
+    if delete_params[0] != 55 or delete_params[1] != snapshot["snapshotTime"]:
+        problems.append("prune 参数未绑定 conversationId / snapshotTime")
+
+    cases = (
+        ({"id": 200, "conversation_id": 55, "created_at": "2026-11-09 12:00:01"}, True),
+        ({"id": 66, "conversation_id": 55, "created_at": "2026-11-09 12:00:01"}, False),
+        ({"id": 201, "conversation_id": 56, "created_at": "2026-11-09 12:00:01"}, False),
+        ({"id": 202, "conversation_id": 55, "created_at": "2026-11-09 11:59:59"}, False),
+        ({"id": 203, "conversation_id": 55, "created_at": "2026-11-09 12:00:00"}, False),
+    )
+    for row, expected in cases:
+        if is_prunable_message(row, scope) is not expected:
+            problems.append(f"prune 范围判断错误：{row} 期望 {expected}")
 
     for broken in (
         {**snapshot["isolation"], "db": "ails"},

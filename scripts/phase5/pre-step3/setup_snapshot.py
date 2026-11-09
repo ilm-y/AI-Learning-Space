@@ -101,9 +101,9 @@ class SnapshotSetup:
         username = "prestep3_" + self.state["stamp"].replace("-", "_")
         body = {"username": username, "password": PASSWORD}
         try:
-            data = self.api("POST", "/api/auth/register", token="", json=body)
+            data = self.api("POST", "/api/auth/register", json=body)
         except RuntimeError:
-            data = self.api("POST", "/api/auth/login", token="", json=body)
+            data = self.api("POST", "/api/auth/login", json=body)
         self.token = data["token"]
         self.ids["userId"] = int(data["user"]["id"])
         self.ids["username"] = username
