@@ -2,10 +2,11 @@
 
 - 日期：2026-11-09
 - 分支：`main`
-- 基线提交：`5afb20e fix(agent): Manifest 记录 section 展开的全部 source 并补充 Phase 5 Pilot 证据`
+- 基线提交：`3c66b58 chore(phase5): Memory 隔离补丁、Usage UNKNOWN 映射与策略开关设计审核`
 - 复核范围：Manifest 修复验证、A/B/C 公平性、Memory Collection 隔离、Usage 诊断可信边界、Tavily 最小集成设计、修复后 3 次真实验证计划
-- 本批追加（批次 1）：Memory 隔离补丁实施、Usage UNKNOWN 映射（脚本层）、A/B/C 策略开关设计审核、Tavily 溯源方案确认
-- 本轮约束：**未启动 90 次全量调用；未调用 LLM / Embedding / Tavily；未写入/删除 MySQL 或 Qdrant 业务数据；未实现策略开关 / Tavily；未进入 Step 4；未 commit / push。**
+- 批次 1：Memory 隔离补丁实施、Usage UNKNOWN 映射（脚本层）、A/B/C 策略开关设计审核、Tavily 溯源方案确认
+- 批次 2：三个设计细节确认、A/B/C 策略开关实现 + C 回归、统一数据快照脚本（§11）
+- 本轮约束：**未启动 90 次全量调用；未调用 LLM / Embedding / Tavily；未写入/删除 MySQL 或 Qdrant 业务数据；未执行快照脚本的 `--apply` / `--index-knowledge`；未进入 Step 4；未 commit / push。**
 - 唯一资源动作：`scripts/phase5/pre-step3/verify_memory_isolation.py` 在临时 Qdrant collection 内写入 1 个点、查询 1 次、删除 1 个临时 collection；默认 collection 前后只读复查，未变化。
 
 ---
@@ -17,9 +18,9 @@
 | Manifest 多 source 修复 | **PASS**（代码 + 单测） |
 | Manifest 六字段 / 五顶层字段兼容 | **PASS** |
 | 多 source token 统计是否重复 | **未发现重复**；但 `per_type.trajectory.used` 只包含首个 source 的份额，属语义限制 |
-| A/B/C 公平性（当前 Pilot 配置） | **FAIL / BLOCKED**：数据快照、问题、Knowledge 均不同；最小设计见 §2.7，未实现 |
-| B 是否为旧策略 | **否**：当前 B 是「当前 Policy + Builder，只是没有文档」，不是旧策略 |
-| 真实链路内 A/B/C 策略切换 | **BLOCKED（设计已审）**：Runtime 始终计算 Plan；方案 1 设计已输出，未实现 |
+| A/B/C 公平性（当前 Pilot 配置） | **FAIL（整改已落地，未执行验证）**：策略开关与统一快照脚本已实现/交付（§11）；3 次真实验证尚未运行 |
+| B 是否为旧策略 | **否，但已按三层近似实现**：B = `plan=None` + 强制检索 + 无预算/Session policy + 模拟 `DEGRADED→EMPTY`；禁止表述为「B = 旧版」（§2.7.3 / §11.4） |
+| 真实链路内 A/B/C 策略切换 | **PASS（已实现）**：`AILS_CONTEXT_STRATEGY` 仅启动读取；C golden 回归通过（§11.3/§11.5） |
 | Memory 默认 Collection 隔离（当前 Pilot 配置） | **PASS（本批已修）**：`start_services.py` 注入带 stamp 的 `AILS_MEMORY_COLLECTION_PREFIX` + fail-closed 断言 |
 | Memory 隔离机制证明 | **PASS（本批已增强）**：写入/查询/删除三点隔离，默认 collection 三次快照未变，无残留 |
 | Memory 清理 | **PASS（本批已修）**：`cleanup.py` 校验后删除 memory collection、复查 404、检查残留 |
@@ -236,7 +237,7 @@ D4-5 的 B 基线语义是：
   - 无法用当前生产链路直接跑「无个人上下文但同 Knowledge 的 A」；
   - 不能用「在 Pilot 脚本里拼 Prompt」绕过，因为这不再是 Spring → Agent 的真实上下文构建。
 
-### 2.5 最小整改方案（建议，未实现）
+### 2.5 最小整改方案（设计；批次 2 已实现，见 §11）
 
 #### A. 统一数据快照
 
@@ -309,7 +310,7 @@ D4-5 的 B 基线语义是：
 - B 组直接部署旧 commit 的 Agent；
 - 需要处理旧 Schema/旧依赖/旧配置兼容，成本高，不作为最小方案。
 
-**本轮建议：方案 1。未实现，等待人工批准。**
+**本轮建议：方案 1。批次 2 已按方案 1 实现，见 §11。**
 
 ### 2.6 公平性验收标准
 
@@ -323,9 +324,9 @@ D4-5 的 B 基线语义是：
 - C 的 Manifest 符合当前 Policy。
 - 任何一组运行后不得改变冻结表或共享 memory collection。
 
-### 2.7 A/B/C 策略开关最小设计审核（只设计，不实现）
+### 2.7 A/B/C 策略开关最小设计审核（本批已实现，见 §11）
 
-本批**不实现** `AILS_CONTEXT_STRATEGY`，以下仅给出可评审的最小设计。方案采用 §2.5 方案 1：仍走真实 Spring → Agent HTTP → 生产 Runtime/ContextBuilder，不新增 Spring 字段，不拼 Prompt。
+本节最初只输出设计；**前置整改批次 2 已按此实现**，三处设计细节的最终确认与实现证据见 §11。方案采用 §2.5 方案 1：仍走真实 Spring → Agent HTTP → 生产 Runtime/ContextBuilder，不新增 Spring 字段，不拼 Prompt。
 
 #### 2.7.1 配置项
 
@@ -397,7 +398,7 @@ D4-5 的 B 基线语义是：
 | A 的 `plan=None` 与「无个人上下文」双重差异 | 在报告中明确 A 也是实验定义，不是「当前策略去掉数据」；三组只差策略 |
 | 策略分支侵入生产 Runtime | 分支集中在检索/构建边界，C 路径保持原代码路径；新增 C 回归测试；上线前由人工审核 diff |
 
-**本批结论：设计已输出，未实现，等待人工批准。**
+**批次 1 结论：设计已输出。批次 2 已实现，见 §11。**
 
 ---
 
@@ -861,12 +862,12 @@ python scripts/phase5/pilot/cleanup.py <STATE_FILE>
 | Manifest token 不重复 | **PASS（有语义限制）** | 拆分和守恒；`per_type` 是 type 口径 |
 | `${type}_source` 限制已记录 | **PASS** | 本报告 §1.6 |
 | D4-5 评估器计划已记录 | **PASS** | 未实现 |
-| A/B/C 同一数据快照 | **FAIL（设计已确认）** | 当前 A 先跑、后建数据；统一快照方案见 §2.5/§2.7 |
-| A/B/C 同一问题 | **FAIL（设计已确认统一）** | 当前三个问题不同；统一中性问题见 §2.7.5 |
-| A/B/C 同一 Knowledge 候选 | **FAIL（设计已确认三组同文档）** | 当前 A/B 无文档，C 有 |
-| B 近似旧策略 | **FAIL / BLOCKED（设计已审）** | 当前 B 是当前策略减 Knowledge；三层近似定义见 §2.7.3，待批准实现 |
-| 真实链路内策略切换 | **BLOCKED（设计已审）** | Runtime 无策略开关；方案 1 最小设计见 §2.7，待批准实现 |
-| A/B/C 策略开关设计 | **PASS（仅设计）** | 配置、安全约束、B 三层、改动范围、风险已输出；未实现 |
+| A/B/C 同一数据快照 | **PASS（脚本已交付，未执行）** | `scripts/phase5/pre-step3/`：统一中性问题 + 单会话 + U/E/R/M + 冻结表哈希 + 恢复；实际建库留批次 3（§11.6） |
+| A/B/C 同一问题 | **FAIL（脚本已固定，未执行）** | `snapshot_common.NEUTRAL_QUESTION` 已成为唯一问题；三组尚未实际运行 |
+| A/B/C 同一 Knowledge 候选 | **FAIL（脚本已支持，未索引）** | `setup_snapshot.py --index-knowledge` 留批次 3；本批不调用 Embedding |
+| B 近似旧策略 | **PASS（已实现，三层定义已标注）** | Runtime 分支 + `_fold_legacy_degraded`；报告与 trace 标注模拟近似（§11.4） |
+| 真实链路内策略切换 | **PASS（已实现）** | `AILS_CONTEXT_STRATEGY` 仅启动读取；真实 Spring → Agent 链路内切换，Spring/Schema 未改（§11.4） |
+| A/B/C 策略开关实现 | **PASS（已实现）** | 配置、fail-closed 组合校验、Runtime 分支、C golden 回归齐备（§11.3/§11.5） |
 | Memory 前缀可配置 | **PASS** | `AILS_MEMORY_COLLECTION_PREFIX` |
 | Memory 默认值风险 | **FAIL（生产默认值未改）** | Pilot 已强制注入；生产未配置时仍会落到共享 `ails_memories_*` |
 | 当前 Pilot Memory 隔离 | **PASS（本批已修）** | `start_services.py` 注入带 stamp 的 memory 前缀 |
@@ -887,23 +888,29 @@ python scripts/phase5/pilot/cleanup.py <STATE_FILE>
 
 ## 8. Git 状态
 
-截至本批整改（2026-11-09）完成时：
+截至前置整改批次 2（2026-11-09）完成时：
 
 ```text
- M scripts/phase5/pilot/cleanup.py
- M scripts/phase5/pilot/run_agent.py
- M scripts/phase5/pilot/start_services.py
-?? scripts/phase5/pre-step3/
-?? docs/testing/phase5-pre-step3-review.md   # 本报告
+ M agent/app/config.py
+ M agent/app/runtime.py
+ M docs/testing/phase5-pre-step3-review.md
+?? agent/tests/context_strategy_fixtures.py
+?? agent/tests/fixtures/context_strategy_c_golden.json
+?? agent/tests/test_context_strategy.py
+?? scripts/phase5/pre-step3/freeze_check.py
+?? scripts/phase5/pre-step3/restore_snapshot.py
+?? scripts/phase5/pre-step3/setup_snapshot.py
+?? scripts/phase5/pre-step3/snapshot_common.py
 ```
 
-- 已跟踪文件修改**仅限 Phase 5 Pilot 脚本**；`agent/app/**`、`backend/**` 无修改；
+- 已跟踪文件修改**仅限** `agent/app/config.py`、`agent/app/runtime.py` 与本报告；
+- `backend/**`（含 Spring / Schema / SSE）、`ContextBuilder`、Policy 语义**无修改**；
 - **未 commit**；
 - **未 push**；
 - 最近提交仍为：
+  - `3c66b58 chore(phase5): Memory 隔离补丁、Usage UNKNOWN 映射与策略开关设计审核`
   - `5afb20e fix(agent): Manifest 记录 section 展开的全部 source 并补充 Phase 5 Pilot 证据`
   - `531dbd0 fix(agent): Manifest 记录所有 source_ids 而非仅第一个`
-  - `37d5749 test(phase5): Step 3 Pilot 真实链路验证与 A/B/C 初步对照`
 
 ---
 
@@ -921,8 +928,8 @@ python scripts/phase5/pilot/cleanup.py <STATE_FILE>
 
 本批新增待决策：
 
-10. **A/B/C 策略开关设计是否批准**：是否批准 §2.7 的 `AILS_CONTEXT_STRATEGY` 最小设计（默认 `C`、组合式隔离环境校验、Runtime 检索/构建边界分支、日志级策略记录）？批准后才进入实现；未批准前不得改生产 `runtime.py` / `config.py`。
-11. **B 近似三层定义是否接受**：是否接受 §2.7.3 的分层——可复现旧行为 / 无法精确复现 / 为实验模拟的 `DEGRADED→EMPTY`，并在结果中显式标注，禁止表述为「B = 旧版」？
+10. **A/B/C 策略开关设计是否批准**：→ **已批准并实现（前置整改批次 2）**。`AILS_CONTEXT_STRATEGY` 默认 `C`、fail-closed 组合校验、Runtime 检索/构建边界分支、trace + 结构化日志记录，见 §11.4；C 回归见 §11.5。
+11. **B 近似三层定义是否接受**：→ **已接受并落地**。§2.7.3 的三层定义保留；实现中 `DEGRADED→EMPTY` 仅在 B 分支、进入 Builder 前折叠，Knowledge 不折叠，见 §11.4。
 12. **Tavily 溯源方案是否确认**：是否确认 §5.8 的六项，尤其是第 2 条「v1 采用日志级工具调用记录（含 runId/traceId）、不新增数据库表」足以满足溯源要求？若必须持久化，需另批评审 Schema。
 
 ---
@@ -934,11 +941,116 @@ python scripts/phase5/pilot/cleanup.py <STATE_FILE>
 | Memory 隔离补丁 | **已实施** | `start_services.py` 注入 `AILS_MEMORY_COLLECTION_PREFIX=<stamp>-memory` + fail-closed 断言；state 记录 memory collection；`cleanup.py` 校验后删除/复查/残留检查；§3.8 |
 | Memory 隔离验证 | **PASS** | `verify_memory_isolation.py` 实际执行 `passed=true`；默认 collection 前后 404 未变；无残留；§3.8 |
 | Usage UNKNOWN 映射 | **已实施（脚本层）** | `run_agent.py` 输出 `usageStatus` / `runIdAssociable`；缺失 `usage="UNKNOWN"`；§4.7 |
-| A/B/C 策略开关 | **只设计，未实现** | §2.7：配置、安全约束逐条、B 三层定义、最小改动范围、风险 |
+| A/B/C 策略开关 | **批次 1 只设计；批次 2 已实现** | §2.7 设计；实现与 C 回归见 §11 |
 | Tavily 溯源方案 | **已确认，未实现** | §5.8 六项逐条确认 |
 | 3 次真实验证 | **未执行** | 计划见 §6 |
-| 90 次全量 | **仍 BLOCKED** | 策略开关未实现、真实链路 memory/B/C 公平性未验证、Tavily 未集成 |
+| 90 次全量 | **仍 BLOCKED（批次 1 时点）** | 后续状态：策略开关已实现、快照脚本已交付，仍需 3 次真实验证与 Tavily 集成 |
 | 生产代码 | **未修改** | `agent/app/**`、`backend/**` 无 diff |
 | commit / push | **未做** | 见 §8 |
 
 **进入全量的最低剩余条件**：批准并实现 §2.7 策略开关 → 按 §2.5/§2.7.5 重建统一快照 → 执行 §6 的 3 次真实验证且全部通过 → 再申请 90 次全量。
+
+---
+
+## 11. 前置整改批次 2 总结（2026-11-09）
+
+本批完成三件事：三个设计细节的最终确认、A/B/C 策略开关实现与 C 回归、统一数据快照脚本。**未**执行任何 LLM / Embedding / Tavily 调用，**未**写 MySQL，**未** commit / push。
+
+### 11.1 细节 1：`test_env_id` 正则的位置
+
+**结论：硬编码在 `config.py` 的模块级常量 `_TEST_ENV_ID_RE`（L26），不接受配置。**
+
+- 它是 Pilot stamp 的命名约定（`start_services.py` 生成 `phase5-pilot-<YYYYmmddHHMMSS>-<6hex>`），不是密钥，也不是环境差异项；生产不设置 `AILS_TEST_ENV_ID`，默认值为空串。
+- 若改成可配置：正则本身可能被写坏（误放行/误拒绝），且与 `start_services.py` 的生成格式产生漂移；可配置化换不来任何安全收益。
+- 生产安全来自默认值：`test_only=False`、`test_env_id=""`；只要 `context_strategy != "C"`，`_validate_context_strategy` 会因这两项直接拒绝启动。配置泄漏最多暴露「测试开关存在」，无法让生产通过校验。
+- 因此 `_TEST_ENV_ID_RE` 留在生产代码中可接受；它是 fail-closed 校验的一部分，而不是运行期开关。
+
+### 11.2 细节 2：delegation secret 条件
+
+**结论：生产 Agent **不使用**该密钥；原设计中的「delegation secret 必须为空」是恒真条件，已从策略校验器删除，保留为字段级全局不变量。**
+
+代码证据：
+
+- `config.py` 的 `_reject_delegation_signing_secret`（L195-208）是字段校验器，对**所有**环境无条件拒绝非空 `internal_delegation_secret`；
+- 该密钥由 Spring 持有（`InternalIdentitySigner` 读取 `ails.internal.delegation-secret`），Agent 端不参与签名业务；
+- 因此任何能让 A/B 启动的配置，必然已经满足「为空」；再写进 `_validate_context_strategy` 只是死代码。
+
+最终实现：从策略校验器中删除该条件，并在其 docstring 中说明原因；新增测试 `test_delegation_secret_guard_is_unconditional_not_strategy_specific` 证明即使隔离配置全部合法，出现该密钥仍然启动失败，且错误信息不回显密钥值。
+
+### 11.3 细节 3：C 策略默认路径一致性
+
+原计划四处改动位置与 C 下的行为：
+
+| 位置 | C 当前行为 | 加开关后 C 的行为 |
+|---|---|---|
+| `_retrieve` 计划入口（原 L747-759） | `plan_retrieval()` → `state.retrieval_plan` + `history_review_requested` | 完全相同的调用与赋值，只是包在 `if strategy == "C"` 内 |
+| 检索触发标志（原 L774-783） | 由 `plan.knowledge/understanding/memory/evidence/revision` 决定 | 表达式逐字保留；`memory_concept_ids = plan.memory_concept_ids` 不变 |
+| 检索 gather（原 L794-825） | 按上述布尔值组装 task | 布尔值来源不变，task 组装不变 |
+| 构建前（原 L640） | `_apply_session_policy()` → `builder.build()` | C 仍先 `_apply_session_policy()` 再 `build()`；`plan` 仍是同一个 `RetrievalPlan` |
+
+A/B 才走 `plan=None` 分支：不调用 `plan_retrieval()`、不应用 Session policy；B 额外在进入 Builder 前把检索 `DEGRADED` 折叠为 `EMPTY`（`_fold_legacy_degraded`，runtime L1302），Knowledge 不折叠。`RETRIEVE` trace 在 `plan=None` 时写 `retrievalPolicy=null`、`intent=null`、`policyVersion=null`、`sessionPolicyReason="experimental_strategy_no_policy"`，并始终写 `contextStrategy`。
+
+回归证据：C 的 golden（`agent/tests/fixtures/context_strategy_c_golden.json`）在**实现开关之前**由生产链路生成，覆盖 Manifest、section 顺序、citation、状态、token 计数与 trace；开关后逐字段一致，唯一差异是新增的 `contextStrategy` trace 字段（测试中剥离后单独断言为 `["C","C"]`）。
+
+### 11.4 实现清单
+
+| 文件 | 改动 |
+|---|---|
+| `agent/app/config.py` | L26-30 常量；L187-193 三个字段；L210-259 `_validate_context_strategy`（C 直接放行；A/B 校验 `test_only`、`test_env_id` 正则、两个 collection 前缀、非生产默认前缀、loopback）；`describe()` 增加 `context_strategy` / `test_only`。请求模型零改动 |
+| `agent/app/runtime.py` | `prepare()`：启动日志 + `RUN_START` trace 写 `contextStrategy`；`_retrieve()`：A 清空 history/session、仅 Knowledge；B 强制全部来源、`plan=None`、无 Session policy；C 原路径；`_fold_legacy_degraded()`；`RETRIEVE` trace 兼容 `plan=None`，写 `contextStrategy`，B 额外标注 `bApproximation="simulated-degraded-as-empty"` |
+| `agent/tests/context_strategy_fixtures.py` | 确定性 retriever / FakeLLM / golden payload 采集 |
+| `agent/tests/fixtures/context_strategy_c_golden.json` | 开关前生成的 C 基线 |
+| `agent/tests/test_context_strategy.py` | 19 个用例：默认 C、生产拒绝 A/B、缺任一隔离条件 fail closed、delegation secret 全局守卫、A/B 分支、B 近似标注、每次运行记录策略、C golden 回归 |
+| `scripts/phase5/pre-step3/*` | 统一快照准备 / 冻结检查 / 恢复（§11.6） |
+
+未修改：`ContextBuilder`、`AgentState` / Manifest Schema、SSE、Spring 任何文件、Provider 适配层。
+
+### 11.5 测试结果
+
+```text
+# 新增用例
+python -m pytest tests/test_context_strategy.py -q
+19 passed in 4.92s
+
+# Agent 全量回归（排除 tests/eval）
+python -m pytest tests --ignore=tests/eval -q
+605 passed, 9 skipped, 1 xfailed in 37.11s
+```
+
+C 回归中 `terminal.usage=None`、`usageStatus="UNKNOWN"` 属既有 provider 诊断边界，本批未改。
+
+### 11.6 统一数据快照脚本
+
+目录：`scripts/phase5/pre-step3/`
+
+| 文件 | 职责 |
+|---|---|
+| `snapshot_common.py` | 唯一中性问题（`NEUTRAL_QUESTION`）、固定 fixture 内容、15 张冻结表定义、隔离断言、规范化行哈希、生成参数指纹（非密钥） |
+| `setup_snapshot.py` | 默认 dry-run；`--apply` 通过本机 Spring API 建 user/space/concept/session/**单** conversation，并用一个 SQL 事务写历史消息 + U/E/R/M + source；`--index-knowledge` 才上传文档（调用 Embedding，本批未执行）；输出快照清单 JSON |
+| `freeze_check.py` | `--write-baseline` 冻结行数 + SHA-256 + 生成参数；`--check` 任一组前后比对，漂移即非零退出；`--dump` 只读打印；`SET SESSION TRANSACTION READ ONLY`，从不 commit |
+| `restore_snapshot.py` | 用 `INSERT ... ON DUPLICATE KEY UPDATE`（显式 ID + `snapshotTime`）恢复历史消息与个人上下文；默认不删除任何行；仅 `--prune-run-messages` 删除同对话内不属于快照的消息 |
+
+关键设计：
+
+- 三组共用**同一 conversationId、同一问题、同一文档**；A 的「无个人上下文」由策略实现，数据不删。
+- 冻结哈希排除运行期可变列：`conversation.last_message_seq/last_message_at/updated_at`、`learning_session.last_active_at`、`document.index_attempts/index_error/index_started_at/vector_reconciliation_*`、生成列 `active_content_hash`。
+- 生成参数指纹含 provider/model/temperature/max_tokens、top_k/min_score、预算、history limit、embedding provider/model/dimension，以及 `BASE_SYSTEM_INSTRUCTION` 的 SHA-256。
+- 本批**未**执行 `--apply`、`--index-knowledge` 或任何 MySQL 写入；只做 `--self-test` 与 dry-run。
+
+### 11.7 脚本自检结果
+
+```text
+python -m py_compile scripts/phase5/pre-step3/*.py          # COMPILE_OK
+python scripts/phase5/pre-step3/setup_snapshot.py --self-test   # 隔离断言 4/4 拒绝；profile 完整
+python scripts/phase5/pre-step3/freeze_check.py --self-test     # problems=[]（15 张表）
+python scripts/phase5/pre-step3/restore_snapshot.py --self-test # problems=[]（11 条 upsert）
+setup_snapshot.py <fake-state>                              # dry-run：只打印计划，不连库
+restore_snapshot.py <fake-snapshot>                         # dry-run：只打印语句，不写库
+```
+
+### 11.8 本批残余风险
+
+- **分析消费者必须关闭**：若 Understanding/Evidence/Memory 写回开启，冻结表会漂移；`restore_snapshot.py` 只恢复它记录过的行，不清理分析写入的新行。
+- **Knowledge 尚未索引**：`setup_snapshot.py` 默认不建文档；批次 3 必须先 `--index-knowledge`，否则 A/B/C 的 Knowledge 都为空，实验无意义。
+- **Qdrant 点哈希未纳入**：本批只冻结 MySQL 表；§2.7.5 提到的 Qdrant point/payload 哈希需在批次 3 另行实现或人工核对。
+- **测试账号口令**：快照账号位于隔离库，使用固定的实验用口令（常量在 `snapshot_common.py`，不输出、不写日志）；不得用于任何真实环境。

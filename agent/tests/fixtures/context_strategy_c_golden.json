@@ -1,0 +1,503 @@
+{
+  "citationInvalidLabels": [],
+  "citations": [
+    {
+      "chunkId": 701,
+      "chunkIndex": 0,
+      "documentId": 801,
+      "sourceTitle": "tcp_handshake.md"
+    }
+  ],
+  "contextTokens": 1149,
+  "estimatedTokens": 3538,
+  "historyMessages": 2,
+  "knowledgeState": "SUCCESS",
+  "manifest": {
+    "budget": {
+      "effective": 2700,
+      "output_reserve": 300,
+      "per_type": {
+        "history": {
+          "cap": 944,
+          "injection_status": "SELECTED",
+          "required": false,
+          "used": 33
+        },
+        "knowledge": {
+          "cap": 1080,
+          "injection_status": "SELECTED",
+          "required": true,
+          "used": 80
+        },
+        "memory": {
+          "cap": 540,
+          "injection_status": "SELECTED",
+          "required": true,
+          "used": 75
+        },
+        "session": {
+          "cap": null,
+          "injection_status": "SELECTED",
+          "required": true,
+          "used": 48
+        },
+        "understanding": {
+          "cap": 944,
+          "injection_status": "SELECTED",
+          "required": true,
+          "used": 318
+        },
+        "user_input": {
+          "cap": null,
+          "injection_status": "SELECTED",
+          "required": true,
+          "used": 19
+        }
+      },
+      "remaining": 1851,
+      "total": 3000,
+      "used": 1149
+    },
+    "intent": "LEARNING_EXPLANATION",
+    "policy_version": "d4-2-v1",
+    "schema_version": 1,
+    "sources": [
+      {
+        "estimated_tokens": 12,
+        "injection_status": "SELECTED",
+        "reason": "within_budget",
+        "retrieval_status": "SUCCESS",
+        "source_id": "history:1",
+        "type": "history"
+      },
+      {
+        "estimated_tokens": 21,
+        "injection_status": "SELECTED",
+        "reason": "within_budget",
+        "retrieval_status": "SUCCESS",
+        "source_id": "history:2",
+        "type": "history"
+      },
+      {
+        "estimated_tokens": 80,
+        "injection_status": "SELECTED",
+        "reason": "within_budget",
+        "retrieval_status": "SUCCESS",
+        "source_id": "chunk:701",
+        "type": "knowledge"
+      },
+      {
+        "estimated_tokens": 75,
+        "injection_status": "SELECTED",
+        "reason": "within_budget",
+        "retrieval_status": "SUCCESS",
+        "source_id": "memory:51",
+        "type": "memory"
+      },
+      {
+        "estimated_tokens": 48,
+        "injection_status": "SELECTED",
+        "reason": "within_budget",
+        "retrieval_status": "SUCCESS",
+        "source_id": "session:5",
+        "type": "session"
+      },
+      {
+        "estimated_tokens": 318,
+        "injection_status": "SELECTED",
+        "reason": "within_budget",
+        "retrieval_status": "SUCCESS",
+        "source_id": "understanding:31",
+        "type": "understanding"
+      },
+      {
+        "estimated_tokens": 19,
+        "injection_status": "SELECTED",
+        "reason": "within_budget",
+        "retrieval_status": "SUCCESS",
+        "source_id": "message:current",
+        "type": "user_input"
+      }
+    ]
+  },
+  "providedLabels": [
+    "资料《tcp_handshake.md》#0"
+  ],
+  "response": "第三次握手确认服务端的 SYN-ACK 已被客户端收到，避免旧连接请求被服务端误当成新连接。[资料《tcp_handshake.md》#0]",
+  "retrievalPlan": {
+    "concepts": [
+      1
+    ],
+    "intent": "LEARNING_EXPLANATION",
+    "intentReason": "concept_hit_explanation",
+    "memoryConceptIds": [
+      1
+    ],
+    "memoryScopePriority": [
+      "CONCEPT",
+      "SPACE",
+      "GLOBAL"
+    ],
+    "needs": {
+      "evidence": {
+        "need": "SKIP",
+        "reason": "explanation_no_evidence_request",
+        "triggered": false
+      },
+      "evidenceRelated": {
+        "need": "SKIP",
+        "reason": "no_evidence_query:explanation_no_evidence_request",
+        "triggered": false
+      },
+      "knowledge": {
+        "need": "REQUIRED",
+        "reason": "explanation_requires_documents",
+        "triggered": true
+      },
+      "memory": {
+        "need": "REQUIRED",
+        "reason": "explanation_reads_learning_memory",
+        "triggered": true
+      },
+      "revision": {
+        "need": "SKIP",
+        "reason": "explanation_no_revision",
+        "triggered": false
+      },
+      "understanding": {
+        "need": "REQUIRED",
+        "reason": "explanation_reads_current_understanding",
+        "triggered": true
+      }
+    },
+    "policyVersion": "d4-2-v1",
+    "reasons": {
+      "evidence": "explanation_no_evidence_request",
+      "evidenceRelated": "no_evidence_query:explanation_no_evidence_request",
+      "intent": "concept_hit_explanation",
+      "knowledge": "explanation_requires_documents",
+      "memory": "explanation_reads_learning_memory",
+      "memoryConceptIds": "all_detected_concepts",
+      "revision": "explanation_no_revision",
+      "session": "session_frame_undetermined",
+      "understanding": "explanation_reads_current_understanding"
+    },
+    "reviewRequired": false,
+    "session": {
+      "conceptMatch": null,
+      "injectCurrentFocus": true,
+      "injectGoal": true,
+      "injectRecentTurns": true,
+      "need": "REQUIRED",
+      "reason": "session_frame_undetermined",
+      "sessionId": 5
+    }
+  },
+  "retrieverCalls": [
+    "concepts",
+    "knowledge",
+    "understandings",
+    "memories"
+  ],
+  "sectionNames": [
+    "user_input",
+    "history:2",
+    "history:1",
+    "session",
+    "understanding:1",
+    "memory:51",
+    "knowledge:701"
+  ],
+  "sectionTypes": [
+    "user_input",
+    "history",
+    "history",
+    "session",
+    "understanding",
+    "memory",
+    "knowledge"
+  ],
+  "sessionPresent": true,
+  "statuses": {
+    "evidence": "NOT_RETRIEVED",
+    "knowledge": "SUCCESS",
+    "memory": "SUCCESS",
+    "revision": "NOT_QUERIED",
+    "understanding": "SUCCESS"
+  },
+  "strategy": "C",
+  "terminal": {
+    "finishReason": null,
+    "truncated": false,
+    "usage": null,
+    "usageStatus": "UNKNOWN"
+  },
+  "traceEvents": [
+    {
+      "detail": {
+        "conversationId": 70,
+        "messageChars": 22,
+        "sessionId": 5,
+        "spaceId": 9,
+        "userId": 7
+      },
+      "type": "RUN_START"
+    },
+    {
+      "detail": {
+        "concepts_available": 1,
+        "detected": [
+          "TCP 三次握手"
+        ],
+        "matchedOn": [
+          "message:canonical_name"
+        ],
+        "resolverCallReason": "rule_hit_normal_intent",
+        "resolverIntent": "knowledge_question",
+        "resolverStatus": "NOT_CALLED",
+        "ruleDetected": [
+          "TCP 三次握手"
+        ]
+      },
+      "type": "CONCEPT_DETECT"
+    },
+    {
+      "detail": {
+        "conceptIds": [
+          1
+        ],
+        "crossConceptEvidenceStatus": "NOT_RETRIEVED",
+        "crossConceptEvidenceWarning": null,
+        "crossConceptEvidences": 0,
+        "evidenceRequested": false,
+        "evidenceStatus": "NOT_RETRIEVED",
+        "evidenceWarning": null,
+        "evidences": 0,
+        "expandedConceptIds": [],
+        "historyReviewRequested": false,
+        "intent": "LEARNING_EXPLANATION",
+        "knowledge": 1,
+        "knowledgeCandidates": 1,
+        "knowledgeStatus": "SUCCESS",
+        "memories": 1,
+        "memoryDetail": null,
+        "memoryStatus": "SUCCESS",
+        "memoryWarning": null,
+        "policyVersion": "d4-2-v1",
+        "relatedConceptCandidates": [],
+        "relatedConceptStatus": "NOT_RETRIEVED",
+        "relatedConceptWarning": null,
+        "resolverHintsNotInRelation": [],
+        "resolverRelatedHintIds": [],
+        "resolverStatus": "NOT_CALLED",
+        "retrievalPolicy": {
+          "concepts": [
+            1
+          ],
+          "intent": "LEARNING_EXPLANATION",
+          "intentReason": "concept_hit_explanation",
+          "memoryConceptIds": [
+            1
+          ],
+          "memoryScopePriority": [
+            "CONCEPT",
+            "SPACE",
+            "GLOBAL"
+          ],
+          "needs": {
+            "evidence": {
+              "need": "SKIP",
+              "reason": "explanation_no_evidence_request",
+              "triggered": false
+            },
+            "evidenceRelated": {
+              "need": "SKIP",
+              "reason": "no_evidence_query:explanation_no_evidence_request",
+              "triggered": false
+            },
+            "knowledge": {
+              "need": "REQUIRED",
+              "reason": "explanation_requires_documents",
+              "triggered": true
+            },
+            "memory": {
+              "need": "REQUIRED",
+              "reason": "explanation_reads_learning_memory",
+              "triggered": true
+            },
+            "revision": {
+              "need": "SKIP",
+              "reason": "explanation_no_revision",
+              "triggered": false
+            },
+            "understanding": {
+              "need": "REQUIRED",
+              "reason": "explanation_reads_current_understanding",
+              "triggered": true
+            }
+          },
+          "policyVersion": "d4-2-v1",
+          "reasons": {
+            "evidence": "explanation_no_evidence_request",
+            "evidenceRelated": "no_evidence_query:explanation_no_evidence_request",
+            "intent": "concept_hit_explanation",
+            "knowledge": "explanation_requires_documents",
+            "memory": "explanation_reads_learning_memory",
+            "memoryConceptIds": "all_detected_concepts",
+            "revision": "explanation_no_revision",
+            "session": "session_frame_undetermined",
+            "understanding": "explanation_reads_current_understanding"
+          },
+          "reviewRequired": false,
+          "session": {
+            "conceptMatch": null,
+            "injectCurrentFocus": true,
+            "injectGoal": true,
+            "injectRecentTurns": true,
+            "need": "REQUIRED",
+            "reason": "session_frame_undetermined",
+            "sessionId": 5
+          }
+        },
+        "revisionStatus": "NOT_QUERIED",
+        "revisionWarning": null,
+        "sessionInjected": true,
+        "sessionPolicyReason": "session_frame_undetermined",
+        "source": "deterministic",
+        "trajectoryConcepts": [],
+        "trajectoryEvidenceIds": [],
+        "trajectoryRevisions": 0,
+        "understandingStatus": "SUCCESS",
+        "understandingWarning": null,
+        "understandings": [
+          "TCP 三次握手"
+        ]
+      },
+      "type": "RETRIEVE"
+    },
+    {
+      "detail": {
+        "contextManifest": {
+          "budget": {
+            "effective": 2700,
+            "output_reserve": 300,
+            "per_type": {
+              "history": {
+                "cap": 944,
+                "injection_status": "SELECTED",
+                "required": false,
+                "used": 33
+              },
+              "knowledge": {
+                "cap": 1080,
+                "injection_status": "SELECTED",
+                "required": true,
+                "used": 80
+              },
+              "memory": {
+                "cap": 540,
+                "injection_status": "SELECTED",
+                "required": true,
+                "used": 75
+              },
+              "session": {
+                "cap": null,
+                "injection_status": "SELECTED",
+                "required": true,
+                "used": 48
+              },
+              "understanding": {
+                "cap": 944,
+                "injection_status": "SELECTED",
+                "required": true,
+                "used": 318
+              },
+              "user_input": {
+                "cap": null,
+                "injection_status": "SELECTED",
+                "required": true,
+                "used": 19
+              }
+            },
+            "remaining": 1851,
+            "total": 3000,
+            "used": 1149
+          },
+          "intent": "LEARNING_EXPLANATION",
+          "policy_version": "d4-2-v1",
+          "schema_version": 1,
+          "sources": [
+            {
+              "estimated_tokens": 12,
+              "injection_status": "SELECTED",
+              "reason": "within_budget",
+              "retrieval_status": "SUCCESS",
+              "source_id": "history:1",
+              "type": "history"
+            },
+            {
+              "estimated_tokens": 21,
+              "injection_status": "SELECTED",
+              "reason": "within_budget",
+              "retrieval_status": "SUCCESS",
+              "source_id": "history:2",
+              "type": "history"
+            },
+            {
+              "estimated_tokens": 80,
+              "injection_status": "SELECTED",
+              "reason": "within_budget",
+              "retrieval_status": "SUCCESS",
+              "source_id": "chunk:701",
+              "type": "knowledge"
+            },
+            {
+              "estimated_tokens": 75,
+              "injection_status": "SELECTED",
+              "reason": "within_budget",
+              "retrieval_status": "SUCCESS",
+              "source_id": "memory:51",
+              "type": "memory"
+            },
+            {
+              "estimated_tokens": 48,
+              "injection_status": "SELECTED",
+              "reason": "within_budget",
+              "retrieval_status": "SUCCESS",
+              "source_id": "session:5",
+              "type": "session"
+            },
+            {
+              "estimated_tokens": 318,
+              "injection_status": "SELECTED",
+              "reason": "within_budget",
+              "retrieval_status": "SUCCESS",
+              "source_id": "understanding:31",
+              "type": "understanding"
+            },
+            {
+              "estimated_tokens": 19,
+              "injection_status": "SELECTED",
+              "reason": "within_budget",
+              "retrieval_status": "SUCCESS",
+              "source_id": "message:current",
+              "type": "user_input"
+            }
+          ]
+        },
+        "droppedSections": [],
+        "estimatedTokens": 3538,
+        "knowledgeDropped": [],
+        "knowledgeInjected": [
+          701
+        ],
+        "knowledgeState": "SUCCESS",
+        "knowledgeStatus": "SUCCESS",
+        "warnings": [
+          "完整 prompt 约 3538 tokens，其中固定系统提示约 2389 tokens；max_context_tokens=3000 约束的是动态上下文（当前 1149 tokens），不是完整 prompt。"
+        ]
+      },
+      "type": "CONTEXT_BUILT"
+    }
+  ]
+}

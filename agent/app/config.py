@@ -8,13 +8,26 @@
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # agent/ 目录，用于把相对路径（fixtures、.env）解析成绝对路径
 AGENT_ROOT = Path(__file__).resolve().parent.parent
+
+# A/B/C 实验的隔离环境标识。格式由 scripts/phase5/pilot/start_services.py
+# 生成的 stamp 决定：phase5-pilot-<YYYYmmddHHMMSS>-<6 位十六进制>。
+# 刻意硬编码而不是做成配置项：它是实验命名约定，不是密钥；可配置只会引入
+# 「正则被改坏 / 与 Pilot 生成器漂移」的失败面，不会增加任何防护。真正的边界
+# 是「谁有权设置环境变量并启动进程」，那由部署侧控制。
+_TEST_ENV_ID_RE = re.compile(r"^phase5-pilot-\d{14}-[0-9a-f]{6}$")
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+# 生产默认前缀：A/B 模式绝不允许回落到这两个共享名字。
+_PRODUCTION_DOCUMENT_PREFIX = "ails_documents"
+_PRODUCTION_MEMORY_PREFIX = "ails_memories"
 
 
 class Settings(BaseSettings):
@@ -169,6 +182,16 @@ class Settings(BaseSettings):
     # 单次记忆向量检索的总时限；Spring 侧 HttpClient 还会再设一层超时。
     memory_search_timeout_seconds: float = 2.0
 
+    # ---------- A/B/C 上下文策略（仅测试用）----------
+    # C = 当前生产策略（默认）；A/B 只在隔离测试环境允许，详见
+    # _validate_context_strategy()。策略只在进程启动时读取，ChatRequest /
+    # AnalyzeRequest / HTTP Header 都没有该字段，用户无法按请求切换。
+    context_strategy: Literal["A", "B", "C"] = "C"
+    # 显式声明「这是隔离测试进程」。默认 False，生产缺省即拒绝 A/B。
+    test_only: bool = False
+    # 与 Pilot stamp 一致；A/B 时两个 collection 前缀都必须以它开头。
+    test_env_id: str = ""
+
     @field_validator("internal_delegation_secret")
     @classmethod
     def _reject_delegation_signing_secret(cls, value: str) -> str:
@@ -183,6 +206,57 @@ class Settings(BaseSettings):
                 "Agent 不得持有后端委托签发密钥"
             )
         return ""
+
+    @model_validator(mode="after")
+    def _validate_context_strategy(self) -> "Settings":
+        """A/B 策略的 fail-closed 启动校验。
+
+        生产判定：没有同时满足「AILS_TEST_ONLY=true + 合法 test_env_id」就视为
+        生产。此时只允许 C；A/B 直接构造失败，进程无法启动。
+
+        关于 delegation secret：``internal_delegation_secret`` 已由字段级
+        ``_reject_delegation_signing_secret`` 对**所有**环境无条件拒绝非空值，
+        因此这里再检查一次恒为真，没有防护价值。本校验不重复该条件；字段级
+        守卫是唯一实现点，详见 docs/testing/phase5-pre-step3-review.md §11.2。
+
+        错误信息只说明缺失/不匹配的配置项，不回显任何密钥或连接串。
+        """
+        if self.context_strategy == "C":
+            return self
+
+        problems: list[str] = []
+        if not self.test_only:
+            problems.append("AILS_TEST_ONLY 未开启")
+
+        env_id = self.test_env_id.strip()
+        if not _TEST_ENV_ID_RE.fullmatch(env_id):
+            problems.append(
+                "AILS_TEST_ENV_ID 缺失或格式不符"
+                "（应形如 phase5-pilot-YYYYmmddHHMMSS-abcdef）"
+            )
+        else:
+            if not self.qdrant_collection_prefix.startswith(env_id):
+                problems.append(
+                    "AILS_QDRANT_COLLECTION_PREFIX 未以 AILS_TEST_ENV_ID 开头"
+                )
+            if not self.memory_collection_prefix.startswith(env_id):
+                problems.append(
+                    "AILS_MEMORY_COLLECTION_PREFIX 未以 AILS_TEST_ENV_ID 开头"
+                )
+
+        if self.qdrant_collection_prefix == _PRODUCTION_DOCUMENT_PREFIX:
+            problems.append("AILS_QDRANT_COLLECTION_PREFIX 不能是生产默认前缀")
+        if self.memory_collection_prefix == _PRODUCTION_MEMORY_PREFIX:
+            problems.append("AILS_MEMORY_COLLECTION_PREFIX 不能是生产默认前缀")
+        if self.host.strip().lower() not in _LOOPBACK_HOSTS:
+            problems.append("AILS_HOST 必须是 loopback 地址")
+
+        if problems:
+            raise ValueError(
+                f"context_strategy={self.context_strategy} 仅允许在隔离测试环境启动："
+                + "；".join(problems)
+            )
+        return self
 
     @model_validator(mode="after")
     def _validate_document_pipeline(self) -> "Settings":
@@ -264,6 +338,8 @@ class Settings(BaseSettings):
     def describe(self) -> dict[str, object]:
         """给 /health 用：说明当前实际生效的是哪套适配器，不泄露密钥。"""
         return {
+            "context_strategy": self.context_strategy,
+            "test_only": self.test_only,
             "llm_provider": self.llm_provider,
             "llm_model": self.llm_model if self.llm_provider != "mock" else "mock",
             "llm_configured": bool(self.llm_api_key) or self.llm_provider == "mock",

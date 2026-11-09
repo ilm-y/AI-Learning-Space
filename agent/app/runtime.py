@@ -617,6 +617,15 @@ class AgentRuntime:
         """
         trace = trace or RunTrace(run_id=request.run_id, trace_id=request.trace_id)
         state = AgentState.from_request(request, trace)
+        strategy = self._settings.context_strategy
+        # 策略只在进程启动时从 Settings 读取；请求体没有任何策略字段。
+        # 每个 AgentRun 都写 trace + 一行结构化日志，Pilot 据此确认本次实际策略。
+        log.info(
+            "run %s contextStrategy=%s traceId=%s",
+            request.run_id,
+            strategy,
+            request.trace_id,
+        )
         trace.record(
             TraceEventType.RUN_START,
             userId=request.user_id,
@@ -624,6 +633,7 @@ class AgentRuntime:
             spaceId=request.learning_space_id,
             sessionId=request.session.id if request.session else None,
             messageChars=len(request.user_message or ""),
+            contextStrategy=strategy,
         )
 
         owned_retriever = retriever is None
@@ -637,6 +647,11 @@ class AgentRuntime:
             )
         try:
             await self._retrieve(state, retriever)
+            if strategy == "B":
+                # B 的旧策略近似：检索阶段的 DEGRADED 在进入 Builder 前折叠为
+                # EMPTY。这是为实验模拟的旧版行为，不是当前代码的自然表现；
+                # 结果元数据必须标记 bApproximation。
+                _fold_legacy_degraded(state)
             state.context = self._builder.build(state)
             trace.record(
                 TraceEventType.CONTEXT_BUILT,
@@ -674,6 +689,14 @@ class AgentRuntime:
 
     async def _retrieve(self, state: AgentState, retriever) -> None:
         query = state.user_message or ""
+        strategy = self._settings.context_strategy
+
+        if strategy == "A":
+            # A 的定义是「无个人上下文，但保留同一 Knowledge」。为了与 D4-5
+            # harness 的 include_history=False / include_session=False 对齐，
+            # history / session 从概念识别开始就不参与，而不是只在渲染时清空。
+            state.history = []
+            state.session = None
 
         concepts = await retriever.list_concepts(state.space_id)
         trace_detail: dict[str, object] = {"concepts_available": len(concepts)}
@@ -741,22 +764,60 @@ class AgentRuntime:
             )
 
         concept_ids = state.concept_ids
-        # D4-2：把「本轮查什么、为什么查」收敛成一份结构化计划。
-        # Runtime 只执行计划，不在下面重新做触发判断；Session 的 goal/focus
-        # 也由这里决定是否注入（SessionResolver 可能把新话题挂到旧 Session）。
-        plan = plan_retrieval(
-            user_message=query,
-            concept_ids=concept_ids,
-            session=state.session,
-            space_concepts=concepts,
-            history=state.history,
-        )
-        state.retrieval_plan = plan
-        # 复盘校验比「读取轨迹」更窄：只有个人历史问题才缓冲回答。
-        # 否则「过去十年 CPU 架构有什么变化」这类知识问题会因为一个「过去」
-        # 被当成复盘，既增加首字延迟，又可能被要求说明「没有历史记录」。
-        state.history_review_requested = plan.review_required
-        _apply_session_policy(state, plan)
+        if strategy == "C":
+            # D4-2：把「本轮查什么、为什么查」收敛成一份结构化计划。
+            # Runtime 只执行计划，不在下面重新做触发判断；Session 的 goal/focus
+            # 也由这里决定是否注入（SessionResolver 可能把新话题挂到旧 Session）。
+            plan: RetrievalPlan | None = plan_retrieval(
+                user_message=query,
+                concept_ids=concept_ids,
+                session=state.session,
+                space_concepts=concepts,
+                history=state.history,
+            )
+            state.retrieval_plan = plan
+            # 复盘校验比「读取轨迹」更窄：只有个人历史问题才缓冲回答。
+            # 否则「过去十年 CPU 架构有什么变化」这类知识问题会因为一个「过去」
+            # 被当成复盘，既增加首字延迟，又可能被要求说明「没有历史记录」。
+            state.history_review_requested = plan.review_required
+            _apply_session_policy(state, plan)
+
+            # REQUIRED / OPTIONAL 在本批都表示「发起检索」；SKIP 才表示不发起。
+            # Policy 在没有概念锚点时已经把 U / M / E / Revision 统一置为 SKIP。
+            retrieve_knowledge = plan.knowledge.triggered
+            retrieve_understandings = plan.understanding.triggered and bool(concept_ids)
+            retrieve_memories = plan.memory.triggered and bool(plan.memory_concept_ids)
+            wants_evidence = plan.evidence.triggered and bool(concept_ids)
+            # 轨迹只注入显式复盘问题；「之前学过链表，现在学树」这类普通问题
+            # 即使带时间词，也不应该被塞进历史轨迹。
+            retrieve_trajectory = plan.revision.triggered and bool(concept_ids)
+            memory_concept_ids = list(plan.memory_concept_ids)
+        elif strategy == "A":
+            # A：不注入个人上下文，只保留 Knowledge。plan=None 让 Builder 走
+            # 无 Plan 的既有组装路径；history/session 已在方法开头清空。
+            plan = None
+            state.retrieval_plan = None
+            state.history_review_requested = False
+            retrieve_knowledge = True
+            retrieve_understandings = False
+            retrieve_memories = False
+            wants_evidence = False
+            retrieve_trajectory = False
+            memory_concept_ids = []
+        else:  # strategy == "B"
+            # B：旧策略近似。plan=None + 强制检索全部来源 + 不应用 Session policy。
+            # U / M / E / Revision 仍要求 concept 锚点：后端这些读接口按
+            # user_id + concept_id 组织，没有概念时无法发起「全量历史」查询。
+            # 这是近似定义的一部分，报告里必须标注。
+            plan = None
+            state.retrieval_plan = None
+            state.history_review_requested = is_history_review(query)
+            retrieve_knowledge = True
+            retrieve_understandings = bool(concept_ids)
+            retrieve_memories = bool(concept_ids)
+            wants_evidence = bool(concept_ids)
+            retrieve_trajectory = bool(concept_ids)
+            memory_concept_ids = list(concept_ids)
 
         # Knowledge 独立于 Concept：用户问一个还没建 Concept 的新知识点时，
         # 上传的文档仍然应该参与回答。Concept 只决定 U / M / E 是否有可挂靠对象。
@@ -769,15 +830,6 @@ class AgentRuntime:
             min_score=self._settings.knowledge_min_score,
         )
 
-        # REQUIRED / OPTIONAL 在本批都表示「发起检索」；SKIP 才表示不发起。
-        # Policy 在没有概念锚点时已经把 U / M / E / Revision 统一置为 SKIP。
-        retrieve_knowledge = plan.knowledge.triggered
-        retrieve_understandings = plan.understanding.triggered and bool(concept_ids)
-        retrieve_memories = plan.memory.triggered and bool(plan.memory_concept_ids)
-        wants_evidence = plan.evidence.triggered and bool(concept_ids)
-        # 轨迹只注入显式复盘问题；「之前学过链表，现在学树」这类普通问题
-        # 即使带时间词，也不应该被塞进历史轨迹。
-        retrieve_trajectory = plan.revision.triggered and bool(concept_ids)
         # 复盘时用 Revision 关联精确回查，而不是再塞一份「最近 3 条」，
         # 否则同一批证据会在上下文里出现两次。
         fetch_recent_evidence = wants_evidence and not retrieve_trajectory
@@ -804,7 +856,7 @@ class AgentRuntime:
                 retriever.get_memories(
                     state.user_id,
                     state.space_id,
-                    list(plan.memory_concept_ids),
+                    memory_concept_ids,
                     query,
                 ),
             )
@@ -917,17 +969,39 @@ class AgentRuntime:
                 state.evidence_status = fallback_result.status.value
                 state.evidence_warning = fallback_result.warning_text
 
+        if plan is not None:
+            retrieval_policy: dict[str, object] | None = plan.as_dict()
+            intent_value: str | None = plan.intent.value
+            policy_version: str | None = plan.policy_version
+            session_injected = plan.session.injects_frame
+            session_policy_reason = plan.session.reason
+        else:
+            # A/B 不走 Policy。B 的 plan=None 让 Builder 保留旧的 Session 注入
+            # 行为，因此这里按 state 的真实内容记录，而不是谎报 false。
+            retrieval_policy = None
+            intent_value = None
+            policy_version = None
+            session_injected = bool(
+                state.session
+                and (
+                    (state.session.goal or "").strip()
+                    or (state.session.current_focus or "").strip()
+                )
+            )
+            session_policy_reason = "experimental_strategy_no_policy"
+
         state.trace.record(
             TraceEventType.RETRIEVE,
             source=retriever.name,
+            contextStrategy=strategy,
             conceptIds=concept_ids,
             # D4-2：策略版本、意图与逐数据源的决策理由。它解释「为什么这轮查了 /
             # 没查某个源」，而不是只报告结果数量。
-            retrievalPolicy=plan.as_dict(),
-            intent=plan.intent.value,
-            policyVersion=plan.policy_version,
-            sessionInjected=plan.session.injects_frame,
-            sessionPolicyReason=plan.session.reason,
+            retrievalPolicy=retrieval_policy,
+            intent=intent_value,
+            policyVersion=policy_version,
+            sessionInjected=session_injected,
+            sessionPolicyReason=session_policy_reason,
             understandings=[item.concept_name for item in state.understandings],
             understandingStatus=state.understanding_status,
             understandingWarning=state.understanding_warning,
@@ -965,6 +1039,13 @@ class AgentRuntime:
             trajectoryConcepts=[item.concept_name for item in state.trajectories],
             trajectoryRevisions=sum(len(item.revisions) for item in state.trajectories),
             trajectoryEvidenceIds=[item.id for item in state.evidences],
+            # B 的三层定义第 3 层：DEGRADED→EMPTY 是为实验模拟的近似，
+            # 必须在结果元数据里显式标注，禁止与「旧版真实表现」混为一谈。
+            **(
+                {"bApproximation": "simulated-degraded-as-empty"}
+                if strategy == "B"
+                else {}
+            ),
         )
 
     async def _safe_knowledge(self, retriever, query: KnowledgeQuery) -> KnowledgeResult:
@@ -1223,6 +1304,25 @@ def _retriever_selection(retriever, settings: Settings) -> tuple[str, bool, str 
     if mode == "auto" and retriever.name.startswith("fixture:"):
         return mode, True, "no_credentials"
     return mode, False, None
+
+
+def _fold_legacy_degraded(state: AgentState) -> None:
+    """B 旧策略近似：把检索失败折叠成 EMPTY。
+
+    与 D4-5 harness 的 ``_fold_degraded`` 一致，覆盖 Understanding / Memory /
+    Evidence / Revision。运行时还会出现跨概念证据状态，同样折叠；否则 B 仍会
+    渲染「检索失败」提示，偏离旧策略近似。Knowledge 不折叠：harness 也不折叠，
+    且「文档检索失败」必须对模型可见，不能伪装成「没有资料」。
+    """
+    for attr in (
+        "understanding_status",
+        "memory_status",
+        "evidence_status",
+        "revision_status",
+        "cross_concept_evidence_status",
+    ):
+        if getattr(state, attr) == "DEGRADED":
+            setattr(state, attr, "EMPTY")
 
 
 def _apply_session_policy(state: AgentState, plan: RetrievalPlan) -> None:
