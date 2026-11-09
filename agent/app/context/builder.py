@@ -24,10 +24,35 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
 from app.citations import format_source_label
+from app.context.budget import (
+    ELASTIC_KIND_ORDER,
+    INJECTION_EXCLUDED,
+    INJECTION_OMITTED,
+    INJECTION_PARTIAL,
+    INJECTION_SELECTED,
+    INJECTION_TRUNCATED,
+    MANIFEST_SCHEMA_VERSION,
+    PROTECTED_KINDS,
+    REASON_CHAR_TRUNCATED,
+    REASON_DUPLICATE_SOURCE,
+    REASON_GLOBAL_BUDGET,
+    REASON_NOT_REVIEW_INTENT,
+    REASON_POLICY_SKIP,
+    REASON_SEMANTIC_REDUNDANCY,
+    REASON_TIER_PREFIX,
+    REASON_TYPE_BUDGET,
+    REASON_WITHIN_BUDGET,
+    TIER_FULL,
+    TIER_ONE_LINE,
+    TIER_STRUCTURED,
+    BudgetPolicy,
+)
+from app.context.policy import Intent, RetrievalNeed, RetrievalPlan
 from app.context.tokens import estimate_tokens, truncate_to_tokens
 from app.context.trajectory import (
     historical_misconceptions,
@@ -200,6 +225,25 @@ class ContextSection:
     estimated_tokens: int = 0
     truncated: bool = False
     dropped: bool = False
+    # ---------- D4-3：Manifest / 预算所需的元数据（不含正文）----------
+    # `source_type` 与 section 前缀一致，单独存一份是为了让 Manifest 不依赖
+    # section 命名格式；`retrieval_status` 保存检索层状态，避免把「没查」
+    # 和「查了为空」在 Manifest 里混成一个值。
+    source_type: str = ""
+    retrieval_status: str = ""
+    # protected 区块先占预算：Session 与状态说明被丢掉会让模型把「没看到」
+    # 说成「没有」，它们不值得为任何弹性内容让路。
+    protected: bool = False
+    # 当前采用的压缩档位；full / structured / one_line。
+    tier: str = TIER_FULL
+    # 分层压缩时由收集阶段挂上：入参是档位，返回该档位的渲染文本。
+    render_tier: Callable[[str], str] | None = None
+    # 被排除（policy / duplicate）或超预算（type / global）的稳定原因。
+    exclusion_reason: str | None = None
+    # 被保留但降级（tier / 字符截断 / 语义冗余）的原因。
+    compression_reason: str | None = None
+    # 最终注入状态：SELECTED / TRUNCATED / OMITTED / EXCLUDED。
+    injection_status: str = ""
 
     def __post_init__(self) -> None:
         self.estimated_tokens = estimate_tokens(self.content)
@@ -259,6 +303,9 @@ class BuiltContext:
     memory_detail: str | None = None
     revision_status: str = "NOT_QUERIED"
     revision_warning: str | None = None
+    # D4-3 最小 Manifest：只含 source_id / 状态 / 原因 / token 估算与预算汇总。
+    # 刻意不包含正文、完整 prompt、query 或异常原文；不是可查询的持久化结构。
+    context_manifest: dict[str, object] = field(default_factory=dict)
 
     @property
     def dropped_sections(self) -> list[str]:
@@ -296,27 +343,73 @@ class BuiltContext:
             "revisionWarning": self.revision_warning,
             "droppedSections": self.dropped_sections,
             "warnings": self.warnings,
+            "contextManifest": self.context_manifest,
             "sections": [section.as_dict() for section in self.sections],
             "systemInstruction": self.system_instruction,
             "messages": [message.as_dict() for message in self.messages],
         }
 
 
+@dataclass(slots=True)
+class _BuildScope:
+    """一次 build 的局部台账。
+
+    必须是 build 内部的局部对象，不能挂到 ContextBuilder 实例上：
+    Runtime 持有一个 Builder 并可能并发处理多个请求，实例级可变状态会串数据。
+    """
+
+    plan: RetrievalPlan | None
+    exclusions: list[dict[str, object]] = field(default_factory=list)
+    allocations: dict[str, dict[str, object]] = field(default_factory=dict)
+    effective_budget: int = 0
+
+
 class ContextBuilder:
-    def __init__(self, *, max_context_tokens: int = 3000, recent_history_limit: int = 12) -> None:
+    def __init__(
+        self,
+        *,
+        max_context_tokens: int = 3000,
+        recent_history_limit: int = 12,
+        budget_policy: BudgetPolicy | None = None,
+        output_reserve_ratio: float | None = None,
+        type_cap_ratios: dict[str, float] | None = None,
+    ) -> None:
         if max_context_tokens <= 0:
             raise ValueError("max_context_tokens 必须为正数")
         if recent_history_limit < 0:
             # 契约：0 = 不注入历史，负数非法。不要用 [-0:] 这种切片把 0 解释成全部。
             raise ValueError("recent_history_limit 不能为负数（0 表示不注入历史）")
+        base = budget_policy or BudgetPolicy()
+        policy = BudgetPolicy(
+            output_reserve_ratio=(
+                output_reserve_ratio
+                if output_reserve_ratio is not None
+                else base.output_reserve_ratio
+            ),
+            type_cap_ratios=(
+                type_cap_ratios
+                if type_cap_ratios is not None
+                else dict(base.type_cap_ratios)
+            ),
+        )
+        policy.validate()
         self._max_context_tokens = max_context_tokens
         self._recent_history_limit = recent_history_limit
+        self._budget_policy = policy
 
     # ---------- 主流程 ----------
 
     def build(self, state: AgentState) -> BuiltContext:
-        sections = self._dedupe(self._collect_sections(state))
-        self._fit_budget(sections)
+        # D4-3：Plan 存在时，先按数据源与意图收敛候选，再按类型排序/定额/分层压缩。
+        # Plan 为 None 只出现在直接构造 Builder 的单元测试与旧调用点，此时保留
+        # 既有全局预算行为，避免把 D4-2 之前的契约测试改写成新语义。
+        scope = _BuildScope(plan=state.retrieval_plan)
+        sections = self._apply_plan_scope(self._collect_sections(state), scope)
+        sections = self._dedupe(sections, scope)
+        if scope.plan is not None:
+            self._apply_type_budgets(sections, scope)
+            self._degrade_redundant_sections(sections)
+        self._fit_budget(sections, scope)
 
         system_instruction = self._render_system_instruction(sections, state)
         messages = self._render_messages(sections, system_instruction)
@@ -327,7 +420,7 @@ class ContextBuilder:
             context_tokens = _context_tokens(system_instruction, messages)
             if context_tokens <= self._max_context_tokens:
                 break
-            if not self._reduce_one(sections):
+            if not self._reduce_one(sections, scope):
                 break
             system_instruction = self._render_system_instruction(sections, state)
             messages = self._render_messages(sections, system_instruction)
@@ -383,6 +476,8 @@ class ContextBuilder:
             )
         if overrun_reason:
             warnings.append(overrun_reason)
+        self._finalize_injection_status(sections)
+        manifest = self._build_manifest(sections, scope, context_tokens)
         return BuiltContext(
             system_instruction=system_instruction,
             messages=messages,
@@ -411,6 +506,7 @@ class ContextBuilder:
             memory_detail=state.memory_detail,
             revision_status=state.revision_status,
             revision_warning=state.revision_warning,
+            context_manifest=manifest,
         )
 
     # ---------- 1. 收集 ----------
@@ -425,7 +521,11 @@ class ContextBuilder:
                 title="本轮提问",
                 content=state.user_message,
                 priority=PRIORITY_USER_INPUT,
-                source_ids=[f"message:{state.user_message[:30]}"],
+                # 不把用户消息前缀写进 source_id：Manifest 会复用这个字段，
+                # 任何正文片段都不应进入可观测结构。
+                source_ids=["message:current"],
+                source_type="user_input",
+                retrieval_status="SUCCESS",
             )
         )
 
@@ -439,6 +539,9 @@ class ContextBuilder:
                     content=message.content,
                     priority=PRIORITY_HISTORY - distance,
                     role="user" if message.is_user() else "assistant",
+                    source_ids=[f"history:{len(history) - distance}"],
+                    source_type="history",
+                    retrieval_status="SUCCESS",
                 )
             )
 
@@ -456,6 +559,14 @@ class ContextBuilder:
                         priority=PRIORITY_SESSION,
                         source_ids=[f"session:{state.session.id}"],
                         dedupe_key="session",
+                        source_type="session",
+                        # Session 由请求上下文直接带入，不是后端检索结果；
+                        # 它已经成功到手，因此状态是 SUCCESS，而不是 Policy 的
+                        # REQUIRED / OPTIONAL / SKIP（那是检索需求，不是检索状态）。
+                        retrieval_status="SUCCESS",
+                        # Session 是整轮回答的框架，且通常只有一两行；
+                        # 它被挤掉只是省几十 token，损失却是一整轮落点。
+                        protected=True,
                     )
                 )
 
@@ -475,6 +586,9 @@ class ContextBuilder:
                         f"revision-status:{state.revision_status}",
                     ],
                     dedupe_key="cognitive_status",
+                    source_type="cognitive_status",
+                    retrieval_status=state.understanding_status,
+                    protected=True,
                 )
             )
 
@@ -484,7 +598,13 @@ class ContextBuilder:
             for memory in state.memories
             if memory.memory_type is MemoryType.LEARNING
         }
-        for understanding in state.understandings:
+        # 每个 concept 只保留当前快照：先按 updated_at/id 倒序，重复的 concept
+        # 由 _dedupe 保留第一条，后到的旧快照进入排除台账。
+        for understanding in sorted(
+            state.understandings,
+            key=lambda item: (_time_key(item.updated_at), item.id),
+            reverse=True,
+        ):
             if not understanding.has_content and understanding.status is UnderstandingStatus.UNKNOWN:
                 # 只有「UNKNOWN 且没有任何内容」的快照不提供任何信息，塞进去只会浪费预算。
                 # EXPOSED / PARTIAL 等状态即使没有条目化正文也必须保留 ——
@@ -505,6 +625,11 @@ class ContextBuilder:
                     source_ids=[f"understanding:{understanding.id}"],
                     dedupe_key=f"understanding:{understanding.concept_id}",
                     allow_truncate=True,
+                    source_type="understanding",
+                    retrieval_status=state.understanding_status,
+                    render_tier=lambda tier, item=understanding, conflict=has_learning_memory: (
+                        _render_understanding(item, has_learning_memory=conflict, tier=tier)
+                    ),
                 )
             )
 
@@ -522,6 +647,11 @@ class ContextBuilder:
                     ],
                     dedupe_key=f"trajectory:{trajectory.concept_id}",
                     allow_truncate=True,
+                    source_type="trajectory",
+                    retrieval_status=state.revision_status,
+                    render_tier=lambda tier, item=trajectory: _render_trajectory(
+                        item, tier=tier
+                    ),
                 )
             )
 
@@ -531,7 +661,18 @@ class ContextBuilder:
             for evidence in trajectory.evidences
         }
 
-        for memory in state.memories:
+        # Memory 先按作用域（CONCEPT > SPACE > GLOBAL），同作用域内按后端相关度
+        # 的代理（importance）与更新时间。Python 排序是稳定的，因此没有这些字段时
+        # 保留后端返回的相关度顺序。
+        scope_priority = (
+            state.retrieval_plan.memory_scope_priority
+            if state.retrieval_plan is not None
+            else ("CONCEPT", "SPACE", "GLOBAL")
+        )
+        for memory in sorted(
+            state.memories,
+            key=lambda item: _memory_sort_key(item, scope_priority),
+        ):
             sections.append(
                 ContextSection(
                     name=f"memory:{memory.id}",
@@ -540,6 +681,9 @@ class ContextBuilder:
                     priority=PRIORITY_MEMORY,
                     source_ids=[f"memory:{memory.id}"],
                     dedupe_key=f"memory:{memory.id}",
+                    source_type="memory",
+                    retrieval_status=state.memory_status,
+                    render_tier=lambda tier, item=memory: _render_memory(item, tier=tier),
                 )
             )
 
@@ -553,6 +697,9 @@ class ContextBuilder:
                     priority=PRIORITY_CONCEPT_STATUS,
                     source_ids=[f"resolver-status:{state.resolver_status}"],
                     dedupe_key="concept_status",
+                    source_type="concept_status",
+                    retrieval_status=state.resolver_status,
+                    protected=True,
                 )
             )
 
@@ -568,10 +715,18 @@ class ContextBuilder:
                     priority=PRIORITY_KNOWLEDGE_STATUS,
                     source_ids=[f"knowledge-status:{state.knowledge_status}"],
                     dedupe_key="knowledge_status",
+                    source_type="knowledge_status",
+                    retrieval_status=state.knowledge_status,
+                    protected=True,
                 )
             )
 
-        for chunk in state.knowledge:
+        # 知识片段按检索相关度（score）排序；分数相同保留后端顺序。
+        # 这里**不设 render_tier**：引用校验以 chunk 为最小单位，半个片段
+        # 既不能用来源标注引用，也会让 injected/dropped 契约失真。
+        for chunk in sorted(
+            state.knowledge, key=lambda item: item.score or 0.0, reverse=True
+        ):
             sections.append(
                 ContextSection(
                     name=f"knowledge:{chunk.id}",
@@ -580,6 +735,8 @@ class ContextBuilder:
                     priority=PRIORITY_KNOWLEDGE,
                     source_ids=[f"chunk:{chunk.id}"],
                     dedupe_key=f"chunk:{chunk.id}",
+                    source_type="knowledge",
+                    retrieval_status=state.knowledge_status,
                 )
             )
 
@@ -596,10 +753,23 @@ class ContextBuilder:
                         f"cross-evidence-status:{state.cross_concept_evidence_status}",
                     ],
                     dedupe_key="evidence_status",
+                    source_type="evidence_status",
+                    retrieval_status=state.evidence_status,
+                    protected=True,
                 )
             )
 
-        for evidence in state.evidences:
+        intent = state.retrieval_plan.intent if state.retrieval_plan else None
+        # Evidence 始终是历史材料：先按意图相关性（复盘/追问时错误与解释类优先），
+        # 再按时间倒序。排序只决定「谁先被保留」，不会把它渲染成当前状态。
+        for evidence in sorted(
+            state.evidences,
+            key=lambda item: (
+                _evidence_intent_relevance(item, intent),
+                _time_key(item.created_at),
+            ),
+            reverse=True,
+        ):
             # 复盘轨迹已经把关联证据按时间渲染过；再走通用 evidence 区块会重复注入。
             if evidence.id in trajectory_evidence_ids:
                 continue
@@ -613,7 +783,14 @@ class ContextBuilder:
                         content=_render_related_evidence(evidence),
                         priority=PRIORITY_RELATED_EVIDENCE,
                         source_ids=[f"evidence:{evidence.id}"],
-                        dedupe_key=f"related_evidence:{evidence.id}",
+                        # 与原始证据共用同一 dedupe_key：同一条物理证据无论带不带
+                        # 跨概念标记，都只允许注入一次。
+                        dedupe_key=f"evidence:{evidence.id}",
+                        source_type="related_evidence",
+                        retrieval_status=state.cross_concept_evidence_status,
+                        render_tier=lambda tier, item=evidence: _render_related_evidence(
+                            item, tier=tier
+                        ),
                     )
                 )
                 continue
@@ -625,6 +802,11 @@ class ContextBuilder:
                     priority=PRIORITY_EVIDENCE,
                     source_ids=[f"evidence:{evidence.id}"],
                     dedupe_key=f"evidence:{evidence.id}",
+                    source_type="evidence",
+                    retrieval_status=state.evidence_status,
+                    render_tier=lambda tier, item=evidence: _render_evidence(
+                        item, tier=tier
+                    ),
                 )
             )
 
@@ -649,10 +831,48 @@ class ContextBuilder:
             history = history[:-1]
         return history
 
-    # ---------- 2. 去重 ----------
+    # ---------- 2. 按 Plan 收敛候选 ----------
 
-    @staticmethod
-    def _dedupe(sections: list[ContextSection]) -> list[ContextSection]:
+    def _apply_plan_scope(
+        self, sections: list[ContextSection], scope: _BuildScope
+    ) -> list[ContextSection]:
+        """把「本轮没查 / 不该查」的数据源挡在渲染之前。
+
+        Runtime 已经按 Plan 决定是否发起检索；这里再兜一层，是为了让
+        「state 里恰好有旧数据、但本轮 Plan 是 SKIP」这种情况不会把旧数据
+        静默注入。Plan 为 None 时完全保留旧行为。
+        """
+        plan = scope.plan
+        if plan is None:
+            return sections
+        kept: list[ContextSection] = []
+        for section in sections:
+            kind = _kind(section)
+            if section.name == "user_input" or kind in {"history", "session"}:
+                kept.append(section)
+                continue
+            if kind in PROTECTED_KINDS:
+                kept.append(section)
+                continue
+            if kind == "trajectory" and plan.intent is not Intent.LEARNING_REVIEW:
+                self._record_exclusion(
+                    scope, section, INJECTION_EXCLUDED, REASON_NOT_REVIEW_INTENT
+                )
+                continue
+            if _plan_need(plan, kind) is RetrievalNeed.SKIP:
+                self._record_exclusion(
+                    scope, section, INJECTION_EXCLUDED, REASON_POLICY_SKIP
+                )
+                continue
+            kept.append(section)
+        return kept
+
+    # ---------- 3. 去重 ----------
+
+    def _dedupe(
+        self, sections: list[ContextSection], scope: _BuildScope
+    ) -> list[ContextSection]:
+        """同一 dedupe_key 只保留优先级最高的一份；重复项进入排除台账。"""
         seen: dict[str, ContextSection] = {}
         result: list[ContextSection] = []
         for section in sorted(sections, key=lambda item: item.priority, reverse=True):
@@ -661,27 +881,191 @@ class ContextBuilder:
                 result.append(section)
                 continue
             if key in seen:
+                self._record_exclusion(
+                    scope, section, INJECTION_EXCLUDED, REASON_DUPLICATE_SOURCE
+                )
                 continue
             seen[key] = section
             result.append(section)
         return result
 
-    # ---------- 3. 控 Token ----------
+    # ---------- 4. 按类型额度 / 分层压缩 ----------
 
-    def _fit_budget(self, sections: list[ContextSection]) -> None:
+    def _apply_type_budgets(
+        self, sections: list[ContextSection], scope: _BuildScope
+    ) -> None:
+        """REQUIRED 先分、OPTIONAL 只用剩余；每类先满文本，再 structured / one_line。
+
+        固定与 protected 区块（本轮输入、Session、检索状态说明）先占预算；
+        历史消息按「最新优先 + 类型上限」分配；弹性类型按优先级竞争。
+        """
+        plan = scope.plan
+        if plan is None:
+            return
+        total = self._max_context_tokens
+        effective = self._budget_policy.effective_total(total)
+        scope.effective_budget = effective
+        remaining = effective
+
+        user_input = next(
+            (section for section in sections if section.name == "user_input"), None
+        )
+        if user_input is not None:
+            remaining = max(0, remaining - user_input.estimated_tokens)
+        for section in sections:
+            if section.protected and not section.dropped:
+                remaining = max(0, remaining - section.estimated_tokens)
+
+        remaining = self._allocate_history(sections, scope, effective, remaining)
+
+        required: list[str] = []
+        optional: list[str] = []
+        for kind in ELASTIC_KIND_ORDER:
+            need = _plan_need(plan, kind)
+            if need is RetrievalNeed.REQUIRED:
+                required.append(kind)
+            elif need is RetrievalNeed.OPTIONAL:
+                optional.append(kind)
+
+        for group in (required, optional):
+            for kind in group:
+                cap = self._budget_policy.cap(kind, effective)
+                used = 0
+                for section in [
+                    item
+                    for item in sections
+                    if _kind(item) == kind and not item.dropped
+                ]:
+                    available = max(0, min(cap - used, remaining))
+                    cost = self._select_with_tiers(section, available)
+                    if cost is None:
+                        section.dropped = True
+                        section.exclusion_reason = REASON_TYPE_BUDGET
+                        continue
+                    used += cost
+                    remaining = max(0, remaining - cost)
+                scope.allocations[kind] = {
+                    "cap": cap,
+                    "used": used,
+                    "required": kind in required,
+                }
+
+    def _allocate_history(
+        self,
+        sections: list[ContextSection],
+        scope: _BuildScope,
+        effective: int,
+        remaining: int,
+    ) -> int:
+        history = sorted(
+            (
+                section
+                for section in sections
+                if _kind(section) == "history" and not section.dropped
+            ),
+            key=_history_index,
+            reverse=True,
+        )
+        cap = self._budget_policy.cap("history", effective)
+        used = 0
+        for index, section in enumerate(history):
+            cost = section.estimated_tokens
+            # 最新一轮允许越过类型上限一次：它是续接指代的最近锚点。
+            within_cap = index == 0 or used + cost <= cap
+            if within_cap and cost <= remaining:
+                used += cost
+                remaining -= cost
+                continue
+            section.dropped = True
+            section.exclusion_reason = REASON_TYPE_BUDGET
+        scope.allocations["history"] = {
+            "cap": cap,
+            "used": used,
+            "required": False,
+        }
+        return remaining
+
+    @staticmethod
+    def _select_with_tiers(section: ContextSection, available: int) -> int | None:
+        """在 available 内选择最详细的档位；返回 None 表示只能不注入。"""
+        if section.estimated_tokens <= available:
+            return section.estimated_tokens
+        if section.render_tier is None:
+            # Knowledge 等原子类型：不切正文，整段保留或不注入。
+            return None
+        for tier in (TIER_STRUCTURED, TIER_ONE_LINE):
+            content = section.render_tier(tier)
+            cost = estimate_tokens(content)
+            if cost <= available:
+                section.content = content
+                section.estimated_tokens = cost
+                section.tier = tier
+                section.truncated = True
+                section.compression_reason = f"{REASON_TIER_PREFIX}{tier}"
+                return cost
+        return None
+
+    def _degrade_redundant_sections(self, sections: list[ContextSection]) -> None:
+        """语义冗余只降细节，不删除；冲突内容不合并。
+
+        只处理 Memory / Evidence / Related Evidence 与当前 Understanding 的重叠：
+        当前快照已经完整表达同一事实时，历史材料降为 structured，仍然保留
+        来源与时间，供模型核对，而不是把两边合并成一条新事实。
+        """
+        understanding_text = " ".join(
+            section.content
+            for section in sections
+            if _kind(section) == "understanding" and not section.dropped
+        )
+        if not understanding_text:
+            return
+        for section in sections:
+            if section.dropped:
+                continue
+            if _kind(section) not in {"memory", "evidence", "related_evidence"}:
+                continue
+            if section.tier != TIER_FULL or section.render_tier is None:
+                continue
+            if not _is_semantically_redundant(section.content, understanding_text):
+                continue
+            content = section.render_tier(TIER_STRUCTURED)
+            cost = estimate_tokens(content)
+            if cost >= section.estimated_tokens:
+                continue
+            section.content = content
+            section.estimated_tokens = cost
+            section.tier = TIER_STRUCTURED
+            section.truncated = True
+            section.compression_reason = REASON_SEMANTIC_REDUNDANCY
+
+    # ---------- 5. 全局控 Token ----------
+
+    def _fit_budget(
+        self, sections: list[ContextSection], scope: _BuildScope
+    ) -> None:
         """按优先级从高到低装，装不下的丢。
 
-        只有 `allow_truncate` 的段落会被裁一半留下 —— 认知背景被裁掉尾部仍然有用；
-        而历史消息、参考资料、证据是原子的，半条消息比没有更误导。
+        protected 区块（Session / 状态说明）先占预算，不参与竞争；`user_input`
+        永不丢弃。保留 `allow_truncate` 的字符级兜底，用于分层压缩之后仍超总预算
+        的极端情况。
         """
         remaining = self._max_context_tokens
+        for section in sections:
+            if section.protected and not section.dropped:
+                remaining -= section.estimated_tokens
+        remaining = max(0, remaining)
         for section in sorted(sections, key=lambda item: item.priority, reverse=True):
+            if section.dropped or section.protected:
+                continue
             if section.estimated_tokens <= remaining:
                 remaining -= section.estimated_tokens
                 continue
             if section.allow_truncate and remaining >= MIN_USEFUL_SECTION_TOKENS:
                 section.content = truncate_to_tokens(section.content, remaining)
                 section.truncated = True
+                section.compression_reason = (
+                    section.compression_reason or REASON_CHAR_TRUNCATED
+                )
                 section.estimated_tokens = estimate_tokens(section.content)
                 remaining -= section.estimated_tokens
                 continue
@@ -689,22 +1073,27 @@ class ContextBuilder:
             if section.name == "user_input":
                 section.content = truncate_to_tokens(section.content, max(remaining, 1))
                 section.truncated = True
+                section.compression_reason = REASON_CHAR_TRUNCATED
                 section.estimated_tokens = estimate_tokens(section.content)
                 remaining = 0
                 continue
             section.dropped = True
+            section.exclusion_reason = REASON_GLOBAL_BUDGET
 
-    def _reduce_one(self, sections: list[ContextSection]) -> bool:
+    def _reduce_one(
+        self, sections: list[ContextSection], scope: _BuildScope
+    ) -> bool:
         """按优先级从低到高再收紧一段；返回 False 表示已无可删内容。
 
-        优先截断允许截断的区块，其次整段丢弃。`user_input` 永不丢弃 ——
-        模型看不到问题，这次回答就没有意义。
+        优先截断允许截断的区块，其次整段丢弃。`user_input` 与 protected
+        区块永不丢弃 —— 模型看不到问题/状态说明，这次回答就没有意义。
         """
         candidates = [
             section
             for section in sections
             if not section.dropped
-            and section.name not in {"user_input", "session"}
+            and not section.protected
+            and section.name != "user_input"
         ]
         if not candidates:
             return False
@@ -715,10 +1104,140 @@ class ContextBuilder:
             section.content = truncate_to_tokens(section.content, target)
             section.estimated_tokens = estimate_tokens(section.content)
             section.truncated = True
+            section.compression_reason = (
+                section.compression_reason or REASON_CHAR_TRUNCATED
+            )
             if section.estimated_tokens < before:
                 return True
         section.dropped = True
+        section.exclusion_reason = REASON_GLOBAL_BUDGET
         return True
+
+    # ---------- 6. Manifest ----------
+
+    @staticmethod
+    def _record_exclusion(
+        scope: _BuildScope,
+        section: ContextSection,
+        injection_status: str,
+        reason: str,
+    ) -> None:
+        scope.exclusions.append(
+            {
+                "type": section.source_type or _kind(section),
+                "source_id": (
+                    section.source_ids[0] if section.source_ids else section.name
+                ),
+                "retrieval_status": section.retrieval_status or "UNKNOWN",
+                "injection_status": injection_status,
+                "reason": reason,
+                "estimated_tokens": section.estimated_tokens,
+            }
+        )
+
+    @staticmethod
+    def _finalize_injection_status(sections: list[ContextSection]) -> None:
+        for section in sections:
+            if section.dropped:
+                reason = section.exclusion_reason or REASON_GLOBAL_BUDGET
+                section.injection_status = (
+                    INJECTION_OMITTED
+                    if reason in {REASON_TYPE_BUDGET, REASON_GLOBAL_BUDGET}
+                    else INJECTION_EXCLUDED
+                )
+            elif section.truncated:
+                section.injection_status = INJECTION_TRUNCATED
+            else:
+                section.injection_status = INJECTION_SELECTED
+
+    def _build_manifest(
+        self,
+        sections: list[ContextSection],
+        scope: _BuildScope,
+        context_tokens: int,
+    ) -> dict[str, object]:
+        """最小 Manifest：只含 source_id / 状态 / 原因 / token 估算。
+
+        严禁放入正文、完整 prompt、query 或异常原文。来源被排除时也留下记录，
+        否则「没进上下文」的原因只能靠猜。
+        """
+        entries = [self._manifest_entry(section) for section in sections]
+        entries.extend(scope.exclusions)
+        entries.sort(key=lambda item: (str(item["type"]), str(item["source_id"])))
+        per_type: dict[str, dict[str, object]] = {}
+        kinds = sorted(
+            {str(item["type"]) for item in entries} | set(scope.allocations)
+        )
+        for kind in kinds:
+            items = [item for item in entries if item["type"] == kind]
+            if not items:
+                continue
+            selected = [
+                item
+                for item in items
+                if item["injection_status"] in {INJECTION_SELECTED, INJECTION_TRUNCATED}
+            ]
+            absent = [
+                item
+                for item in items
+                if item["injection_status"] not in {INJECTION_SELECTED, INJECTION_TRUNCATED}
+            ]
+            if selected and absent:
+                type_status = INJECTION_PARTIAL
+            elif selected:
+                type_status = INJECTION_SELECTED
+            elif any(
+                item["reason"]
+                in {REASON_POLICY_SKIP, REASON_NOT_REVIEW_INTENT, REASON_DUPLICATE_SOURCE}
+                for item in absent
+            ):
+                type_status = INJECTION_EXCLUDED
+            else:
+                type_status = INJECTION_OMITTED
+            allocation = scope.allocations.get(kind, {})
+            per_type[kind] = {
+                "cap": allocation.get("cap"),
+                "used": sum(int(item["estimated_tokens"]) for item in selected),
+                "required": bool(
+                    allocation.get(
+                        "required",
+                        kind in PROTECTED_KINDS
+                        or kind in {"user_input", "history", "session"},
+                    )
+                ),
+                "injection_status": type_status,
+            }
+
+        total = self._max_context_tokens
+        return {
+            "schema_version": MANIFEST_SCHEMA_VERSION,
+            "policy_version": scope.plan.policy_version if scope.plan else None,
+            "intent": scope.plan.intent.value if scope.plan else None,
+            "sources": entries,
+            "budget": {
+                "total": total,
+                "effective": scope.effective_budget or total,
+                "used": context_tokens,
+                "remaining": max(0, total - context_tokens),
+                "output_reserve": self._budget_policy.reserve_tokens(total),
+                "per_type": per_type,
+            },
+        }
+
+    @staticmethod
+    def _manifest_entry(section: ContextSection) -> dict[str, object]:
+        return {
+            "type": section.source_type or _kind(section),
+            "source_id": section.source_ids[0] if section.source_ids else section.name,
+            "retrieval_status": section.retrieval_status or "UNKNOWN",
+            "injection_status": section.injection_status or INJECTION_SELECTED,
+            "reason": (
+                section.exclusion_reason
+                or section.compression_reason
+                or REASON_WITHIN_BUDGET
+            ),
+            "estimated_tokens": section.estimated_tokens,
+        }
 
     # ---------- 4/5. 渲染 ----------
 
@@ -964,6 +1483,111 @@ def _kind(section: ContextSection) -> str:
     return section.name.split(":", 1)[0]
 
 
+def _plan_need(plan: RetrievalPlan, kind: str) -> RetrievalNeed | None:
+    """把 Builder 的 section 类型映射回 Plan 的 need；未知类型不设限。"""
+    decision = {
+        "understanding": plan.understanding,
+        "memory": plan.memory,
+        "knowledge": plan.knowledge,
+        "evidence": plan.evidence,
+        "related_evidence": plan.evidence_related,
+        "trajectory": plan.revision,
+    }.get(kind)
+    return decision.need if decision is not None else None
+
+
+def _time_key(value: datetime | None) -> float:
+    """可比较的时间键。缺失时间排在最旧；aware/naive 都走 timestamp。"""
+    return value.timestamp() if value is not None else 0.0
+
+
+def _history_index(section: ContextSection) -> int:
+    try:
+        return int(section.name.split(":", 1)[1])
+    except (IndexError, ValueError):
+        return 0
+
+
+def _memory_sort_key(
+    memory: MemoryItem, scope_priority: tuple[str, ...] | list[str]
+) -> tuple[int, float, float]:
+    """CONCEPT > SPACE > GLOBAL；同作用域内 importance / updated_at 优先。
+
+    后端 hybrid 检索已经给过相关度顺序；这里没有显式 relevance 字段，
+    因此用 importance 作为相关度代理，并把输入顺序留作稳定排序的兜底。
+    """
+    rank = {str(scope): index for index, scope in enumerate(scope_priority)}
+    scope_rank = rank.get(memory.scope_type.value, len(rank))
+    importance = float(memory.importance) if memory.importance is not None else 0.0
+    return (scope_rank, -importance, -_time_key(memory.updated_at))
+
+
+_EVIDENCE_TYPE_RELEVANCE = {
+    EvidenceType.USER_EXPLANATION: 3,
+    EvidenceType.USER_CORRECTION: 3,
+    EvidenceType.TEST_RESULT: 2,
+    EvidenceType.OBSERVATION: 1,
+    EvidenceType.HIGHLIGHT_SIGNAL: 0,
+}
+
+
+def _evidence_intent_relevance(
+    evidence: EvidenceItem, intent: Intent | None
+) -> int:
+    """意图相关性的确定性代理。
+
+    复盘时「答错 / 部分正确」是追溯纠正的第一手材料；其余意图先按证据类型
+    （用户解释 > 测试结果 > 观察 > 批注信号）排序，再在同一档内按时间倒序。
+    """
+    if intent is Intent.LEARNING_REVIEW:
+        return (
+            3
+            if evidence.correctness
+            in {EvidenceCorrectness.INCORRECT, EvidenceCorrectness.PARTIAL}
+            else 1
+        )
+    return _EVIDENCE_TYPE_RELEVANCE.get(evidence.evidence_type, 1)
+
+
+_OVERLAP_IGNORABLE = set(
+    " \t\n，。；：、,.!?！？（）()[]【】「」“”‘’\"'-—｜|>#*`/\\"
+)
+
+
+def _normalize_overlap_text(text: str) -> str:
+    stripped = text.strip()
+    # 去掉 section 的 `- [标签]` 前缀：标签本身不该把重叠比例拉低。
+    if stripped.startswith("- ["):
+        close = stripped.find("]")
+        if close != -1:
+            stripped = stripped[close + 1 :].lstrip(" ｜")
+    return "".join(ch.casefold() for ch in stripped if ch not in _OVERLAP_IGNORABLE)
+
+
+def _bigrams(text: str) -> set[str]:
+    if len(text) < 2:
+        return set()
+    return {text[index : index + 2] for index in range(len(text) - 1)}
+
+
+def _is_semantically_redundant(item_text: str, current_text: str) -> bool:
+    """保守的语义冗余判定：整段包含或字符 bigram 重合 ≥ 0.6。
+
+    只用于「降低历史材料细节」，不用于删除；阈值刻意偏高，宁可漏判，
+    也不要把只是同主题的 Memory / Evidence 当成当前认知的重复。
+    """
+    item = _normalize_overlap_text(item_text)
+    current = _normalize_overlap_text(current_text)
+    if len(item) < 8 or len(current) < 8:
+        return False
+    if item in current:
+        return True
+    item_grams = _bigrams(item)
+    if not item_grams:
+        return False
+    return len(item_grams & _bigrams(current)) / len(item_grams) >= 0.6
+
+
 def _prompt_tokens(messages: list[ChatMessage]) -> int:
     """完整 prompt 的估算：system instruction + 所有实际消息。"""
     return sum(estimate_tokens(message.content) for message in messages)
@@ -990,10 +1614,17 @@ def _render_session(session: SessionContext) -> str:
 
 
 def _render_understanding(
-    understanding: Understanding, *, has_learning_memory: bool = False
+    understanding: Understanding,
+    *,
+    has_learning_memory: bool = False,
+    tier: str = TIER_FULL,
 ) -> str:
     label = _STATUS_LABEL.get(understanding.status, understanding.status.value)
     lines = [f"### {understanding.concept_name} ｜ 状态：{label}"]
+    if understanding.updated_at is not None:
+        # 当前快照也必须带时间：否则与 Learning Memory 冲突时，模型无法判断
+        # 哪一边更早，只能靠区块标题猜。
+        lines.append(f"- 当前快照更新于 {_format_time(understanding.updated_at)}")
     if not understanding.has_content:
         # EXPOSED / PARTIAL 等状态可能没有任何条目化正文。整块丢掉会让模型
         # 把「接触过但没写细节」误读成「从未学过」，所以保留状态本身并明确边界。
@@ -1003,25 +1634,50 @@ def _render_understanding(
             "这只说明用户接触过该知识点，不能推断其具体掌握程度，"
             "也不能据此说用户从未学过。"
         )
+    if tier == TIER_ONE_LINE:
+        if understanding.summary:
+            lines.append(f"- 当前理解：{_clip(understanding.summary, 60)}")
+        if understanding.misconceptions:
+            lines.append(
+                f"- 当前误区：{_clip(understanding.misconceptions[0].text, 50)}"
+            )
+        if has_learning_memory:
+            lines.append("- 长期记忆另有较早记录；以本条当前快照为准。")
+        return "\n".join(lines)
+
     if understanding.summary:
         lines.append(f"- 当前理解：{understanding.summary}")
-    if understanding.known_parts:
+    known_parts = understanding.known_parts
+    if tier == TIER_STRUCTURED:
+        known_parts = known_parts[:3]
+    if known_parts:
         lines.append(
             "- 已经理解（只有这个列表里的内容可以称为已掌握）："
-            + "；".join(understanding.known_parts)
+            + "；".join(known_parts)
+            + ("（其余条目因预算未展开）" if len(understanding.known_parts) > len(known_parts) else "")
         )
-        lines.append(
-            "- 这个列表之外的相关知识，即使本轮讲解提到，也不能说成用户已经掌握。"
-        )
-    if understanding.misconceptions:
+        if tier == TIER_FULL:
+            lines.append(
+                "- 这个列表之外的相关知识，即使本轮讲解提到，也不能说成用户已经掌握。"
+            )
+    misconceptions = understanding.misconceptions
+    if tier == TIER_STRUCTURED:
+        misconceptions = misconceptions[:3]
+    if misconceptions:
         lines.append("- 仍然存在的误区（要针对性纠正，指出推理在哪一步分叉，而不是直接说「你错了」）：")
-        for item in understanding.misconceptions:
+        for item in misconceptions:
             marker = "当前存在" if item.status is MisconceptionStatus.ACTIVE else "已有反向证据，可能正在解除"
             lines.append(f"  - [{marker}] {item.text}")
-    if understanding.uncertain_parts:
-        lines.append("- 还不确定（本次可以重点补）：" + "；".join(understanding.uncertain_parts))
+    uncertain_parts = understanding.uncertain_parts
+    if tier == TIER_STRUCTURED:
+        uncertain_parts = uncertain_parts[:3]
+    if uncertain_parts:
+        lines.append("- 还不确定（本次可以重点补）：" + "；".join(uncertain_parts))
     if understanding.latest_user_explanation:
-        lines.append(f"- 用户自己的说法：「{understanding.latest_user_explanation}」")
+        explanation = understanding.latest_user_explanation
+        if tier == TIER_STRUCTURED:
+            explanation = _clip(explanation, 80)
+        lines.append(f"- 用户自己的说法：「{explanation}」")
     if has_learning_memory:
         lines.append(
             "- 注意：长期记忆里另有一条较早的学习状态记录，可能与本条当前认知不同；"
@@ -1029,26 +1685,42 @@ def _render_understanding(
         )
     # 这条规则在 Trajectory-enabled 与 Current-only 两种上下文里都必须存在，
     # 否则两种模式的非轨迹输入就不一致，C 的对照会失去意义。
-    lines.append(
-        "- 如果本轮没有提供历史轨迹：不要从当前状态反推过去，也不要把"
-        "「没有看到错误记录」说成「过去没有错误」；用户问历史时说明当前可见信息不足。"
-    )
+    # 只有完整档在 section 内重复它；structured / one_line 由
+    # BASE_SYSTEM_INSTRUCTION 中的同义规则兜底，避免预算紧张时重复占篇幅。
+    if tier == TIER_FULL:
+        lines.append(
+            "- 如果本轮没有提供历史轨迹：不要从当前状态反推过去，也不要把"
+            "「没有看到错误记录」说成「过去没有错误」；用户问历史时说明当前可见信息不足。"
+        )
     return "\n".join(lines)
 
 
-def _render_memory(memory: MemoryItem) -> str:
+def _render_memory(memory: MemoryItem, *, tier: str = TIER_FULL) -> str:
     label = _MEMORY_LABEL.get(memory.memory_type, memory.memory_type.value)
     scope = _MEMORY_SCOPE_LABEL.get(memory.scope_type, memory.scope_type.value)
-    times: list[str] = []
+    notes: list[str] = []
     if memory.created_at:
-        times.append(f"记录于 {_format_time(memory.created_at)}")
+        notes.append(f"记录于 {_format_time(memory.created_at)}")
     if memory.updated_at and memory.updated_at != memory.created_at:
-        times.append(f"更新于 {_format_time(memory.updated_at)}")
-    suffix = f"（{'；'.join(times)}）" if times else ""
-    return f"- [{label}，作用域：{scope}] {memory.content}{suffix}"
+        notes.append(f"更新于 {_format_time(memory.updated_at)}")
+    if memory.memory_type is MemoryType.LEARNING and memory.concept_id is not None:
+        # 不臆测「哪条一定冲突」，只明确边界：两边都保留，以当前快照为准。
+        # 这样 Memory / Understanding 不会被合并成一条新事实。
+        notes.append("历史记录，可能与当前认知冲突；两边均保留，以当前快照为准")
+    if tier == TIER_ONE_LINE:
+        notes.append("来源：长期记忆")
+        content = _clip(memory.content, 50)
+    elif tier == TIER_STRUCTURED:
+        content = _clip(memory.content, 120)
+    else:
+        content = memory.content
+    suffix = f"（{'；'.join(notes)}）" if notes else ""
+    return f"- [{label}，作用域：{scope}] {content}{suffix}"
 
 
-def _render_trajectory(trajectory: LearningTrajectory) -> str:
+def _render_trajectory(
+    trajectory: LearningTrajectory, *, tier: str = TIER_FULL
+) -> str:
     """渲染「过去发生的事实」，与当前理解严格分开。
 
     这里只使用 Revision / Evidence 原始字段，不生成任何模型总结：
@@ -1062,6 +1734,21 @@ def _render_trajectory(trajectory: LearningTrajectory) -> str:
         f"### {trajectory.concept_name} ｜ 学习轨迹（历史）",
         f"- 当前状态（来自持久化快照）：{label}",
     ]
+
+    if tier == TIER_ONE_LINE:
+        historical = historical_misconceptions(trajectory)
+        if trajectory.current_misconceptions:
+            lines.append(
+                "- 当前仍存在的误区："
+                + _clip("；".join(trajectory.current_misconceptions), 50)
+            )
+        elif historical:
+            lines.append(f"- 历史误区：{_clip(historical[0], 50)}")
+        lines.append(
+            f"- 历史版本 {len(trajectory.revisions)} 条、关联证据 "
+            f"{len(trajectory.evidences)} 条；本次因预算仅保留摘要。"
+        )
+        return "\n".join(lines)
 
     if trajectory.current_misconceptions:
         lines.append(
@@ -1106,15 +1793,25 @@ def _render_trajectory(trajectory: LearningTrajectory) -> str:
         )
         lines.append(f"- 后续正确证据（{len(correction_evidence)} 条）：{times}")
 
-    if trajectory.evidences:
+    if tier == TIER_FULL and trajectory.evidences:
         lines.append("- 关联证据（按时间）：")
         for evidence in trajectory.evidences:
             lines.append("  - " + _render_trajectory_evidence(evidence))
+    elif tier == TIER_STRUCTURED and trajectory.evidences:
+        lines.append(
+            f"- 关联证据 {len(trajectory.evidences)} 条（本次仅保留数量，未展开细节）。"
+        )
 
-    lines.append(
-        "- 以上是全部可核对记录；未记录的动机、原因、是否借助外部资料，"
-        "均无法确认，不要补写。"
-    )
+    if tier == TIER_FULL:
+        lines.append(
+            "- 以上是全部可核对记录；未记录的动机、原因、是否借助外部资料，"
+            "均无法确认，不要补写。"
+        )
+    else:
+        lines.append(
+            "- 以上仅为预算压缩后的历史摘要；未展开的记录不等于不存在，"
+            "不要据此断言用户过去没有相关变化。"
+        )
     return "\n".join(lines)
 
 
@@ -1142,6 +1839,14 @@ def _render_trajectory_evidence(evidence: EvidenceItem) -> str:
 
 def _format_time(value: datetime | None) -> str:
     return value.strftime("%Y-%m-%d %H:%M") if value else ""
+
+
+def _clip(text: str | None, limit: int) -> str:
+    """压缩档的确定性截断：保留前 limit 个字符，明确标记还有省略。"""
+    value = (text or "").strip()
+    if len(value) <= limit:
+        return value
+    return value[:limit].rstrip() + "…"
 
 
 def _final_knowledge_state(
@@ -1198,11 +1903,18 @@ def _upsert_budget_knowledge_status(
         if section.name == "knowledge_status":
             section.content = content
             section.estimated_tokens = estimate_tokens(content)
-            section.dropped = False
             section.source_ids = [
                 f"knowledge-status:{final_state}",
                 f"knowledge-retrieval:{raw_status}",
             ]
+            section.source_type = "knowledge_status"
+            section.retrieval_status = final_state
+            section.protected = True
+            section.exclusion_reason = None
+            section.compression_reason = None
+            section.tier = TIER_FULL
+            section.truncated = False
+            section.dropped = False
             return sections
     return [
         *sections,
@@ -1216,6 +1928,9 @@ def _upsert_budget_knowledge_status(
                 f"knowledge-retrieval:{raw_status}",
             ],
             dedupe_key="knowledge_status",
+            source_type="knowledge_status",
+            retrieval_status=final_state,
+            protected=True,
         ),
     ]
 
@@ -1426,17 +2141,24 @@ def _render_knowledge(chunk: KnowledgeChunk) -> str:
     return f"- [{label}]{suffix} {chunk.content}"
 
 
-def _render_evidence(evidence) -> str:
+def _render_evidence(evidence, *, tier: str = TIER_FULL) -> str:
     label = _CORRECTNESS_LABEL.get(evidence.correctness, evidence.correctness.value)
     evidence_type = _EVIDENCE_TYPE_LABEL.get(
         evidence.evidence_type, evidence.evidence_type.value
     )
     when = _format_time(evidence.created_at)
     prefix = f"{when} ｜ " if when else ""
+    if tier == TIER_ONE_LINE:
+        return (
+            f"- [{label}/{evidence_type}] {prefix}{_clip(evidence.observation, 50)}"
+            "（来源：历史证据）"
+        )
+    if tier == TIER_STRUCTURED:
+        return f"- [{label}/{evidence_type}] {prefix}{_clip(evidence.observation, 120)}"
     return f"- [{label}/{evidence_type}] {prefix}{evidence.observation}"
 
 
-def _render_related_evidence(evidence) -> str:
+def _render_related_evidence(evidence, *, tier: str = TIER_FULL) -> str:
     """渲染跨概念证据：明确标注扩展依据、发起概念与真实归属。
 
     `related_via` / `source_concept_id` / `is_cross_concept` 是 Agent 侧标记，
@@ -1454,7 +2176,12 @@ def _render_related_evidence(evidence) -> str:
         if evidence.source_concept_id is not None
         else ""
     )
+    observation = evidence.observation
+    if tier == TIER_ONE_LINE:
+        observation = _clip(observation, 50) + "（来源：相关概念历史证据）"
+    elif tier == TIER_STRUCTURED:
+        observation = _clip(observation, 120)
     return (
         f"- [{label}/{evidence_type}] 关联依据：{via}{source}"
-        f" ｜ 证据归属概念：#{evidence.concept_id} ｜ {prefix}{evidence.observation}"
+        f" ｜ 证据归属概念：#{evidence.concept_id} ｜ {prefix}{observation}"
     )

@@ -643,6 +643,9 @@ class AgentRuntime:
                 knowledgeInjected=state.context.knowledge_injected_chunk_ids,
                 knowledgeDropped=state.context.knowledge_dropped_chunk_ids,
                 warnings=state.context.warnings,
+                # D4-3 最小 Manifest：只含 source_id / 检索与注入状态 / 原因 /
+                # token 估算。不含正文、完整 prompt、query 或异常原文。
+                contextManifest=state.context.context_manifest,
             )
         finally:
             if owned_retriever:
