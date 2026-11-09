@@ -19,6 +19,10 @@ if str(SCRIPT_DIR) not in sys.path:
 
 import qdrant_freeze_check as qdrant  # noqa: E402
 import restore_snapshot as restore  # noqa: E402
+import run_c_verification as run_c  # noqa: E402
+from snapshot_common import FIXTURE_MARKER, REVIEW_QUESTION  # noqa: E402
+
+from app.context.policy import Intent, RetrievalNeed, plan_retrieval  # noqa: E402
 
 
 def _snapshot() -> dict:
@@ -129,3 +133,102 @@ def test_qdrant_script_has_no_write_api_calls() -> None:
         "requests." + "delete(",
     ):
         assert forbidden not in source
+
+
+# ---------- 批次 3 修正：问题意图与 Manifest token 守恒 ----------
+
+
+def test_review_question_is_classified_as_learning_review() -> None:
+    """修正后的判据只有在问题真的进入复盘 intent 时才成立。"""
+    plan = plan_retrieval(
+        user_message=REVIEW_QUESTION,
+        concept_ids=[1],
+        session=None,
+        space_concepts=[],
+    )
+
+    assert plan.intent is Intent.LEARNING_REVIEW
+    assert plan.review_required is True
+    assert plan.revision.need is RetrievalNeed.REQUIRED
+    assert plan.memory.need is RetrievalNeed.REQUIRED
+    # 「回顾」在 EVIDENCE_TRIGGERS 中，复盘问题同时要求 evidence。
+    assert plan.evidence.need is RetrievalNeed.REQUIRED
+
+
+def test_review_question_explicitly_asks_for_the_fixture_marker() -> None:
+    """逐字标记判据必须由问题显式要求，不能依赖模型自觉。"""
+    assert "方括号标记" in REVIEW_QUESTION
+    assert FIXTURE_MARKER not in REVIEW_QUESTION  # 不直接把答案写进问题
+
+
+def _review_manifest(per_type: dict) -> dict:
+    return {
+        "intent": "LEARNING_REVIEW",
+        "sources": [
+            {
+                "type": "trajectory",
+                "source_id": "revision:88",
+                "retrieval_status": "SUCCESS",
+                "injection_status": "SELECTED",
+                "reason": "in_budget",
+                "estimated_tokens": 10,
+            },
+            {
+                "type": "trajectory_source",
+                "source_id": "evidence:99",
+                "retrieval_status": "SUCCESS",
+                "injection_status": "SELECTED",
+                "reason": "in_budget",
+                "estimated_tokens": 10,
+            },
+        ],
+        "budget": {"per_type": per_type},
+    }
+
+
+def test_manifest_token_conservation_aligns_exact_type() -> None:
+    """trajectory 与 trajectory_source 分别对各自的 per_type key。
+
+    这是 run 1 复盘 Manifest 的真实形状：按基类型分组合把两份 entry 相加，
+    却只与 per_type["trajectory"] 比较，产生假失败。
+    """
+    snapshot = {"dataset": {"revisionId": 88, "evidenceId": 99}}
+    manifest = _review_manifest(
+        {
+            "trajectory": {"used": 10},
+            "trajectory_source": {"used": 10},
+        }
+    )
+    check = run_c.validate_manifest(manifest, snapshot)
+
+    assert check["problems"] == []
+    assert check["intent"] == "LEARNING_REVIEW"
+    assert check["revisionEntry"] is True
+    assert check["evidenceEntry"] is True
+
+
+def test_manifest_token_conservation_detects_real_mismatch() -> None:
+    snapshot = {"dataset": {"revisionId": 88, "evidenceId": 99}}
+    manifest = _review_manifest(
+        {
+            "trajectory": {"used": 10},
+            "trajectory_source": {"used": 5},  # 实际 entry 是 10
+        }
+    )
+
+    problems = run_c.validate_manifest(manifest, snapshot)["problems"]
+    assert any("trajectory_source token 拆分不守恒" in item for item in problems)
+
+
+def test_manifest_requires_revision_entry_for_learning_review() -> None:
+    snapshot = {"dataset": {"revisionId": 88, "evidenceId": 99}}
+    manifest = _review_manifest(
+        {
+            "trajectory": {"used": 10},
+            "trajectory_source": {"used": 10},
+        }
+    )
+    manifest["sources"] = [manifest["sources"][1]]  # 只剩 evidence
+
+    problems = run_c.validate_manifest(manifest, snapshot)["problems"]
+    assert any("revision entry" in item for item in problems)

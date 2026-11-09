@@ -5,7 +5,7 @@
 - 一个用户、一个空间、一个概念、一个会话、一个对话；
 - 同一段两轮历史消息、同一份 Understanding / Revision / Evidence / Memory；
 - 同一份 Knowledge 文档（与上面同一个空间）；
-- 三组使用同一条中性问题（``NEUTRAL_QUESTION``）。
+- 三组使用同一条复盘问题（``REVIEW_QUESTION``，intent=LEARNING_REVIEW）。
 
 本脚本分两段能力：
 
@@ -37,8 +37,8 @@ from snapshot_common import (
     HISTORY_ASSISTANT,
     HISTORY_USER,
     MEMORY_CONTENT,
-    NEUTRAL_QUESTION,
     PASSWORD,
+    REVIEW_QUESTION,
     SESSION_FOCUS,
     SESSION_GOAL,
     UNDERSTANDING_EXPLANATION,
@@ -343,7 +343,7 @@ class SnapshotSetup:
             "memoryCollection": self.state["memoryCollection"],
             "springPort": self.state["springPort"],
             "agentPort": self.state["agentPort"],
-            "question": NEUTRAL_QUESTION,
+            "question": REVIEW_QUESTION,
             "fixtureMarker": FIXTURE_MARKER,
             "knowledge": (
                 "将通过 Spring 上传并索引（调用 Embedding）"
@@ -375,7 +375,7 @@ class SnapshotSetup:
                 "memoryCollectionPrefix": self.state["memoryCollectionPrefix"],
             },
             "dataset": dict(self.ids),
-            "question": NEUTRAL_QUESTION,
+            "question": REVIEW_QUESTION,
             "generationProfile": generation_profile(),
             "knowledge": knowledge,
             "consumers": {
@@ -501,7 +501,7 @@ def self_test() -> dict[str, Any]:
     return {
         "envId": env_id,
         "isolationRejections": rejected,
-        "question": NEUTRAL_QUESTION,
+        "question": REVIEW_QUESTION,
         "generationProfileKeys": sorted(profile),
         "baseSystemInstructionSha256": profile["baseSystemInstructionSha256"],
         "documentChars": len(DOCUMENT_TEXT),

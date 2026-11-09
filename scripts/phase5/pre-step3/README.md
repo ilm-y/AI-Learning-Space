@@ -31,7 +31,7 @@ python scripts/phase5/pre-step3/qdrant_freeze_check.py <snapshot> --write-baseli
 python scripts/phase5/pre-step3/restore_snapshot.py <snapshot> --apply --prune-run-messages
 python scripts/phase5/pre-step3/freeze_check.py <snapshot> --check
 python scripts/phase5/pre-step3/qdrant_freeze_check.py <snapshot> --check
-# 1e) 对同一 conversationId 发送同一个 NEUTRAL_QUESTION（3 次，串行）
+# 1e) 对同一 conversationId 发送同一个 REVIEW_QUESTION（intent=LEARNING_REVIEW，3 次，串行）
 # 1f) 每次运行后：再次 restore + 两组冻结检查（必须 PASS）
 ```
 
@@ -49,6 +49,30 @@ python scripts/phase5/pre-step3/qdrant_freeze_check.py <snapshot> --check
 4. **Qdrant 只读冻结**：`qdrant_freeze_check.py` 只发 GET 与 scroll POST，
    不发任何写接口；`--write-baseline` / `--check` 的 point 数、id 集合或
    payload 任一变化即失败。
+
+## 问题与判据（批次 3 修正）
+
+- 使用 `REVIEW_QUESTION`：「请回顾我之前对 TCP 三次握手的理解：逐字引用我
+  那条消息的原文（包括开头的方括号标记），再指出我卡在哪里、为什么卡住。」
+- 该问题命中 `REVIEW_TRIGGERS`（回顾/之前）+ 第一人称，Policy 判为
+  `LEARNING_REVIEW`：Revision 为 REQUIRED，trajectory 区块进入上下文。
+- 「回答含 `PHASE5-PRESTEP3-SNAPSHOT`」因此是可判定的历史使用证据：问题
+  显式要求逐字引用含标记的原话，与 KNOWLEDGE_QUERY 下「不要复述内部记录」
+  的冲突已消除。
+- Manifest 的 token 守恒按**精确 type** 对齐（`trajectory` 与
+  `trajectory_source` 分别对 `budget.per_type` 的同名 key）。
+
+## Embedding 预算口径（批次 3 修正）
+
+预算按两个口径分别定义，执行器在每轮记录并校验：
+
+| 口径 | 上限 | 本批实际 |
+|---|---:|---:|
+| 单次运行 | ≤3 次调用 | 2 次（Knowledge query + Memory query） |
+| 整个批次 | ≤10 次调用 | run 1 重跑 = 文档 1 + 查询 2 = **3 次** |
+
+C 策略在 `LEARNING_REVIEW` 下 Knowledge 与 Memory 都是 REQUIRED，因此每次运行
+固定 2 次 Embedding；3 次全量时为 1 + 3×2 = 7 次，仍在批次上限 10 内。
 
 ## 默认行为
 

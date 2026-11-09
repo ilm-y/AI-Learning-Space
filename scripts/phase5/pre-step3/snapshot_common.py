@@ -29,11 +29,15 @@ for _path in (PILOT_DIR, AGENT_DIR):
 
 from common import connect_mysql, parse_env_file, read_state, sanitize_error, write_json  # noqa: E402
 
-# 三组共用的中性问题：不要求个人历史，A 不会因缺个人上下文被问题本身惩罚；
-# 同时含「依据」，让 Evidence 检索在 A/B/C 中都按同一规则触发。
-NEUTRAL_QUESTION = (
-    "TCP 三次握手中，为什么第三次握手是必要的？"
-    "请结合你可用的资料回答，并说明你的依据。"
+# 三组共用的复盘问题（修正后判据）：显式要求引用用户此前的原话。
+# 该措辞同时命中 REVIEW_TRIGGERS（回顾/之前）与第一人称「我」，Policy 判定为
+# LEARNING_REVIEW：Revision 为 REQUIRED，trajectory 区块进入上下文；系统指令
+# 在复盘场景下明确允许「引用用户当时的原话」。问题点名要求连同开头的方括号
+# 标记一起逐字引用，使「回答含预置标记」成为可判定的历史使用证据，而不是
+# 依赖模型自行决定是否复述内部标签。
+REVIEW_QUESTION = (
+    "请回顾我之前对 TCP 三次握手的理解：逐字引用我那条消息的原文"
+    "（包括开头的方括号标记），再指出我卡在哪里、为什么卡住。"
 )
 
 DB_NAME_RE = re.compile(r"^phase5_pilot_\d{14}_[0-9a-f]{6}$")
@@ -466,7 +470,7 @@ def load_state(path: str | Path) -> dict[str, Any]:
 
 __all__ = [
     "AGENT_DIR",
-    "NEUTRAL_QUESTION",
+    "REVIEW_QUESTION",
     "PASSWORD",
     "DOCUMENT_TEXT",
     "FIXTURE_MARKER",

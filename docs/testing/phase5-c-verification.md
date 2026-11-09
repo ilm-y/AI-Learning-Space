@@ -1,9 +1,10 @@
 # Phase 5 pre-Step3 批次 3：C 策略真实链路验证记录
 
 - 执行日期：2026-11-09
-- 分支：`main`（未 commit、未 push）
+- 分支：`phase5/pre-step3-batch3`（未 commit、未 push）
 - 范围：只跑 C，不跑 A/B，不进入 90 次全量，不实现 Tavily
-- 结论：**本批 FAIL（在 run 1 命中失败判据后停止，runs 2/3 未执行）**
+- 结论：**首次执行 FAIL（run 1 命中判据设计问题，runs 2/3 未执行）；
+  修正两个阻塞点后重跑 run 1 = PASS（见 §11）**
 
 > 本文只记录 hash、id、状态、计数与必要的回答摘录；不包含密钥、token、
 > 连接串密码或完整 prompt。
@@ -409,3 +410,241 @@ Embedding 一次。建议在跑 3 次全量前明确选择：
   - `docs/testing/phase5-c-verification.md`（本文件）
 - 未修改 Runtime / ContextBuilder / Policy / Schema / SSE / Spring 生产代码。
 - 未执行 A/B、90 次全量、Tavily；未 commit、未 push。
+
+---
+
+## 11. 批次 3 修正：两个阻塞点决策与 run 1 重跑（2026-11-09）
+
+### 11.1 阻塞点 1 决策：方案 A（改用复盘问题）
+
+**决策：方案 A。** `NEUTRAL_QUESTION` 改为 `REVIEW_QUESTION`，使 Policy 判定
+`intent=LEARNING_REVIEW`：
+
+```text
+请回顾我之前对 TCP 三次握手的理解：逐字引用我那条消息的原文
+（包括开头的方括号标记），再指出我卡在哪里、为什么卡住。
+```
+
+理由：
+
+1. 原判据「回答必须逐字包含 `PHASE5-PRESTEP3-SNAPSHOT`」在 `KNOWLEDGE_QUERY`
+   下与系统指令直接冲突：`BASE_SYSTEM_INSTRUCTION` 要求「不要复述它的结构」，
+   标记又是内部 fixture 标签，模型不复述是正确行为。
+2. `LEARNING_REVIEW` 是「验证历史被使用」最直接的场景：Revision 为 REQUIRED，
+   trajectory 区块进入上下文；系统指令在复盘场景下明确允许「引用用户当时的原话」。
+3. 问题显式要求「逐字引用……包括开头的方括号标记」，把标记判据从事后猜测变成
+   问题本身的明确要求；问题没有直接写出标记值，不构成泄题。
+4. 方案 B（保留知识问答 + 语义判定）需要引入关键词/语义阈值，判定口径更软，
+   且无法证明读取的是**本快照**而不是通用 TCP 知识。
+
+实际改动：
+
+- `snapshot_common.py`：`NEUTRAL_QUESTION` → `REVIEW_QUESTION`，并更新注释；
+- `setup_snapshot.py` / `run_c_verification.py`：引用与快照清单同步；
+- `run_c_verification.py`：新增 `intent != LEARNING_REVIEW` 失败判据；
+- 测试新增：问题必须被 Policy 判为 `LEARNING_REVIEW`、revision/evidence/memory
+  均为 REQUIRED，且问题要求方括号标记但不泄露标记值。
+
+### 11.2 阻塞点 2 决策：方案 A（预算按单次运行口径）
+
+**决策：方案 A。** 预算拆成两个独立口径：
+
+| 口径 | 上限 | 依据 |
+|---|---:|---|
+| 单次运行 | ≤3 次 Embedding | C 策略在 `LEARNING_REVIEW` 下 Knowledge + Memory 各 1 次，实际 2 次/run |
+| 整个批次 | ≤10 次 Embedding | 文档索引 1 次 + 3 次运行 ×2 = 7 次 |
+
+理由：预算本来就应按「单次运行」定义；整批上限单独设置，避免把「一次运行的成本」
+和「一批实验的总成本」混为一个数字。方案 B（关闭 C 的 Memory 检索）会改变 C 的
+语义（C 的定义包含 Memory），不可取；只验证 run 1 则放弃 runs 2/3 的覆盖。
+
+实际改动：`run_c_verification.py` 新增 `EMBEDDING_MAX_PER_RUN=3` /
+`EMBEDDING_MAX_BATCH=10`，每次运行后校验单次预算，批次结束记录
+`embeddingBudget` 并校验总预算；README 同步口径。
+
+### 11.3 修正后的失败判据
+
+| 判据 | 修正后口径 |
+|---|---|
+| Manifest 缺 revision / evidence entry | `LEARNING_REVIEW` 下 revision 与 evidence 都必须存在，且指向快照 id |
+| token 拆分之和 != section 估算 | 按 Manifest **精确 type** 对齐 `budget.per_type[type].used`；trajectory 与 trajectory_source 分开校验，同一 section 多 source 仍检查 divmod 均分 |
+| 回答未使用预置历史 | 回答逐字包含 `PHASE5-PRESTEP3-SNAPSHOT`（问题显式要求引用含标记的原话） |
+| Citation 无法追溯 | 每条 citation 回查 `document_chunk` + `document`，必须属于当前 space |
+| Usage 伪造或估算 | 只接受 provider 原始 usage 的 `REAL`（或明确 `UNKNOWN`） |
+| run_id 无法关联 | SSE runId 必须对应 `agent_run.id` 且状态为 COMPLETED/TRUNCATED |
+| freeze / qdrant 前后不一致 | 运行前后与 restore 后均必须 PASS |
+| 分析消费者写回 | `.request` / `.retry` worker 消费者必须为 0，冻结表不变 |
+| 任何 error / timeout / 空输出 / 截断 | `message.error` 为空、回答非空、`finishReason != length` |
+| 默认 Memory collection 被读写 | 运行前后只读比对必须一致（本批均为 404） |
+
+### 11.4 前置条件逐项确认
+
+| 前置 | 结果 |
+|---|---|
+| 4 项决策补丁已提交 | PASS（`ea13db0`；文档 `a7b0811`） |
+| 分析消费者关闭 | PASS：`.request` / `.retry` 消费者均为 0 |
+| 内部凭据 401 已解决 | PASS：Agent 启动日志 `internal_auth_configured=True`、`internal_identity_configured=True`；SSE 全链路无 401/403 |
+| Memory 隔离补丁生效 | PASS：`memoryIsolationChecked=true`，默认 Memory collection 运行前后均 404 |
+| 修正后的判据已写入脚本 | PASS：`run_c_verification.py --self-test` = `problems: []` |
+| LLM max_tokens ≥4096 | PASS：诊断 `maxTokens=4096` |
+| 离线回归 | PASS：`pytest agent/tests/test_phase5_prestep3_scripts.py agent/tests/test_context_strategy.py -q` → **37 passed** |
+
+### 11.5 run 1 重跑记录
+
+| 字段 | 值 |
+|---|---|
+| run_id | `1` |
+| clientRequestId | `3aa758a4-c4af-4913-85aa-972e87f1d00c` |
+| provider request UUID | `026f65822f6c49e4a9d53a688a332bf2` |
+| providerRequestId | `null`（provider 未返回） |
+| finish_reason | `stop` |
+| truncated | `false` |
+| usageStatus | `REAL` |
+| prompt / completion / total tokens | `2763 / 1899 / 4662` |
+| cached / reasoning tokens | `1536 / 1366` |
+| 客户端 SSE 耗时 | `15578 ms` |
+| 诊断记录耗时 | `14592 ms` |
+| contextStrategy | `C` |
+| agent_run.status | `COMPLETED` |
+| manifest.intent | `LEARNING_REVIEW` |
+| manifest.policy_version | `d4-2-v1` |
+| 回答字符数 | `981` |
+| 回答含唯一标记 | **是** |
+| Embedding（本次） | 2 次调用 / 2 个文本（Knowledge + Memory） |
+| Embedding（批次） | 文档 1 + 查询 2 = **3 次**（≤10） |
+
+回答开头（仅模型输出，不含 prompt）：
+
+```text
+## 你的原话
+
+> 【PHASE5-PRESTEP3-SNAPSHOT】我先说说我的理解：TCP 三次握手是客户端发 SYN，
+> 服务端回 SYN-ACK，客户端再回 ACK。
+
+## 这句话说对了什么，又停在哪
+...
+## 卡点的位置
+...
+```
+
+### 11.6 Manifest 与 token 拆分
+
+`sources`（10 条，全部 `SELECTED` / `within_budget`）：
+
+| type | source_id | estimated_tokens |
+|---|---|---:|
+| history | `history:1` | 43 |
+| history | `history:2` | 32 |
+| knowledge | `chunk:1` | 95 |
+| knowledge | `chunk:2` | 97 |
+| memory | `memory:1` | 108 |
+| session | `session:1` | 50 |
+| trajectory | `revision:1` | 89 |
+| trajectory_source | `evidence:1` | 88 |
+| understanding | `understanding:1` | 333 |
+| user_input | `message:current` | 57 |
+
+token 守恒（精确 type）：
+
+| type | per_type.used | entry 求和 | 结果 |
+|---|---:|---:|---|
+| history | 75 | 43 + 32 | PASS |
+| knowledge | 192 | 95 + 97 | PASS |
+| memory | 108 | 108 | PASS |
+| session | 50 | 50 | PASS |
+| trajectory | 89 | 89 | PASS |
+| trajectory_source | 88 | 88 | PASS |
+| understanding | 333 | 333 | PASS |
+| user_input | 57 | 57 | PASS |
+
+`manifestCheck.problems = []`；`revisionEntry=true`、`evidenceEntry=true`；
+trajectory 两个 source 的 token 相差 1（89 / 88），符合 divmod 均分。
+
+> 本次修正同时修复了一个执行器缺陷：原 `validate_manifest` 按去掉 `_source`
+> 的基类型分组，会把 trajectory 的 revision + evidence 两个 entry 相加后只与
+> `per_type["trajectory"]` 比较，在真实复盘 Manifest 上必然假失败。现改为按
+> 精确 type 对齐，并保留同一 section 的均分与状态一致性检查。
+
+### 11.7 Citation、Context Hash 与 Usage
+
+- Citation：2 条（`documentId=1`、`chunkId=1/2`、`sourceTitle=phase5-prestep3-tcp.md`），
+  均可回查且属于当前 space；`citationCheck.problems = []`、`traceable=true`。
+- Context Hash：
+
+```json
+{
+  "seq": 1,
+  "recordedAt": "2026-11-09T20:45:34",
+  "contextSha256": "0ba8a1c123f0c4bd507714f1294aed4ca4e6369036d8a2ff89723fbfc6329cee",
+  "messageCount": 4,
+  "roles": ["system", "user", "assistant", "user"],
+  "chars": 4775,
+  "systemSha256": "3ea4a2f3fca45a50f43936f878204bd1d33b5e6959190442a2fce20b5a871edb",
+  "userSha256": "072686dba83997877689c831593e0be4b46b509ffa9d980a934e7d7ee45c0786",
+  "fixtureMarkerOccurrences": 6
+}
+```
+
+- Usage：`REAL`，provider 返回完整 usage；`finish_reason=stop`、未截断、无 error。
+- run_id：SSE `runId=1` 与 `agent_run.id=1` 一致，状态 `COMPLETED`。
+  与上一轮相同的串行关联限制仍存在（诊断不带 run_id），本批是单请求串行。
+
+### 11.8 冻结一致性与清理
+
+| 检查 | 基线 / 运行前 | run 后 + restore 后 |
+|---|---|---|
+| MySQL 15 表 combined | `ee6e5b3f...33f8abd3` | 同值 PASS |
+| Qdrant pointCount | 2 | 2 PASS |
+| Qdrant combined | `ae48e3ed...cdf6e40` | 同值 PASS |
+| 默认 Memory collection | 404 | 404 |
+| restore 原子性 | 删除前 / 删除后 / commit 后一致 | PASS（run1 删除 2 条，残留 0） |
+
+清理（`cleanup.py` 实际执行）：
+
+- Agent / Spring 进程停止，8001/8081 已关闭；
+- 隔离 DB 已 DROP，独立复查残留为空；
+- 文档 collection 与 Memory collection 已删除，独立复查残留为空；
+- RabbitMQ 隔离队列 / exchange 已删除，复查 leftovers 为空；
+- 默认 Memory collection 复查 404。
+
+`cleanup.py` 的 `ok=false` 仍是检查顺序导致：Memory collection 清理时文档
+collection 尚未删除；随后文档 collection 也被删除，最终 `residualPhase5Collections=[]`。
+以独立复查为准。本次还修复了执行器二次写盘的一个缺陷：`run_script()` 把
+`Path` 放进结果字典，cleanup 后写 JSON 失败；现统一转为 `str`。
+
+### 11.9 修正后失败判据逐条判定：**PASS**
+
+| 判据 | 判定 | 证据 |
+|---|---|---|
+| Manifest 缺 revision / evidence entry | PASS | `revision:1` + `evidence:1` 均在，`manifestCheck.problems=[]` |
+| token 拆分不守恒 | PASS | §11.6 按精确 type 全部守恒 |
+| 回答未使用预置历史 | PASS | `answerContainsFixtureMarker=true`，回答逐字引用含标记原话 |
+| Citation 无法追溯 | PASS | 2 条 citation 均可回查 |
+| Usage 伪造/估算 | PASS | `REAL`，provider 原始 usage |
+| run_id 无法关联 | PASS（串行关联限制） | SSE runId=1 = agent_run.id=1 |
+| freeze / qdrant 前后不一致 | PASS | 前后与 restore 后哈希一致 |
+| 分析消费者写回 | PASS | worker 消费者 0，冻结表未变 |
+| error / timeout / 空输出 / 截断 | PASS | `stop`、非空、未截断、无 error |
+| 默认 Memory collection 被读写 | PASS | 前后均 404 |
+| Embedding 预算 | PASS | 单次 2≤3；批次 3≤10 |
+
+### 11.10 结论
+
+- **run 1 重跑 PASS**，两个阻塞点均按方案 A 解决；
+- 本轮只执行 run 1，没有进入 runs 2/3，没有跑 A/B 或 90 次全量；
+- 冻结一致性与隔离资源清理均通过；
+- 未 commit、未 push。
+
+进入 runs 2/3 的条件：按修正后判据，run 1 已满足；后续只需在**同一判断口径**下
+补跑 run 2/3（每次 2 次 Embedding，批次总上限 10 次仍有余量），不再需要改动
+Runtime / Policy / Schema。
+
+### 11.11 需要人工审核的决策点
+
+1. 复盘问题显式要求「包括开头的方括号标记」是否可接受：这是为了让逐字标记成为
+   可判定证据；若认为问题过度引导，可退回到「只要求引用原话」，但需接受标记
+   判据变为概率性。
+2. 批次 Embedding 上限取 10（而非任务示例的 7）：本批实际 3 次，3 次全量预计 7 次；
+   10 给未来重试留了 3 次余量。若要求严格等于 7，需要把上限改为 7。
+3. run 1 的 Usage 与 run_id 仍是串行人工对应（Agent 诊断不带 run_id）；若要求程序化
+   绑定，需要新增 Agent 诊断字段，属于新改动，未在本批实施。

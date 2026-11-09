@@ -7,9 +7,9 @@
 1. ``setup_snapshot.py --apply --index-knowledge``（若快照不存在）；
 2. ``freeze_check --write-baseline`` + ``qdrant_freeze_check --write-baseline``；
 3. 每次：restore（含决策 1/2 的原子性检查）→ MySQL/Qdrant 冻结校验 →
-   同一 conversation、同一 NEUTRAL_QUESTION 的 SSE 调用 → 记录
-   run_id / request_id / finish_reason / usage / latency / Manifest /
-   Citation / Context Hash；
+   同一 conversation、同一 REVIEW_QUESTION（intent=LEARNING_REVIEW）的
+   SSE 调用 → 记录 run_id / request_id / finish_reason / usage / latency /
+   Manifest / Citation / Context Hash；
 4. 每次结束再次 restore，并再次校验冻结一致性；
 5. 3 次后 ``cleanup.py`` 清理隔离资源。
 
@@ -31,8 +31,8 @@ import requests
 
 from snapshot_common import (
     FIXTURE_MARKER,
-    NEUTRAL_QUESTION,
     PASSWORD,
+    REVIEW_QUESTION,
     assert_isolated_state,
     connect_mysql,
     write_json,
@@ -42,6 +42,12 @@ HERE = Path(__file__).resolve().parent
 PILOT_DIR = HERE.parent / "pilot"
 REQUIRED_LLM_MAX_TOKENS = 4096
 HISTORY_MARKER = FIXTURE_MARKER
+
+# Embedding 预算口径（阻塞点 2 决策 A）：按「单次运行」与「整个批次」分开计。
+# C 策略在 LEARNING_REVIEW 下 Knowledge + Memory 各检索一次，即 2 次/run；
+# 本批只跑 run 1，文档索引 1 次 + 查询 2 次 = 3 次。
+EMBEDDING_MAX_PER_RUN = 3
+EMBEDDING_MAX_BATCH = 10
 
 
 def run_script(name: str | Path, *args: str, timeout: int = 600) -> dict[str, Any]:
@@ -65,7 +71,7 @@ def run_script(name: str | Path, *args: str, timeout: int = 600) -> dict[str, An
         print(completed.stderr.strip(), file=sys.stderr)
     print(f"[exit={completed.returncode} elapsedMs={elapsed_ms}]")
     return {
-        "script": name,
+        "script": str(script),
         "args": list(args),
         "exitCode": completed.returncode,
         "stdout": completed.stdout,
@@ -320,27 +326,34 @@ def validate_manifest(manifest: dict[str, Any] | None, snapshot: dict[str, Any])
 
     # token 拆分守恒：Manifest 的 `budget.per_type[type].used` 是选中 entry
     # 的 estimated_tokens 之和；两者不等说明 section 估算与拆分不一致。
-    # 多 source 的同一 section（trajectory / evidence_status）用 divmod 均分，
-    # 各项最多相差 1，单独校验。
-    groups: dict[str, list[dict[str, Any]]] = {}
+    #
+    # per_type 的 key 是 Manifest 的**精确 type**：同一 section 的第一个 source
+    # 保留顶层 type，后续 source 记为 `<type>_source`。因此守恒必须按精确 type
+    # 对齐；若按去掉 `_source` 的基类型分组，trajectory section（revision +
+    # evidence 两个 source）会被加总后只与 per_type["trajectory"] 的份额比较，
+    # 产生假失败。多 source 的同一基类型（trajectory / evidence_status）另做
+    # divmod 均分检查，各项最多相差 1。
+    per_type = ((manifest.get("budget") or {}).get("per_type") or {})
+    exact_groups: dict[str, list[dict[str, Any]]] = {}
+    base_groups: dict[str, list[dict[str, Any]]] = {}
     for source in sources:
         kind = str(source.get("type") or "")
         base = kind[: -len("_source")] if kind.endswith("_source") else kind
-        groups.setdefault(base, []).append(source)
-    per_type = ((manifest.get("budget") or {}).get("per_type") or {})
-    for base, items in groups.items():
+        exact_groups.setdefault(kind, []).append(source)
+        base_groups.setdefault(base, []).append(source)
+    for kind, items in exact_groups.items():
         selected = [
             int(item.get("estimated_tokens") or 0)
             for item in items
             if item.get("injection_status") in {"SELECTED", "TRUNCATED"}
         ]
-        declared = (per_type.get(base) or {}).get("used")
+        declared = (per_type.get(kind) or {}).get("used")
         if declared is not None and int(declared) != sum(selected):
             problems.append(
-                f"{base} token 拆分不守恒：entries={sum(selected)} per_type={declared}"
+                f"{kind} token 拆分不守恒：entries={sum(selected)} per_type={declared}"
             )
     for base in ("trajectory", "evidence_status"):
-        items = groups.get(base) or []
+        items = base_groups.get(base) or []
         values = [int(item.get("estimated_tokens") or 0) for item in items]
         if len(values) > 1 and max(values) - min(values) > 1:
             problems.append(f"{base} section token 拆分不均衡：{values}")
@@ -353,7 +366,8 @@ def validate_manifest(manifest: dict[str, Any] | None, snapshot: dict[str, Any])
         "revisionEntry": bool(revision_entries),
         "evidenceEntry": bool(evidence_entries),
         "trajectoryTokens": [
-            int(item.get("estimated_tokens") or 0) for item in (groups.get("trajectory") or [])
+            int(item.get("estimated_tokens") or 0)
+            for item in (base_groups.get("trajectory") or [])
         ],
         "sourceCount": len(sources),
     }
@@ -552,7 +566,7 @@ def main() -> int:
         context_before = agent_context_hashes(agent)
         diagnostics_before = agent_diagnostics(agent)
         _ = diagnostics_before  # 仅确认路由可用；实际记录取调用后的 last-call
-        call = chat(spring, token, conversation_id, NEUTRAL_QUESTION, label)
+        call = chat(spring, token, conversation_id, REVIEW_QUESTION, label)
         time.sleep(0.5)
         diagnostics = agent_diagnostics(agent)
         context_after = agent_context_hashes(agent)
@@ -626,8 +640,18 @@ def main() -> int:
             problems.append(f"Usage 状态非 REAL/UNKNOWN：{usage_status}")
         problems.extend(manifest_check["problems"])
         problems.extend(citation_check["problems"])
+        if manifest_check.get("intent") != "LEARNING_REVIEW":
+            problems.append(
+                f"intent={manifest_check.get('intent')}，复盘的 revision/trajectory "
+                "判据不成立"
+            )
         if HISTORY_MARKER not in call["answer"]:
-            problems.append("回答未包含预置历史唯一标记")
+            problems.append("回答未逐字引用含预置标记的历史原话")
+        if embedding_calls > EMBEDDING_MAX_PER_RUN:
+            problems.append(
+                f"单次 Embedding 调用 {embedding_calls} 次，超过预算 "
+                f"{EMBEDDING_MAX_PER_RUN}"
+            )
         if context_record is None:
             problems.append("未取得 Context Hash（未见新的 LLM 调用记录）")
         elif int(context_record.get("fixtureMarkerOccurrences") or 0) <= 0:
@@ -646,7 +670,7 @@ def main() -> int:
         run_record = {
             "index": index,
             "strategy": "C",
-            "question": NEUTRAL_QUESTION,
+            "question": REVIEW_QUESTION,
             "runId": run_id,
             "clientRequestId": call["clientRequestId"],
             "providerRequestId": stream_diag.get("providerRequestId"),
@@ -723,6 +747,27 @@ def main() -> int:
             print("FAIL：" + "；".join(problems), file=sys.stderr)
             break
 
+    # 批次 Embedding 预算（阻塞点 2 决策 A）：文档索引 + 所有 run 的查询调用。
+    setup_embedding = int(
+        (results.get("embeddingAfterSetup") or {}).get("embeddingCalls") or 0
+    )
+    run_embedding = sum(int(item.get("embeddingCalls") or 0) for item in results["runs"])
+    total_embedding = setup_embedding + run_embedding
+    results["embeddingBudget"] = {
+        "setupCalls": setup_embedding,
+        "runCalls": run_embedding,
+        "totalCalls": total_embedding,
+        "maxPerRun": EMBEDDING_MAX_PER_RUN,
+        "maxBatch": EMBEDDING_MAX_BATCH,
+    }
+    if total_embedding > EMBEDDING_MAX_BATCH:
+        failure = failure or (
+            f"批次 Embedding 调用 {total_embedding} 次，超过预算 {EMBEDDING_MAX_BATCH}"
+        )
+        results["problems"].append(
+            f"批次 Embedding 超预算：{total_embedding} > {EMBEDDING_MAX_BATCH}"
+        )
+
     memory_after = memory_collection_state(state)
     results["defaultMemory"]["after"] = memory_after
     if memory_before != memory_after:
@@ -780,7 +825,10 @@ def self_test() -> dict[str, Any]:
         ],
         "budget": {
             "per_type": {
-                "trajectory": {"used": 20},
+                # per_type 以精确 type 为 key：trajectory section 的 revision
+                # 与 evidence 两个 source 分别记在 trajectory / trajectory_source。
+                "trajectory": {"used": 10},
+                "trajectory_source": {"used": 10},
                 "evidence": {"used": 0},
             }
         },
