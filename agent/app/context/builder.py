@@ -1814,7 +1814,10 @@ def _render_understanding(
         explanation = understanding.latest_user_explanation
         if tier == TIER_STRUCTURED:
             explanation = _clip(explanation, 80)
-        lines.append(f"- 用户自己的说法：「{explanation}」")
+        lines.append(
+            "- 系统保存的用户解释记录（可能来自批注摘录，不是 history 逐字原话）："
+            f"「{explanation}」"
+        )
     if has_learning_memory:
         lines.append(
             "- 注意：长期记忆里另有一条较早的学习状态记录，可能与本条当前认知不同；"

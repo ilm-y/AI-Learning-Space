@@ -31,6 +31,24 @@
   是起点小、呈指数增长」）称为用户「更早的说法 / 另一句原话」。历史原句
   仍被引用，约束没有完全阻止模型把 Understanding 转述当成用户原话。
   详见 `docs/testing/phase5-abc-rerun.md` 第 14 节。
+- Batch 6（2026-11-09 23:58 快照）：在约束中补充 history / Understanding /
+  Memory / Evidence 的来源定义与标注规则后，S5-B 3 次重跑结果：
+  - 3/3 最终回答逐字包含历史原句（`exactOriginalSentence=true`）；
+  - 3/3 把 Understanding 标注为「系统记录的你当前理解 / 转述」，
+    `understandingAsOriginal=false`，0/3 出现 Batch 5 的「更早的说法 /
+    另一句原话」措辞；
+  - S5-B-1 首答触发一次 HISTORY_GUARD（`internal_process`，假设列表中的
+    「想通」被字面命中），重生成后仍正确标注，未回退。
+  本批只做 3 次样本，且不确定「0/3」是来源定义的效果还是采样波动；
+  Prompt 层只规范了「叫法」。详见 `docs/testing/phase5-abc-rerun.md`
+  第 15 节。
+- Batch 7（2026-11-10 00:09 快照）：已把 Understanding 区块中
+  `latest_user_explanation` 的渲染标签从「用户自己的说法」改为
+  「系统保存的用户解释记录（可能来自批注摘录，不是 history 逐字原话）」，
+  不重写用户内容，不改检索 / 预算 / Manifest 逻辑。离线 D4-5 21/21；
+  S10-B 预算场景 `problems=[]`、全部来源 SELECTED、used/effective=
+  2777/3000，citation 与改动前一致；`systemSha256` 按预期变化，
+  指标未退化。详见 `docs/testing/phase5-abc-rerun.md` 第 16 节。
 
 **影响**
 
@@ -50,8 +68,17 @@ Phase 5 的核心问题之一是「模型是否真的理解上下文」。这条
    历史原句」的频次，但没有消除「把 Understanding 转述称为用户原话」。
    后续若要求零容忍，需要更细的提示词或产品侧校验（例如要求带引号的
    原话必须能在本轮注入的 history 消息中逐字找到），不在本批边界内。
+4. Batch 6 已按上述方向补齐来源定义与标注规则，S5-B 3/3 未再误称
+   Understanding 为原话；下一步应扩大样本统计 `quoteSources` /
+   `understandingAsOriginal` 分布。
+5. Batch 7 已实施 ContextBuilder 的 provenance 标签改动（见 rerun 报告
+   16.2），使 `latest_user_explanation` 在上下文层不再以「用户自己的说法」
+   呈现；该改动会改变 `systemSha256` / `contextHash`，需在后续全量基线
+   中重新记录。
 
-**状态**：开放，已通过条件 prompt 缓解（Batch 5），未根治。
+**状态**：开放，已通过 prompt 来源定义（Batch 6）与 ContextBuilder
+provenance 标签（Batch 7）双重缓解；S5-B 仅有 3 次重跑样本，
+未见误称，但不足以关闭。
 
 ## KI-2 HISTORY_GUARD partial_upgrade 否定语境误判
 

@@ -68,6 +68,25 @@ def test_global_contract_does_not_contain_the_conditional_instruction():
     assert VERBATIM_QUOTE_INSTRUCTION not in BASE_SYSTEM_INSTRUCTION
 
 
+def test_instruction_defines_each_source_and_only_history_counts_as_verbatim():
+    text = VERBATIM_QUOTE_INSTRUCTION
+    sources = ("history", "Understanding", "Memory", "Evidence")
+    for source in sources:
+        assert source in text, source
+    # 只有 history 可以被称为「原话」；其余三类必须明确写成转述 / 非原话。
+    assert "history 是用户逐字说过的话，只有它可以称为「原话」" in text
+    assert "Understanding 是系统对用户当前掌握状态的总结，是转述，不是原话" in text
+    assert "Memory 是系统提炼的长期信息，不是原话" in text
+    assert "Evidence 是系统记录的学习事件，不是原话" in text
+
+
+def test_instruction_separates_history_and_understanding_labels():
+    text = VERBATIM_QUOTE_INSTRUCTION
+    assert "history 的原句必须标注「你当时说：」" in text
+    assert "Understanding 的内容必须标注「系统记录的你当前理解：」" in text
+    assert "不得把 Understanding 称为「你更早的说法」「另一句原话」" in text
+
+
 def test_quote_request_detection_covers_all_keywords():
     for keyword in QUOTE_REQUEST_KEYWORDS:
         assert is_quote_request(f"请{keyword}一下"), keyword

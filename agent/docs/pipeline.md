@@ -263,7 +263,7 @@ system message  ← 教学契约 + 认知背景（Understanding / Memory / Knowl
 - 仍然存在的误区（要针对性纠正，指出推理在哪一步分叉，而不是直接说「你错了」）：
   - [当前存在] 把 TLB Miss 与 Page Fault 混为一谈
 - 还不确定（本次可以重点补）：Page Table 本身存放在哪里
-- 用户自己的说法：「它应该就是 Page Table 的缓存。」
+- 系统保存的用户解释记录（可能来自批注摘录，不是 history 逐字原话）：「它应该就是 Page Table 的缓存。」
 ```
 
 注意**状态是用中文标签渲染的**（`MISCONCEPTION` → 「存在误区」），

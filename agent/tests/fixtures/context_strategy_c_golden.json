@@ -8,8 +8,8 @@
       "sourceTitle": "tcp_handshake.md"
     }
   ],
-  "contextTokens": 1149,
-  "estimatedTokens": 3538,
+  "contextTokens": 1172,
+  "estimatedTokens": 3561,
   "historyMessages": 2,
   "knowledgeState": "SUCCESS",
   "manifest": {
@@ -45,7 +45,7 @@
           "cap": 944,
           "injection_status": "SELECTED",
           "required": true,
-          "used": 318
+          "used": 341
         },
         "user_input": {
           "cap": null,
@@ -54,9 +54,9 @@
           "used": 19
         }
       },
-      "remaining": 1851,
+      "remaining": 1828,
       "total": 3000,
-      "used": 1149
+      "used": 1172
     },
     "intent": "LEARNING_EXPLANATION",
     "policy_version": "d4-2-v1",
@@ -103,7 +103,7 @@
         "type": "session"
       },
       {
-        "estimated_tokens": 318,
+        "estimated_tokens": 341,
         "injection_status": "SELECTED",
         "reason": "within_budget",
         "retrieval_status": "SUCCESS",
@@ -410,7 +410,7 @@
                 "cap": 944,
                 "injection_status": "SELECTED",
                 "required": true,
-                "used": 318
+                "used": 341
               },
               "user_input": {
                 "cap": null,
@@ -419,9 +419,9 @@
                 "used": 19
               }
             },
-            "remaining": 1851,
+            "remaining": 1828,
             "total": 3000,
-            "used": 1149
+            "used": 1172
           },
           "intent": "LEARNING_EXPLANATION",
           "policy_version": "d4-2-v1",
@@ -468,7 +468,7 @@
               "type": "session"
             },
             {
-              "estimated_tokens": 318,
+              "estimated_tokens": 341,
               "injection_status": "SELECTED",
               "reason": "within_budget",
               "retrieval_status": "SUCCESS",
@@ -486,7 +486,7 @@
           ]
         },
         "droppedSections": [],
-        "estimatedTokens": 3538,
+        "estimatedTokens": 3561,
         "knowledgeDropped": [],
         "knowledgeInjected": [
           701
@@ -494,7 +494,7 @@
         "knowledgeState": "SUCCESS",
         "knowledgeStatus": "SUCCESS",
         "warnings": [
-          "完整 prompt 约 3538 tokens，其中固定系统提示约 2389 tokens；max_context_tokens=3000 约束的是动态上下文（当前 1149 tokens），不是完整 prompt。"
+          "完整 prompt 约 3561 tokens，其中固定系统提示约 2389 tokens；max_context_tokens=3000 约束的是动态上下文（当前 1172 tokens），不是完整 prompt。"
         ]
       },
       "type": "CONTEXT_BUILT"

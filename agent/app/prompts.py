@@ -21,9 +21,18 @@ from __future__ import annotations
 QUOTE_REQUEST_KEYWORDS = ("引用", "原话", "原文", "原句", "复述")
 
 VERBATIM_QUOTE_INSTRUCTION = (
-    "当用户要求引用原话时，必须逐字使用历史消息原文，不得用 "
-    "Understanding/Memory/Evidence 的转述替代；历史中无原话时明确说明，"
-    "不得用相近转述冒充。"
+    "当用户要求引用原话、原文或原句时，先分清本轮上下文里的来源："
+    "history 是用户逐字说过的话，只有它可以称为「原话」；"
+    "Understanding 是系统对用户当前掌握状态的总结，是转述，不是原话；"
+    "Memory 是系统提炼的长期信息，不是原话；"
+    "Evidence 是系统记录的学习事件，不是原话。"
+    "必须逐字使用 history 里的原句，不得用 Understanding/Memory/Evidence "
+    "的转述替代。"
+    "当这些来源同时出现时，history 的原句必须标注「你当时说：」，"
+    "Understanding 的内容必须标注「系统记录的你当前理解：」；"
+    "不得把 Understanding 称为「你更早的说法」「另一句原话」，"
+    "也不得把 Memory 或 Evidence 称为原话。"
+    "历史中无原话时明确说明，不得用相近转述冒充。"
 )
 
 

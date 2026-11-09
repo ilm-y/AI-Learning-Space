@@ -1321,3 +1321,283 @@ S5 复盘问题不必须引用知识文档：每次 repeat 满足「citation 非
 | 是否 commit | 否（本批次未执行 git commit） |
 | 是否 push | 否（本批次未执行 git push） |
 
+## 15. 引用来源语义补充与 S5-B 重跑（Batch 6）
+
+- 追加时间：2026-11-10T00:02:37
+- 重跑快照时间：2026-11-09 23:58:10
+- 隔离库：`phase5_pilot_20261109235808_ec45fb`
+- 文档 collection：`phase5-pilot-20261109235808-ec45fb_text-embedding-v4_1024`
+- Memory collection：`phase5-pilot-20261109235808-ec45fb-memory_text-embedding-v4_1024`
+- 重跑范围：S5-B 3 次 + 非引用类回归 S1 / S2 / S6 各 1 次（策略 B），共 6 次对话、7 次实际 LLM 调用（S5-B-1 触发 1 次 HISTORY_GUARD 重生成）。
+- 生成参数指纹：model=`deepseek-flash`，temperature=`0`，max_tokens=`4096`，embedding=`text-embedding-v4/1024`。
+
+### 15.1 补充后的约束文本与来源说明
+
+**根因**：Batch 5 的约束只写了「不得用转述替代」，没有说明各来源是什么、谁说的、如何区分「原话」。模型看到 Understanding 区块里第一人称的 `latest_user_explanation`，自然把它当成用户说过的另一句话。
+
+**修改位置**：`agent/app/prompts.py` 的 `VERBATIM_QUOTE_INSTRUCTION`（未改 `BASE_SYSTEM_INSTRUCTION`、Tutor 追加位置、ContextBuilder）。
+
+补充后的约束（逐字，362 字符）：
+
+```text
+当用户要求引用原话、原文或原句时，先分清本轮上下文里的来源：history 是用户逐字说过的话，只有它可以称为「原话」；Understanding 是系统对用户当前掌握状态的总结，是转述，不是原话；Memory 是系统提炼的长期信息，不是原话；Evidence 是系统记录的学习事件，不是原话。必须逐字使用 history 里的原句，不得用 Understanding/Memory/Evidence 的转述替代。当这些来源同时出现时，history 的原句必须标注「你当时说：」，Understanding 的内容必须标注「系统记录的你当前理解：」；不得把 Understanding 称为「你更早的说法」「另一句原话」，也不得把 Memory 或 Evidence 称为原话。历史中无原话时明确说明，不得用相近转述冒充。
+```
+
+来源定义与标注规则：
+
+| 来源 | 对模型的定义 | 是否可称「原话」 | 同时出现时的标注 |
+|---|---|---|---|
+| history | 用户逐字说过的话 | 是，且只有它可以 | 「你当时说：」 |
+| Understanding | 系统对用户当前掌握状态的总结 | 否，是转述 | 「系统记录的你当前理解：」 |
+| Memory | 系统提炼的长期信息 | 否 | 不称原话 |
+| Evidence | 系统记录的学习事件 | 否 | 不称原话 |
+
+**测试**：`agent/tests/test_tutor_quote_instruction.py` 新增 2 条（四个来源均有定义且仅 history 可称原话；history / Understanding 标注互不混用），文件共 **16 passed**。原有「非引用类 system 逐字一致」「追加位置在 system 末尾」「complete/stream 一致」等边界用例全部保持通过。
+
+### 15.2 ContextBuilder 渲染现状评估（只评估，未实施）
+
+**是否使用第一人称**：
+
+| 区块 | 渲染骨架 | 是否第一人称叙述 |
+|---|---|---|
+| Understanding | `### 概念 ｜ 状态：…`、`- 当前理解：…`、`- 已经理解：…`、`- 仍然存在的误区：…`、`- 还不确定：…`、`- 用户自己的说法：「…」` | 否。骨架是第三人称；但 `latest_user_explanation` 的内容本身是第一人称，且以「用户自己的说法」+ 引号呈现 |
+| Memory | `- [长期事实 / 学习状态（历史记录）/ 偏好，作用域：…] {content}` | 否。骨架是第三人称；`content` 是否为第一人称取决于后端存储文本 |
+| Evidence | `- [部分正确/用户解释] 时间 ｜ {observation}` | 否。骨架与 S5 预置 observation 都是第三人称 |
+| Trajectory | `- [已纠正，历史] …`、`- 关键版本…`、`- 关联证据…` | 否。只渲染 revision 摘要 / 证据 observation，不渲染 revision 的 `user_explanation` |
+
+**结论**：ContextBuilder 没有用第一人称「我」叙述 Understanding / Memory / Evidence。真正的第一人称泄漏来自 Understanding 区块内的 `latest_user_explanation` 数据值：
+
+- 该字段在 `_render_understanding` 中被渲染为 `- 用户自己的说法：「…」`；
+- 生产链路上它可能来自用户批注的选中文本 / note（`LearningAnalysisService` 将其原样保存，可能截断），但它在 Prompt 中位于 Understanding 区块，不与 history 消息同源，也不保证是本轮 history 的逐字原话；
+- 标签「用户自己的说法」+ 引号，与「原话」在语用上高度接近，是 Batch 5 3/3 误称的直接诱因。
+
+**建议方案（本批不实施，需单独审核）**：
+
+1. **最小改动（推荐）**：只改 `_render_understanding` 中该行的标签，改为
+   `- 系统保存的用户解释记录（可能来自批注摘录，不是 history 逐字原话）：「…」`。
+   不重写内容，保留用户原话信息，但明确 provenance。
+2. **区块说明补充**：在 Understanding 区块的 note 增加一句：
+   「`用户解释记录` 是系统保存的摘录，不等同于本轮历史消息中的逐字原话；只有 history 消息可以作为原话。」
+3. **不建议**把 `latest_user_explanation` 改写成第三人称：该字段是用户产物，改写会改变原意，也会让评测 fixture 与真实数据不一致；也不建议直接删除，会损失「用户怎么解释」这一强教学信号。
+4. Memory / Evidence 骨架已是第三人称，暂不需要为它们加前缀；如要统一，可在区块 note 增加「以下均为系统记录，不是原话」。
+
+**影响评估**：
+
+- Prompt 字节数：每个 Understanding 区块约 `+30~60` 字符；S5 上下文（3000 token 预算）预计增加约 10–20 tokens，不改变当前 tier。S10 等预算紧张场景需要重新验证是否触发降级。
+- Hash：`systemSha256` / `contextHash` 会变化；Manifest 与检索结果不变。所有真实运行基线需在新批次重录。
+- 评测：D4-5 是离线、按结构化字段判定；若有用例断言 system 文本需同步更新，否则 21 个 case 指标不受影响，但需重跑确认。
+- 边界：只改渲染标签与区块 note，不触碰检索、Policy、Manifest Schema、ContextBuilder 的选择 / 预算逻辑。
+
+### 15.3 S5-B 逐次结果
+
+| key | run_id | 引用来源（全部命中） | 主来源 | 是否误称 Understanding 为原话 | 守卫触发 | LLM 调用数 | finish | prompt/completion/total | citation 集合 | Context Hash(12) | System Hash(12) | Manifest(12) | Manifest 关键来源 | 历史原句 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| S5-B-1 | 1 | 历史原句, Understanding | 历史原句 | 否 | 是 | 2 | stop | 3170/1581/4751 | [[5,13],[5,14],[5,15]] | cd598c18971c | 20b237281b84 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 | 是 |
+| S5-B-2 | 3 | 历史原句, Understanding | 历史原句 | 否 | 否 | 1 | stop | 3078/1427/4505 | [[5,13],[5,14],[5,15]] | f91a526a4265 | 2a1a89e93c60 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 | 是 |
+| S5-B-3 | 5 | 历史原句, Understanding | 历史原句 | 否 | 否 | 1 | stop | 3078/1904/4982 | [[5,13],[5,14],[5,15]] | f91a526a4265 | 2a1a89e93c60 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 | 是 |
+
+**逐次判定**：
+
+- **S5-B-1**：首答与最终交付都逐字包含历史原句，并把 Understanding 标注为「系统另外记录的你当前理解是转述，不是原话」/「系统记录的你当前理解：」，未误称。首次回答触发 HISTORY_GUARD，issue kind=`internal_process`，excerpt 为「至于你为什么会改变看法，比如是自己想通的、看了资料…」中的「想通」，属于对假设列表的规则误判，与本批引用约束无关；重生成后 `remainingIssues=[]`、未回退。最终交付为通过校验的重生成回答。
+- **S5-B-2**：单次调用，无守卫。回答同时给出两条并明确区分：「系统记录的你当前理解是：『我原以为…』后一句是系统对你当前掌握状态的转述，不是你当时的原话。」
+- **S5-B-3**：单次调用，无守卫。回答把 Understanding 标注为「系统记录的你当前理解」，并额外说明「长期记忆里那条…同样是系统提炼的记录，也不是原话」。
+- 3/3 `historyUse.pass=true`（`exactOriginalSentence=true` 且三关键词全中）；3/3 `understandingAsOriginal=false`；3/3 citation 非空、可溯源、同文档。
+- Hash 一致性：`manifestSha256` 三次一致（`b51f17aeaba1`）；S5-B-2/B-3 的 `contextHash` / `systemSha256` / `systemChars` 完全一致，S5-B-1 因守卫重生成被豁免，`guard_aware_hash_consistency` PASS。
+- 本批失败判据「S5-B 仍有回答把 Understanding 称为用户原话」**未触发（0/3）**。
+
+**引用来源明细**：
+
+| key | 历史原句 | Understanding 片段 | Memory | Evidence / Revision | 说明 |
+|---|---|---|---|---|---|
+| S5-B-1 | 是 | 「我原以为慢启动增长很慢，后来明白是起点小、呈指数增长」 | 未引用 | 未引用 | 明确写「是转述，不是原话」 |
+| S5-B-2 | 是 | 同上 | 未引用 | 未引用 | 明确写「是你当前掌握状态的转述，不是你当时的原话」 |
+| S5-B-3 | 是 | 同上 | 提到「长期记忆…也不是原话」 | 未引用 | 三类来源分别标注 |
+
+**System prompt 增量核对**：
+
+- 非引用类 S5 上下文在追加约束前的 `systemChars` 为 `4914`（Batch 4 实测）。
+- 本批 S5-B-2/B-3 为 `5278`，差值 `364 = 362`（新约束）+ `2`（两个换行），与代码逐字一致。
+- S5-B-1 的最终记录 `systemChars=5436`，是守卫重生成时额外附加 `extra_instruction` 后的值；首答调用仍为 `5278`。
+
+### 15.4 非引用类回归
+
+| key | quoteRequestDetected | run_id | finish | prompt/completion/total | Context Hash(12) | System Hash(12) | Manifest(12) | problems |
+|---|---|---|---|---|---|---|---|---|
+| S1-B-1 | 否 | 7 | stop | 2834/1663/4497 | ae64420cdfe9 | c6642f563546 | ccaaac3a9c83 | 无 |
+| S2-B-1 | 否 | 9 | stop | 2845/1552/4397 | 48e1a7fdd82b | 0f007daa0d04 | 4f080390b1df | 无 |
+| S6-B-1 | 否 | 11 | stop | 2752/1039/3791 | d79254a1346a | 62b3773c159d | 9de45baca76b | 无 |
+
+- 三个问题均未命中 `引用 / 原话 / 原文 / 原句 / 复述`，`quoteRequestDetected=false`，`quote_instruction_for()` 返回 `None`，未追加约束。
+- 代码级测试证明非引用类 system 与改动前逐字一致；真实运行无 error / timeout / 空输出 / 截断，`problems=[]`。
+
+### 15.5 回归与离线评测
+
+| 项目 | 结果 |
+|---|---|
+| 全量 Agent 测试 `pytest tests` | **650 passed, 9 skipped, 1 xfailed**（新增 2 条来源定义用例） |
+| D4-5 离线上下文质量评测 | **21/21 cases passed**；C regressions vs A/B: none；failed safety probes: none；CI status: PASS |
+| S1 / S2 / S6 真实运行 | 各 1 次，全部 `finishReason=stop`，无 problems |
+| S5-B 3 次重跑 | 3/3 完成，全部含历史原句，0/3 误称 Understanding 为原话 |
+
+### 15.6 KI-1 更新
+
+- KI-1 状态：**开放，已通过来源语义约束进一步缓解，未根治**。
+- 本批效果：在约束中补充 history / Understanding / Memory / Evidence 的定义与标注规则后，S5-B 3/3 最终回答逐字包含历史原句，0/3 把 Understanding 转述称为用户原话；相比 Batch 5 的 3/3 误称，本批未复现该形态。
+- 新增可观测字段：`quoteSources` / `quotePrimary`（既有 `s5_quote_source_check`）与 `understandingAsOriginal` / `understandingMislabelDetail`（新增 `s5_understanding_as_original_check`）。后者只做观测，不参与 PASS/FAIL；判定规则见 `phase5-known-issues.md`。
+- 残差：`latest_user_explanation` 仍以第一人称内容出现在 Understanding 区块，Prompt 层只解决了「叫法」，没有解决「渲染语义」；3 次样本不足以关闭 KI-1。ContextBuilder 渲染层方案见 15.2，需单独审核。
+
+### 15.7 成本记录
+
+| 项目 | 数值 |
+|---|---|
+| 对话调用次数（记录） | 6 |
+| 模型实际调用次数（含守卫重生成） | 7 |
+| 触发守卫的对话数 | 1（S5-B-1） |
+| LLM 预算 | 9；实际 7，未超出 |
+| prompt tokens（仅最终记录） | 17757 |
+| completion tokens（仅最终记录） | 9166 |
+| total tokens（仅最终记录） | 26923 |
+| reasoning tokens（仅最终记录） | 5417 |
+| cached tokens（仅最终记录） | 13312 |
+| Agent 进程内 Embedding 调用 | 12（上限 15） |
+| Agent 进程内 Embedding 文本数 | 12 |
+| 单次运行 Embedding 最大值 | 2（上限 3） |
+| Tavily 调用 | 0 |
+
+- 预算核对：LLM 7/9（S5-B 3 + 回归 3 + 守卫重生成 1）；Embedding 12/15；Tavily 0。setup 阶段 10 份文档的索引 Embedding 由 Spring 侧发起，不属于每次对话的 Agent 预算。
+
+### 15.8 冻结与清理
+
+| 检查 | 结果 | 说明 |
+|---|---|---|
+| MySQL 全局冻结 | PASS | 无漂移 |
+| Qdrant 文档 + Memory | PASS | 无漂移 |
+| 默认 Memory collection | PASS | 未读写 |
+| cleanup.py exitCode | 0 | — |
+| MySQL 库残留 | 0 | — |
+| Qdrant 残留 | [] | — |
+| RabbitMQ 队列 / 交换机残留 | [] | — |
+| 仍开放的端口 | [] | runner 先终止进程，cleanup 报告 process not found，但端口已关闭 |
+| 独立残留检查 | PASS | `residual.ok=true` |
+
+### 15.9 本批结论（Step 3）
+
+- **来源说明已补充**：`VERBATIM_QUOTE_INSTRUCTION` 明确了 history / Understanding / Memory / Evidence 的定义、唯一可称「原话」的来源，以及同时出现时的标注方式；`BASE_SYSTEM_INSTRUCTION` 未修改。
+- **S5-B 3 次重跑完成**：3/3 逐字包含历史原句；3/3 明确把 Understanding 标为「系统记录的你当前理解 / 转述」；本批失败判据「把 Understanding 称为用户原话」0/3 触发。
+- **非引用类未被追加约束**：S1 / S2 / S6 的 `quoteRequestDetected=false`，代码级测试与真实运行一致。
+- **回归通过**：全量 Agent 测试 650 passed；D4-5 21/21；S1/S2/S6 均 stop、无 problems；无 error / timeout / 空输出 / 截断。
+- **ContextBuilder 渲染层只评估未实施**：现状无第一人称叙述；第一人称泄漏来自 `latest_user_explanation` 数据值，建议方案见 15.2，本批未改动。
+- **Phase 5 Step 3 结论：维持 PASS**。本批失败判据均未触发；KI-1 仍开放，需后续更大样本观测。
+- **未 commit / 未 push**：本批只做本地修改、隔离实验与文档更新。
+
+### 15.10 需要人工审核的决策点
+
+1. **「不得把 Understanding 称为原话」是否升级为硬判据**：本批 0/3，但 harness 仍将其记为观测字段；是否在后续批次改为 FAIL 级判据，需要确认。
+2. **ContextBuilder 渲染层方案**：15.2 推荐只改 `用户自己的说法` 标签与 Understanding 区块 note，不改内容、不改检索 / 预算逻辑；该改动会改变 `systemSha256` / `contextHash` 与所有真实运行基线，需单独审核后实施。
+3. **`latest_user_explanation` 的产品语义**：生产上它可能来自用户批注的选中文本（近似原话，但可能截断、且不来自 history），而 Prompt 现在把整个 Understanding 定义为「系统总结」。若产品要求把批注原话当原话使用，需要给它独立来源与 provenance，而不是塞在 Understanding 里。
+4. **HISTORY_GUARD `internal_process` 误判**：S5-B-1 首答在假设列表「是自己想通的、看了资料，还是…」中命中「想通」，触发重生成。该问题属于 History_Guard，按本批边界未修改；建议单独立项。
+5. **旧标记判据**：原始 `problems` 仍包含「回答缺少预期历史标记：【S5-HISTORY】」，按 Batch 4/5 口径视为旧判据观测项，不参与 PASS/FAIL；需确认该口径继续有效。
+6. **样本量**：S5-B 仅 3 次，不能据此关闭 KI-1；后续全量应继续统计 `quoteSources` 与 `understandingAsOriginal` 分布。
+7. **harness 运行方式**：本批使用隔离 temp 中的一次性 runner 调用既有 `setup_phase / one_call / cleanup_phase`，未修改 `run_s5_rerun.py` / `run_full_abc.py`；是否接受该方式需人工确认。
+
+### 15.11 工作区状态
+
+| 项目 | 值 |
+|---|---|
+| branch | main |
+| HEAD | d19576d |
+| HEAD subject | feat(agent): 引用原话类请求追加逐字引用约束，S5-B 3/3 含历史原句 |
+| 工作区状态 | M agent/app/prompts.py  M agent/tests/test_tutor_quote_instruction.py  M scripts/phase5/full/full_common.py  M docs/testing/phase5-abc-rerun.md  M docs/testing/phase5-known-issues.md |
+| 是否 commit | 否（本批次未执行 git commit） |
+| 是否 push | 否（本批次未执行 git push） |
+
+
+## 16. latest_user_explanation 渲染标签调整（Batch 7）
+
+- 执行时间：2026-11-10T00:11:25
+- 快照时间：2026-11-10 00:09:58
+- 隔离库：`phase5_pilot_20261110000956_db9e39`
+- 范围：只改 Understanding 区块中 `latest_user_explanation` 的渲染标签；D4-5 离线评测 + S10-B 预算场景 1 次。不进入 Step 4，不 commit。
+
+### 16.1 改动
+
+| 项目 | 内容 |
+|---|---|
+| 文件 | `agent/app/context/builder.py` 的 `_render_understanding` |
+| 旧标签 | `- 用户自己的说法：「…」` |
+| 新标签 | `- 系统保存的用户解释记录（可能来自批注摘录，不是 history 逐字原话）：「…」` |
+| 用户内容 | 不改写、不截断（原有 structured 截断逻辑不变） |
+| 检索 / 预算 / Manifest 逻辑 | 未修改 |
+| 文档同步 | `agent/docs/pipeline.md` 的渲染示例同步 |
+
+标签前缀增加 30 个字符（`- 用户自己的说法：` 10 字符 → 新前缀 40 字符）。`agent/tests/test_context_builder.py` 断言新标签存在、旧标签不出现，文件 32 passed。
+
+`agent/tests/fixtures/context_strategy_c_golden.json` 因标签长度变化更新；逐字段核对后，差异仅为标签引起的计数：
+
+| 字段 | 改动前 | 改动后 |
+|---|---|---|
+| `estimatedTokens` | 3538 | 3561 |
+| `contextTokens` | 1149 | 1172 |
+| `manifest.budget.per_type.understanding.used` | 318 | 341 |
+| `manifest.budget.used` / `remaining` | 1149 / 1851 | 1172 / 1828 |
+
+所有差异均由标签的 30 个字符导致，Manifest 结构、来源选择、citation 与事件类型未变。
+
+### 16.2 D4-5 离线评测
+
+| 项目 | 结果 |
+|---|---|
+| cases passed | **21/21** |
+| C regressions vs A/B | none |
+| failed safety probes | none |
+| CI status | PASS |
+
+说明：C 基线中的 Understanding token 计数按预期上升（见 16.1），但没有触发降级、丢块或安全探针失败；21 个 case 全部通过。
+
+### 16.3 S10-B 预算场景
+
+| 项目 | 改动前（历史基线） | 本批（S10-B-1） | 判定 |
+|---|---|---|---|
+| run_id | 37 | 1 | — |
+| finish | stop | stop | 无截断 |
+| systemSha256 | `3f8c06016d21…` | `3c97032e8a8f…` | 按预期变化 |
+| contextHash | `adf9d0232ddd…` | `5668787f8b71…` | 按预期变化 |
+| manifestSha256 | — | `88ac6a86bd05…` | Manifest 内计数变化导致 |
+| prompt tokens | 3430 | 3448 | +18 |
+| completion / total | 1891 / 5321 | 2510 / 5958 | 单样本，不作一致性判据 |
+| citation 集合 | [[10,28],[10,29],[10,30],[10,31]] | 同左 | 一致 |
+| 注入状态 | — | 全部 `SELECTED` | 无 TRUNCATED / DROPPED |
+| 预算 used / effective | — | 2777 / 3000 | 未超预算 |
+| 预算 remaining | — | 223 | — |
+| dropping / truncation | — | `truncated=false`，无 dropped section | 未退化 |
+| problems | [] | [] | 通过 |
+| Embedding 调用 | — | 2 | 未超单次上限 3 |
+| 引用请求检测 | — | `quoteRequestDetected=false` | 未追加引用约束 |
+
+S10 的 `warnings` 仍为预期观测项：`S10 预算压力：statuses=['SELECTED'] used/effective=2777/3000`。本批标签增加约 18 prompt tokens，仍在 3000 动态预算内，没有把任何来源挤出预算。
+
+### 16.4 回归
+
+| 项目 | 结果 |
+|---|---|
+| 全量 Agent 测试 | **650 passed, 9 skipped, 1 xfailed** |
+| ContextBuilder 测试 | 32 passed |
+| D4-5 | 21/21，CI PASS |
+| S10-B | stop，problems=[]，citation 一致，无截断 / 丢块 |
+
+### 16.5 结论
+
+- 标签已按要求改为「系统保存的用户解释记录（可能来自批注摘录，不是 history 逐字原话）」，用户内容与检索 / 预算 / Manifest 逻辑未动。
+- `systemSha256` 与 `contextHash` 按预期变化；D4-5 与 S10-B 的指标没有退化。
+- 未进入 Step 4，未 commit，未 push。
+
+### 16.6 工作区状态（本批结束时）
+
+| 项目 | 值 |
+|---|---|
+| branch | main |
+| HEAD | d19576d |
+| 本批修改 | `agent/app/context/builder.py`、`agent/tests/test_context_builder.py`、`agent/tests/fixtures/context_strategy_c_golden.json`、`agent/docs/pipeline.md`、`docs/testing/phase5-abc-rerun.md`、`docs/testing/phase5-known-issues.md` |
+| Batch 6 未提交改动 | `agent/app/prompts.py`、`agent/tests/test_tutor_quote_instruction.py`、`scripts/phase5/full/full_common.py` 仍保留在工作区 |
+| 是否 commit | 否 |
+| 是否 push | 否 |

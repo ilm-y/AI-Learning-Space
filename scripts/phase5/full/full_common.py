@@ -1828,6 +1828,132 @@ def s5_quote_source_check(answer: str | None) -> dict[str, Any]:
     }
 
 
+S5_UNDERSTANDING_SOURCE_LABEL = "系统记录的你当前理解"
+S5_UNDERSTANDING_MISLABEL_MARKERS = (
+    "另一句原话",
+    "更早的说法",
+    "另一种说法",
+    "你还说过",
+    "你也说过",
+    "你当时还说",
+    "你之前说",
+    "你此前的说法",
+    "你之前的说法",
+    "你原话",
+    "你的原话",
+    "你说过",
+    "你说的是",
+    "你曾说",
+    "当时说",
+    "当时的说法",
+    "原话",
+    "原文",
+    "原句",
+)
+S5_UNDERSTANDING_NEGATION_MARKERS = (
+    "不是原话",
+    "不是原文",
+    "不是原句",
+    "不算原话",
+    "不能算原话",
+    "并非原话",
+    "不是你的原话",
+    "不是用户原话",
+    "不是你说过",
+)
+# 分号也作为分句边界：同一段里「history 原句；Understanding 转述」
+# 必须分开判断，避免正确标注的 Understanding 掩盖另一分句的误称。
+_SENTENCE_TERMINATORS = "。！？；;\n"
+
+
+def _sentence_around(text: str, start: int, end: int) -> str:
+    """取包含 [start,end) 的整句（按句号 / 问号 / 感叹号 / 换行切分）。"""
+    left = max(
+        (text.rfind(marker, 0, start) for marker in _SENTENCE_TERMINATORS),
+        default=-1,
+    ) + 1
+    rights = [
+        position
+        for marker in _SENTENCE_TERMINATORS
+        if (position := text.find(marker, end)) != -1
+    ]
+    right = min(rights) + 1 if rights else len(text)
+    return text[left:right]
+
+
+def s5_understanding_as_original_check(answer: str | None) -> dict[str, Any]:
+    """观测：回答是否把 Understanding 的转述称为用户原话 / 原文 / 原句。
+
+    只检查 ``S5_UNDERSTANDING_FRAGMENTS`` 命中处所在的整句：
+    - 同一句出现「系统记录的你当前理解」→ 已按约束标注，不算误称；
+    - 同一句出现否定表述（「不是原话」等）→ 不算误称；
+    - 同一句出现「原话 / 原文 / 原句 / 更早的说法 / 另一句原话 /
+      你说过 / 你之前说 …」→ 记为 ``understandingAsOriginal=true``。
+
+    该字段只做报告观测，不参与 Step 3 的 PASS/FAIL 判定。
+    """
+    text = answer or ""
+    flagged: list[dict[str, Any]] = []
+    labelled: list[str] = []
+    negated: list[str] = []
+    for fragment in S5_UNDERSTANDING_FRAGMENTS:
+        position = text.find(fragment)
+        while position != -1:
+            sentence = _sentence_around(
+                text, position, position + len(fragment)
+            )
+            clue = next(
+                (
+                    marker
+                    for marker in S5_UNDERSTANDING_MISLABEL_MARKERS
+                    if marker in sentence
+                ),
+                None,
+            )
+            if clue is not None:
+                if S5_UNDERSTANDING_SOURCE_LABEL in sentence:
+                    labelled.append(fragment)
+                elif any(
+                    marker in sentence
+                    for marker in S5_UNDERSTANDING_NEGATION_MARKERS
+                ):
+                    negated.append(fragment)
+                else:
+                    flagged.append(
+                        {
+                            "fragment": fragment,
+                            "sentence": sentence,
+                            "marker": clue,
+                        }
+                    )
+            position = text.find(fragment, position + len(fragment))
+    return {
+        "rule": (
+            "Understanding 片段所在整句出现原话/原文/原句或"
+            "「更早的说法/另一句原话/你说过」等表述，"
+            "且未标注「系统记录的你当前理解」、也未是否定表述时，"
+            "记为把 Understanding 误称为用户原话"
+        ),
+        "understandingAsOriginal": bool(flagged),
+        "understandingMislabelFragments": flagged,
+        "understandingLabelledFragments": sorted(set(labelled)),
+        "understandingNegatedFragments": sorted(set(negated)),
+    }
+
+
+def s5_quote_observation(answer: str | None) -> dict[str, Any]:
+    """S5 引用来源 + Understanding 误称观测的合并记录字段。"""
+    source = s5_quote_source_check(answer)
+    mislabel = s5_understanding_as_original_check(answer)
+    return {
+        "quoteSources": source["sources"],
+        "quotePrimary": source["primary"],
+        "quoteSourceDetail": source,
+        "understandingAsOriginal": mislabel["understandingAsOriginal"],
+        "understandingMislabelDetail": mislabel,
+    }
+
+
 # 只在 HISTORY_GUARD 触发重生成时允许不同的字段。Manifest 不在豁免范围内：
 # 重生成不改变本轮注入来源；如果 Manifest 也变了，说明是上下文组装发生了变化。
 GUARD_EXEMPT_FIELDS = (

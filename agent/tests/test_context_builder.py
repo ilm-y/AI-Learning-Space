@@ -87,7 +87,11 @@ def test_understanding_misconception_reaches_the_model():
     assert "TLB" in system
     assert "把 TLB Miss 与 Page Fault 混为一谈" in system
     assert "当前存在" in system
-    assert "它应该就是 Page Table 的缓存。" in system
+    assert (
+        "- 系统保存的用户解释记录（可能来自批注摘录，不是 history 逐字原话）："
+        "「它应该就是 Page Table 的缓存。」" in system
+    )
+    assert "用户自己的说法" not in system
 
 
 def test_unknown_empty_snapshot_is_not_injected():
