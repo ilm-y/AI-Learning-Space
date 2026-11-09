@@ -168,3 +168,49 @@ provenance 标签（Batch 7）双重缓解；S5-B 仅有 3 次重跑样本，
 `partialUpgradeNegationSkipped` 只做观测，不参与最终判定，需配合人工复核。
 
 **状态**：已修复（Batch 4，2026-11-09）。
+
+## KI-3 HISTORY_GUARD internal_process 对「想通」的字面误判
+
+- 登记时间：2026-11-10
+- 来源批次：Phase 5 Step 4 前置条件第 6 项（只登记，本批不修）
+
+**现象**
+
+产品侧 `HISTORY_GUARD` 的 `internal_process` 校验按字面匹配
+「想通 / 意识到 / 想明白」等内省词。当这些词出现在**假设、转述或
+来源说明**里，而不是对用户过去心理过程的肯定断言时，仍可能被命中，
+触发一次不必要的重生成（严重时触发确定性回退）。
+
+**证据**
+
+- Batch 6（2026-11-09 23:58 快照）S5-B-1 首答在假设列表中写了
+  「想通」，被 `internal_process` 字面命中；重生成后回答正确标注，
+  未回退。见 `docs/testing/phase5-abc-rerun.md` 第 15 节。
+- Step 4（2026-11-10 00:37 快照）S4G-attempt2（run 15）再次复现：
+  首答在解释「不能替用户补心理过程」时写了「你意识到重传意味着丢包」，
+  被字面命中；重生成仍命中，最终走确定性回退。trace：
+  `kind=internal_process`，`excerpt=我如果给你补一段「你意识到重传
+  意味着丢包，所以……」这样的叙述，那是我编的，不是发生过的事实`，
+  `regenerated=true`、`fallback=true`。该次是误判而非真实无依据断言；
+  其余 3 次尝试（attempt1、attempt4、attempt5）模型均未产生可拦截的
+  编造断言，未触发守卫。详见 `docs/testing/phase5-step4-results.md`
+  第 4、6 节。
+- 相关实现：`agent/app/history_guard.py:63-91` 的 `_PROCESS_TERMS`
+  与 `_INTERNAL_PROCESS_RE`；`_check_internal_process` 在
+  `agent/app/history_guard.py:392-413`。
+
+**影响**
+
+1. 合法回答多一次 LLM 调用、延迟与 token；
+2. 若重生成仍被字面命中，会使用确定性回退文本，可能丢失用户要求的
+   引用原句（与 KI-2 的回退路径相同）；
+3. 影响 `historyGuardTriggered` 观测：触发次数不完全等于真实无依据
+   断言次数。
+
+**本批边界**
+
+Step 4 不修改 `agent/app/history_guard.py`。异常场景中构造
+`internal_process` 触发时，需同时记录产品 trace 的 `kind/excerpt`
+与首答/重生成结果，区分「真实无依据断言」与「字面误判」。
+
+**状态**：开放（只登记，不在 Step 4 修复）。
