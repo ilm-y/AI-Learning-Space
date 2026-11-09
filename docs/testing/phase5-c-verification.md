@@ -648,3 +648,280 @@ Runtime / Policy / Schema。
    10 给未来重试留了 3 次余量。若要求严格等于 7，需要把上限改为 7。
 3. run 1 的 Usage 与 run_id 仍是串行人工对应（Agent 诊断不带 run_id）；若要求程序化
    绑定，需要新增 Agent 诊断字段，属于新改动，未在本批实施。
+
+---
+
+## 12. 批次 3 runs 2/3：两次追加 C 验证（2026-11-09）
+
+### 12.1 前置条件逐项确认
+
+| 前置 | 结果 |
+|---|---|
+| 4 项决策补丁与执行器修复在工作区 | PASS：`git status` 干净，HEAD=`e027a5f` |
+| 分析消费者关闭 | PASS：`.request` / `.retry` 消费者均为 0（`.result` 由 Spring 自身监听） |
+| 内部凭据 401 已解决 | PASS：`tokenAligned=true`、`identitySecretSet=true`；SSE 无 401/403 |
+| Memory 隔离补丁生效 | PASS：`memoryIsolationChecked=true`；默认 Memory collection 前后均 404 |
+| 修正判据已写入 | PASS：`run_c_verification.py --self-test` = `problems: []` |
+| LLM max_tokens ≥4096 | PASS：诊断 `maxTokens=4096` |
+| 离线回归 | PASS：`test_phase5_prestep3_scripts.py` + `test_context_strategy.py` → **37 passed** |
+
+本次新环境：stamp=`20261109205040-66f392`，隔离库
+`phase5_pilot_20261109205040_66f392`，文档 collection
+`phase5-pilot-20261109205040-66f392_text-embedding-v4_1024`。
+run 1 所在环境已在上批清理，因此本次是新快照环境中的**整体第 2、3 次** C 调用；
+执行器内部按 1/2 编号，本文一律按整体口径记为 run 2 / run 3。
+
+### 12.2 run 2 记录（整体第 2 次）
+
+| 字段 | 值 |
+|---|---|
+| run_id | `1`（本环境首个 CHAT run） |
+| clientRequestId | `6dce647d-dcd3-496e-ac97-e28016aebc0e` |
+| provider request UUID | `b63e7a3e2c284d94a97fb05f63d70fb1` |
+| providerRequestId | `null`（provider 未返回） |
+| finish_reason | `stop` |
+| truncated | `false` |
+| usageStatus | `REAL` |
+| prompt / completion / total tokens | `2763 / 2345 / 5108` |
+| cached / reasoning tokens | `1536 / 1839` |
+| 客户端 SSE 耗时 | `17405 ms` |
+| 诊断记录耗时 | `16428 ms` |
+| contextStrategy | `C` |
+| agent_run.status | `COMPLETED` |
+| manifest.intent / policy_version | `LEARNING_REVIEW` / `d4-2-v1` |
+| 回答字符数 | `937` |
+| 回答含唯一标记 | **是** |
+| Embedding（本次） | 2 次调用 / 2 个文本 |
+| HTTP 状态 | `200` |
+
+回答开头（仅模型输出）：
+
+```text
+## 你的原话（2026-11-09 20:51 那条消息）
+
+> 【PHASE5-PRESTEP3-SNAPSHOT】我先说说我的理解：TCP 三次握手是客户端发 SYN，服务端回 SYN-ACK，客户端再回 ACK。
+```
+
+引用与 `HISTORY_USER` 逐字一致，含方括号标记。
+
+### 12.3 run 2 判定：**PASS**
+
+| 判据 | 判定 | 证据 |
+|---|---|---|
+| Manifest 缺 revision / evidence entry | PASS | `revision:1` + `evidence:1` 均在 |
+| token 拆分之和 != section 估算 | PASS | `manifestCheck.problems=[]`，精确 type 全部守恒 |
+| 回答未逐字引用原话 | PASS | 包含 `PHASE5-PRESTEP3-SNAPSHOT` 及完整原话 |
+| Citation 无法追溯 | PASS | 2 条均回查成功，`traceable=true` |
+| Usage 伪造/估算 | PASS | `REAL`，provider 原始 usage |
+| run_id 无法关联 | PASS | SSE `runId=1` = `agent_run.id=1`，`COMPLETED` |
+| freeze / qdrant 前后不一致 | PASS | 运行前、运行后、restore 后均 PASS |
+| 分析消费者写回 | PASS | worker 消费者 0，冻结表未变 |
+| error / timeout / 空输出 / 截断 | PASS | `stop`、非空、未截断、无 error |
+| 默认 Memory collection 被读写 | PASS | 前后均 404 |
+| Embedding 单次 >3 / 批次 >10 | PASS | 单次 2；批次累计运行到此刻 3 |
+
+### 12.4 run 3 记录（整体第 3 次）
+
+| 字段 | 值 |
+|---|---|
+| run_id | `3` |
+| clientRequestId | `a8482606-a285-497a-abed-5bec3148cf67` |
+| provider request UUID | `f58311b11f7f4a0399fbb472b42ac4ab` |
+| providerRequestId | `null`（provider 未返回） |
+| finish_reason | `stop` |
+| truncated | `false` |
+| usageStatus | `REAL` |
+| prompt / completion / total tokens | `2763 / 1435 / 4198` |
+| cached / reasoning tokens | `2560 / 956` |
+| 客户端 SSE 耗时 | `12437 ms` |
+| 诊断记录耗时 | `11370 ms` |
+| contextStrategy | `C` |
+| agent_run.status | `COMPLETED` |
+| manifest.intent / policy_version | `LEARNING_REVIEW` / `d4-2-v1` |
+| 回答字符数 | `881` |
+| 回答含唯一标记 | **是** |
+| Embedding（本次） | 2 次调用 / 2 个文本 |
+| HTTP 状态 | `200` |
+
+回答开头（仅模型输出）：
+
+```text
+## 你那条消息的原文
+
+> 【PHASE5-PRESTEP3-SNAPSHOT】我先说说我的理解：TCP 三次握手是客户端发 SYN，服务端回 SYN-ACK，客户端再回 ACK。
+```
+
+引用同样与 `HISTORY_USER` 逐字一致。
+
+**run_id=3 的原因（非失败/非重试）**：每轮对话结束后，Spring 的
+`AnalysisTaskService` 会为分析任务插入一条 `run_type=ANALYSIS` 的
+`agent_run`（MQ 模式，状态 `PENDING`），该行占用 id=2。因此第二次 CHAT run
+拿到 id=3。分析消费者关闭，id=2 保持 `PENDING`，队列消息未被消费，未发生写回。
+这属于 Spring 既有链路行为，不是重试。
+
+### 12.5 run 3 判定：**PASS**
+
+| 判据 | 判定 | 证据 |
+|---|---|---|
+| Manifest 缺 revision / evidence entry | PASS | `revision:1` + `evidence:1` 均在 |
+| token 拆分之和 != section 估算 | PASS | `manifestCheck.problems=[]` |
+| 回答未逐字引用原话 | PASS | 包含标记与完整原话 |
+| Citation 无法追溯 | PASS | 2 条均回查成功 |
+| Usage 伪造/估算 | PASS | `REAL` |
+| run_id 无法关联 | PASS | SSE `runId=3` = `agent_run.id=3`，`COMPLETED` |
+| freeze / qdrant 前后不一致 | PASS | 运行前、运行后、restore 后均 PASS |
+| 分析消费者写回 | PASS | worker 消费者 0，冻结表未变 |
+| error / timeout / 空输出 / 截断 | PASS | `stop`、非空、未截断、无 error |
+| 默认 Memory collection 被读写 | PASS | 前后均 404 |
+| Embedding 单次 >3 / 批次 >10 | PASS | 单次 2；批次 5 |
+
+### 12.6 3 次对比
+
+#### Manifest 一致性：**完全一致**
+
+3 次均为 10 条 source、同一 type 与同一 token 拆分：
+
+| type | source_id | tokens（run 1 / 2 / 3） |
+|---|---|---:|
+| history | `history:1` | 43 / 43 / 43 |
+| history | `history:2` | 32 / 32 / 32 |
+| knowledge | `chunk:1` | 95 / 95 / 95 |
+| knowledge | `chunk:2` | 97 / 97 / 97 |
+| memory | `memory:1` | 108 / 108 / 108 |
+| session | `session:1` | 50 / 50 / 50 |
+| trajectory | `revision:1` | 89 / 89 / 89 |
+| trajectory_source | `evidence:1` | 88 / 88 / 88 |
+| understanding | `understanding:1` | 333 / 333 / 333 |
+| user_input | `message:current` | 57 / 57 / 57 |
+
+`budget.per_type` 与 `estimatedTokens` 估算也一致（动态上下文 1771 tokens，
+总 prompt 约 4160 tokens）。
+
+#### 回答逐字引用：**一致**
+
+3 次回答都在开头以引用块逐字复述原话，均包含
+`【PHASE5-PRESTEP3-SNAPSHOT】我先说说我的理解：…客户端再回 ACK。`。
+引用位置一致（回答开头），标题措辞不同（run 1「你的原话」、run 2「你的原话
+（2026-11-09 20:51 那条消息）」、run 3「你那条消息的原文」），正文引用相同。
+
+#### Context Hash：run 2 = run 3，run 1 不同（已解释）
+
+| run | contextSha256 | systemSha256 | userSha256 | chars | marker |
+|---|---|---|---|---|---:|---:|
+| 1（上一环境） | `0ba8a1c1…c6329cee` | `3ea4a2f3…5a871edb` | `072686db…45c0786` | 4775 | 6 |
+| 2 | `335cb444…11a892b3` | `1f3416bc…25b1b9e` | `072686db…45c0786` | 4775 | 6 |
+| 3 | `335cb444…11a892b3` | `1f3416bc…25b1b9e` | `072686db…45c0786` | 4775 | 6 |
+
+- **run 2 与 run 3 的 Context Hash 完全相同**，说明同一快照下上下文是确定性的。
+- run 1 的差异来自**快照时间戳**：run 1 的 `snapshotTime=2026-11-09 20:45:26`，
+  本次为 `2026-11-09 20:51:07`。`ContextBuilder` 会把
+  Understanding / Memory / Revision / Evidence 的时间以
+  `_format_time()`（精确到分钟）渲染进 system 区块，因此 system 文本在
+  「20:45」与「20:51」处不同；两者长度相同，所以 `chars` 与
+  `prompt_tokens=2763` 三次都一致，而 `systemSha256` 不同。`userSha256`
+  三次相同。这是**跨快照环境**的确定性差异，不是单次运行的上下文非确定性。
+- 结论：若要求「3 次 Context Hash 必须逐字相同」，必须让 3 次运行共用**同一个**
+  快照环境；本次 run 1 与 runs 2/3 分属两个环境，因此做不到跨环境相同。
+
+#### Citation 一致性：**同一 chunk 集合，顺序不同**
+
+| run | citations（chunkId 顺序） | traceable |
+|---|---|---|
+| 1 | `chunk 1`, `chunk 2` | true |
+| 2 | `chunk 2`, `chunk 1` | true |
+| 3 | `chunk 1`, `chunk 2` | true |
+
+3 次都指向同一文档 `phase5-prestep3-tcp.md` 的 chunk 1/2，集合一致；
+run 2 的返回顺序与前两次相反，属于模型生成顺序差异，不影响可追溯性。
+
+#### Usage 波动：**无异常**
+
+| run | prompt | completion | total | cached | reasoning | latency |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 2763 | 1899 | 4662 | 1536 | 1366 | 15578 ms |
+| 2 | 2763 | 2345 | 5108 | 1536 | 1839 | 17405 ms |
+| 3 | 2763 | 1435 | 4198 | 2560 | 956 | 12437 ms |
+
+- 三次 `prompt_tokens` 完全相同（2763），与「输入上下文一致」互相印证；
+- `prompt + completion = total` 三次均成立；
+- completion / reasoning 随采样波动（run 2 最长、run 3 最短），属正常生成差异；
+- run 3 缓存命中 2560、miss 仅 203，说明前缀缓存已预热，不是用量造假；
+- 三次均为 `REAL`，无估算值。
+
+### 12.7 冻结一致性（每次 restore 前后）
+
+| 检查点 | MySQL combined | Qdrant pointCount / combined | 结果 |
+|---|---|---|---|
+| 基线 | `b53a6dbc…08d0e1c4` | 2 / `ae48e3ed…cdf6e40` | PASS |
+| run 2 前 restore（删除前/后/commit） | 三者同值 | — | PASS |
+| run 2 前 freeze / qdrant check | 同基线 | 同基线 | PASS |
+| run 2 后 freeze / qdrant check | 同基线 | 同基线 | PASS |
+| run 2 后 restore（删除 2 条，残留 0） | 同基线 | — | PASS |
+| run 3 前 restore / freeze / qdrant | 同基线 | 同基线 | PASS |
+| run 3 后 freeze / qdrant check | 同基线 | 同基线 | PASS |
+| run 3 后 restore（删除 2 条，残留 0） | 同基线 | — | PASS |
+
+所有 `restore_snapshot.py` 的 before / after / postCommit combined 均相同，
+`residualScopedMessages=0`；执行器每一步 `freeze_check` 与
+`qdrant_freeze_check` 退出码均为 0。
+
+### 12.8 Embedding 预算与成本
+
+| 项目 | 实际 | 上限 |
+|---|---:|---:|
+| 文档索引 | 1 次调用 / 2 个文本 | — |
+| 查询 | 4 次调用 / 4 个文本 | — |
+| 单次运行 | 2 次 | ≤3 |
+| 批次合计 | 5 次调用 / 6 个文本 | ≤6 次（任务口径）/ ≤10（执行器口径） |
+| LLM | 2 次 | ≤2 |
+| Tavily | 0 | 0 |
+| 重试 | 0 | ≤1 |
+
+### 12.9 清理状态
+
+`cleanup.py` 退出 1（`ok=false`），原因仍是既知的检查顺序：删除 Memory
+collection 后做全局残留列表时，文档 collection 尚未删除，因此该字段暂时列出
+文档 collection。以独立复查为准：
+
+| 资源 | 结果 |
+|---|---|
+| Agent 8001 / Spring 8081 | 进程已停止，端口均关闭 |
+| 隔离 DB | 已 DROP，`SHOW DATABASES LIKE` 为空 |
+| 文档 collection | 404 |
+| 隔离 Memory collection | 404 |
+| 默认 Memory collection | 404（全程未创建） |
+| `phase5-pilot-*` 残留 | `[]` |
+| RabbitMQ 隔离队列 / exchange | `leftovers=[]` |
+
+### 12.10 结论
+
+- **run 2 PASS、run 3 PASS**，加上修正后的 **run 1 PASS**，三次 C 调用全部通过；
+- 每次 restore 前后 MySQL 与 Qdrant 冻结均一致；
+- 三次 Manifest 一致；三次均逐字引用原话；Citation 指向同一 chunk 集合；
+  Usage 无异常；Context Hash 在 run 2/3 间完全相同，run 1 的差异已由快照时间戳解释；
+- 隔离资源清理干净；
+- 未修改 Runtime / ContextBuilder / Policy / Schema / SSE / Spring；未跑 A/B、
+  未进入 90 次全量、未实现 Tavily；未 commit、未 push。
+
+**是否满足进入 90 次全量的条件：满足。** 唯一需要在全量前确认的是
+「Context Hash 是否要求跨批次逐字相同」——若要求相同，90 次全量必须在同一
+快照环境内串行完成，而不是每批重建环境。
+
+### 12.11 需要人工审核的决策点
+
+1. **Context Hash 的跨环境可比性**：本次 run 1 与 runs 2/3 分属两个快照环境，
+   system 区块中的分钟级 fixture 时间导致 Hash 不同。run 2/3 同环境已证明
+   确定性。若全量要求「同一输入同一 Hash」，应固定一个快照环境跑完全部次数，
+   并在报告中记录该环境的 `snapshotTime`。
+2. **run_id 序列 1 → 3**：分析 run（`run_type=ANALYSIS`）占用 id=2 是 Spring
+   既有行为。Usage 与 run_id 仍是串行人工对应；若要求程序化绑定，需要新增
+   Agent 诊断字段（新改动）。
+3. **Citation 顺序不稳定**：同一 chunk 集合、不同顺序。若下游按顺序做严格断言，
+   需要改为集合比较；否则可接受。
+4. **`cleanup.py` 的 `ok=false`**：仍是检查顺序造成的假失败，独立复查已全部干净。
+   是否调整脚本检查顺序（属于脚本改动，不在本批允许边界内）需另行决定。
+
+### 12.12 工作区状态
+
+- `git status`：仅 `docs/testing/phase5-c-verification.md` 有本次追加；
+- 未 commit、未 push；A/B 与 90 次全量未执行。
