@@ -89,8 +89,15 @@ def _message_record(messages: list[ChatMessage], strategy: str) -> dict[str, obj
     }
 
 
-def _attach_diagnostics(record: dict[str, object], diagnostics) -> None:
+def _attach_diagnostics(
+    record: dict[str, object], diagnostics, output_text: str = ""
+) -> None:
     record["completed"] = True
+    record["outputChars"] = len(output_text)
+    record["outputSha256"] = _sha256(output_text)
+    # 仅供 experiment harness 在隔离 temp 中分析 HISTORY_GUARD 的首答与重生成；
+    # 不写回业务库，也不进入正式 SSE 内容。
+    record["outputText"] = output_text
     if diagnostics is None:
         record["usageStatus"] = "UNKNOWN"
         record["usage"] = "UNKNOWN"
@@ -116,19 +123,23 @@ class _RecordingStream:
         self._record = record
         self._diagnostics = diagnostics
         self._finished = False
+        self._parts: list[str] = []
 
     def __aiter__(self):
         return self
 
     async def __anext__(self):
         try:
-            return await self._inner.__anext__()
+            chunk = await self._inner.__anext__()
         except StopAsyncIteration:
             self._finish()
             raise
         except BaseException:
             self._finish()
             raise
+        if isinstance(chunk, str):
+            self._parts.append(chunk)
+        return chunk
 
     async def aclose(self):
         close = getattr(self._inner, "aclose", None)
@@ -144,7 +155,7 @@ class _RecordingStream:
         if self._finished:
             return
         self._finished = True
-        _attach_diagnostics(self._record, self._diagnostics)
+        _attach_diagnostics(self._record, self._diagnostics, "".join(self._parts))
 
 
 _original_stream = OpenAICompatibleAdapter.stream_chat_with_completion

@@ -1744,6 +1744,8 @@ def s5_history_use_check(answer: str | None) -> dict[str, Any]:
       2. 回答等价语义：同时包含「慢启动」「每次只」「加一」三个关键词。
 
     合成标记 ``【S5-HISTORY】`` 不再作为必需项。理由见模块内注释。
+
+    本批次只改 S5 的预置 Understanding 数据，不修改这里的匹配规则。
     """
     text = answer or ""
     exact = S5_EXPECTED_ORIGINAL in text
@@ -1759,6 +1761,89 @@ def s5_history_use_check(answer: str | None) -> dict[str, Any]:
         "equivalentSemantics": equivalent,
         "pass": exact or equivalent,
     }
+
+
+# 只在 HISTORY_GUARD 触发重生成时允许不同的字段。Manifest 不在豁免范围内：
+# 重生成不改变本轮注入来源；如果 Manifest 也变了，说明是上下文组装发生了变化。
+GUARD_EXEMPT_FIELDS = (
+    "contextHash",
+    "systemSha256",
+    "systemChars",
+    "promptTokens",
+)
+
+
+def guard_aware_hash_consistency(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """HISTORY_GUARD 触发时的 Hash 一致性判据。
+
+    规则（只豁免守卫触发，不放宽整体一致性）：
+
+    1. 每条记录都必须有布尔字段 ``historyGuardTriggered``；
+    2. ``manifestSha256`` 在 3 次 repeat 之间必须一致（不豁免）；
+    3. 未触发守卫的 repeat 之间，``contextHash`` / ``systemSha256`` /
+       ``systemChars`` / ``promptTokens`` 必须一致；
+    4. ``historyGuardTriggered=true`` 的 repeat 豁免上述字段差异，但必须在
+       结果中标注（本函数输出 ``guardedKeys`` 与逐条豁免说明）；
+    5. 若 3 次全部触发守卫，则没有「未触发」基线，Hash 相等性不适用，
+       记为观测项而不是静默 PASS。
+    """
+    ordered = sorted(records, key=lambda item: int(item.get("rep") or 0))
+    problems: list[str] = []
+    annotations: list[str] = []
+    missing = [
+        record.get("key")
+        for record in ordered
+        if not isinstance(record.get("historyGuardTriggered"), bool)
+    ]
+    if missing:
+        problems.append(f"未记录 historyGuardTriggered：{missing}")
+
+    guarded = [
+        record for record in ordered if record.get("historyGuardTriggered") is True
+    ]
+    unguarded = [
+        record for record in ordered if record.get("historyGuardTriggered") is False
+    ]
+
+    manifest_values = [record.get("manifestSha256") for record in ordered]
+    if len(set(manifest_values)) != 1:
+        problems.append(f"一致性：manifestSha256 不一致 {manifest_values}")
+
+    field_values: dict[str, list[Any]] = {}
+    if unguarded:
+        for field in GUARD_EXEMPT_FIELDS:
+            values = [record.get(field) for record in unguarded]
+            field_values[field] = values
+            if len(set(values)) != 1:
+                problems.append(
+                    f"一致性：{field} 在未触发守卫的 "
+                    f"{len(unguarded)} 次之间不一致 {values}"
+                )
+    else:
+        annotations.append("3 次均触发 HISTORY_GUARD，未建立未触发基线，Hash 相等性不适用")
+
+    for record in guarded:
+        annotations.append(
+            f"{record.get('key')}：historyGuardTriggered=true，"
+            f"豁免 {', '.join(GUARD_EXEMPT_FIELDS)}（llmCallCount="
+            f"{record.get('llmCallCount')}）"
+        )
+
+    return {
+        "rule": (
+            "未触发守卫的 repeat 之间必须 Hash 一致；守卫触发的 repeat "
+            "豁免 contextHash/systemSha256/systemChars/promptTokens，但必须标注；"
+            "manifestSha256 始终要求一致"
+        ),
+        "guardedKeys": [record.get("key") for record in guarded],
+        "unguardedKeys": [record.get("key") for record in unguarded],
+        "manifestValues": manifest_values,
+        "unguardedValues": field_values,
+        "annotations": annotations,
+        "problems": problems,
+        "pass": not problems,
+    }
+
 
 
 def citation_consistency_check(

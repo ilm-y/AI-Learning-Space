@@ -446,6 +446,26 @@ def one_call(
     embedding_texts = int(context_after.get("embeddingTexts", 0)) - int(
         context_before.get("embeddingTexts", 0)
     )
+    # 一轮对话内出现多次 LLM 调用时，本运行期只有一种路径：产品内置
+    # HISTORY_GUARD 的首答校验未通过 → 追加指令重生成。记录每次调用的
+    # system 指纹、长度与 usage，供 guard 豁免判据与首答/重生成分析使用。
+    llm_calls: list[dict[str, Any]] = []
+    for index, item in enumerate(new_records, start=1):
+        item_usage = item.get("usage") if isinstance(item.get("usage"), dict) else {}
+        call_info: dict[str, Any] = {
+            "index": index,
+            "systemSha256": item.get("systemSha256"),
+            "chars": item.get("chars"),
+            "promptTokens": item_usage.get("prompt_tokens"),
+            "outputChars": item.get("outputChars"),
+            "outputSha256": item.get("outputSha256"),
+            "completed": item.get("completed"),
+        }
+        if len(new_records) > 1:
+            # 仅在守卫重生成时保存首答/重生成全文；正文只留在隔离 temp。
+            call_info["outputText"] = item.get("outputText") or ""
+        llm_calls.append(call_info)
+    history_guard_triggered = len(new_records) > 1
     if len(new_records) != 1:
         problems.append(f"单轮对话出现 {len(new_records)} 次 LLM 调用（预期 1）")
     if context_record is not None and context_record.get("contextStrategy") != strategy:
@@ -595,8 +615,21 @@ def one_call(
         "citationSet": citation_set(citations),
         "citationTrace": trace,
         "contextHash": context_record.get("contextSha256") if context_record else None,
+        "systemSha256": context_record.get("systemSha256") if context_record else None,
+        "systemChars": context_record.get("chars") if context_record else None,
         "contextRecord": context_record,
         "newContextRecordCount": len(new_records),
+        # 结果 JSON 的显式观测字段：本轮是否触发 HISTORY_GUARD 重生成。
+        # 判定规则见 full_common.guard_aware_hash_consistency。
+        "historyGuardTriggered": history_guard_triggered,
+        "llmCallCount": len(new_records),
+        "llmCalls": llm_calls,
+        "firstAnswer": (
+            llm_calls[0].get("outputText") if history_guard_triggered and llm_calls else None
+        ),
+        "regeneratedAnswer": (
+            llm_calls[-1].get("outputText") if history_guard_triggered and llm_calls else None
+        ),
         "embeddingCalls": embedding_calls,
         "embeddingTexts": embedding_texts,
         "answerChars": call["answerChars"],
