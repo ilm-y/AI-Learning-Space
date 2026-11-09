@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.llm import build_llm_adapter
@@ -46,6 +48,43 @@ async def test_detected_concepts_are_reported_in_meta(runtime):
 
     assert meta.data["detectedConcepts"] == ["TLB（快表）"]
     assert meta.data["estimatedTokens"] > 0
+
+
+async def test_done_carries_minimal_context_manifest(runtime):
+    """D4-4：Manifest 必须随终态事件到后端，且保持 D4-3 的最小字段边界。"""
+    events = await collect_events(runtime, make_request("TLB 是什么？"))
+    done = next(event for event in events if event.event == "done")
+    manifest = done.data["contextManifest"]
+
+    assert set(manifest) == {
+        "schema_version",
+        "policy_version",
+        "intent",
+        "sources",
+        "budget",
+    }
+    assert manifest["schema_version"] == 1
+    assert manifest["sources"]
+
+    for source in manifest["sources"]:
+        assert set(source) == {
+            "type",
+            "source_id",
+            "retrieval_status",
+            "injection_status",
+            "reason",
+            "estimated_tokens",
+        }
+
+    raw = json.dumps(manifest, ensure_ascii=False)
+    for forbidden in (
+        "preview",
+        "system_instruction",
+        "systemInstruction",
+        "messages",
+        "PRIVATE",
+    ):
+        assert forbidden not in raw
 
 
 async def test_candidate_memory_is_never_injected(runtime):

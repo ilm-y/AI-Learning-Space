@@ -570,6 +570,9 @@ CREATE TABLE IF NOT EXISTS `agent_run` (
     `trace_id`        CHAR(32)           DEFAULT NULL COMMENT '由后端生成并透传给 Agent',
     `input_summary`   TEXT,
     `output_summary`  TEXT,
+    -- D4-4：D4-3 ContextBuilder 的最小上下文 Manifest（来源 id / 状态 / 原因 / token）。
+    -- 刻意不含正文、完整 prompt、query 或异常原文；旧数据与失败 run 为 NULL。
+    `context_manifest` JSON             DEFAULT NULL COMMENT '上下文 Manifest（D4-3 schema_version=1），只存来源与状态，不存正文',
     `duration_ms`     INT               DEFAULT NULL,
     `error_message`   TEXT              COMMENT '给人看的失败说明，不存堆栈',
     `client_request_id` VARCHAR(64)     DEFAULT NULL COMMENT 'CHAT run 的幂等键，与触发它的 USER 消息一致',

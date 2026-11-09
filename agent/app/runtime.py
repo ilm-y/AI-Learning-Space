@@ -277,6 +277,12 @@ class AgentRuntime:
                     # 仍然是事实上的展示标签，但客户端不再只能靠正则去猜：
                     # documentId / chunkId 才是可追溯、可校验权限的第一手字段。
                     "citations": structured_citations(citation_report),
+                    # D4-4：把 CONTEXT_BUILT 已生成的 Manifest 随终态交给后端落库。
+                    # 它仍严格保持 D4-3 的最小字段（来源 id / 状态 / 原因 / token），
+                    # 不含正文、完整 prompt、query 或异常原文。放在 done 而不是 meta：
+                    # 终态事件是后端唯一保证会消费的收尾信号；失败 run 不落 manifest，
+                    # 是这一版已知的可观测边界。
+                    "contextManifest": prepared.context.context_manifest,
                 },
             )
         except (RetrievalError, LLMError) as exc:

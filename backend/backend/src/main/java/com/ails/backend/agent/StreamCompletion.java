@@ -13,24 +13,36 @@ import java.util.List;
  * <p>
  * {@code citations} 是 Agent 校验通过后的结构化来源。旧版本 Agent 或测试替身
  * 不带这个字段（或给 null）时按空列表处理，保持协议兼容。
+ * <p>
+ * {@code contextManifest} 是 D4-3 定义的上下文 Manifest 原始 JSON（字符串）。
+ * 它只含来源 id / 状态 / 原因 / token 估算，不含正文、完整 prompt、query 或异常原文。
+ * 旧版本 Agent 不带这个字段时为 {@code null}，后端保持"没有可观测 Manifest"的语义，
+ * 不伪造空对象。
  *
- * @param finishReason 供应商的完成原因，未知时为 {@code null}
- * @param truncated    内容是否因长度上限被截断
- * @param citations    结构化来源引用，永不为 {@code null}
+ * @param finishReason    供应商的完成原因，未知时为 {@code null}
+ * @param truncated       内容是否因长度上限被截断
+ * @param citations       结构化来源引用，永不为 {@code null}
+ * @param contextManifest 最小上下文 Manifest 的原始 JSON，可能为 {@code null}
  */
-public record StreamCompletion(String finishReason, boolean truncated, List<AgentCitation> citations) {
+public record StreamCompletion(String finishReason, boolean truncated, List<AgentCitation> citations,
+                               String contextManifest) {
 
     public StreamCompletion {
         citations = citations == null ? List.of() : List.copyOf(citations);
     }
 
-    /** 兼容旧调用方：没有引用元数据的终态。 */
+    /** 兼容旧调用方：没有 Manifest 的终态。 */
+    public StreamCompletion(String finishReason, boolean truncated, List<AgentCitation> citations) {
+        this(finishReason, truncated, citations, null);
+    }
+
+    /** 兼容旧调用方：没有引用与 Manifest 元数据的终态。 */
     public StreamCompletion(String finishReason, boolean truncated) {
-        this(finishReason, truncated, List.of());
+        this(finishReason, truncated, List.of(), null);
     }
 
     /** 没有截断元数据时的正常终态。 */
     public static StreamCompletion normal() {
-        return new StreamCompletion(null, false, List.of());
+        return new StreamCompletion(null, false, List.of(), null);
     }
 }

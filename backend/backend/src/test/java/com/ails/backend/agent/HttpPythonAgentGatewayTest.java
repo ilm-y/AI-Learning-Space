@@ -5,6 +5,7 @@ import com.ails.backend.dto.agent.ChatAgentRequest;
 import com.ails.backend.dto.agent.ChatHistoryMessage;
 import com.ails.backend.enums.MessageRole;
 import com.ails.backend.security.InternalIdentitySigner;
+import com.ails.backend.utils.JsonUtil;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -369,6 +370,46 @@ class HttpPythonAgentGatewayTest {
 
         assertThat(handler.completions).hasSize(1);
         assertThat(handler.completions.get(0).citations()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("done 携带 contextManifest：原样保留为 JSON 字符串，不丢字段")
+    void parsesContextManifest() throws IOException {
+        HttpServer server = startServer(200, """
+                event: done
+                data: {"runId":1,"contextManifest":{"schema_version":1,"policy_version":"d4-2-v1","intent":"LEARNING_EXPLANATION","sources":[{"type":"knowledge","source_id":"chunk:1","retrieval_status":"SUCCESS","injection_status":"SELECTED","reason":"within_budget","estimated_tokens":12}],"budget":{"total":3000,"used":12,"remaining":2988,"per_type":{}}}}
+
+                """);
+
+        RecordingHandler handler = new RecordingHandler();
+        gateway(server).streamReply(sampleRequest(), handler);
+
+        assertThat(handler.completions).hasSize(1);
+        String manifest = handler.completions.get(0).contextManifest();
+        assertThat(manifest).isNotNull();
+        assertThat(JsonUtil.toMap(manifest))
+                .containsEntry("schema_version", 1)
+                .containsEntry("policy_version", "d4-2-v1")
+                .containsEntry("intent", "LEARNING_EXPLANATION");
+        assertThat(manifest).contains("\"source_id\":\"chunk:1\"")
+                .contains("\"injection_status\":\"SELECTED\"")
+                .contains("\"reason\":\"within_budget\"");
+    }
+
+    @Test
+    @DisplayName("done 的 contextManifest 缺失或不是对象：保持 null，不伪造空 Manifest")
+    void missingOrInvalidContextManifestIsNull() throws IOException {
+        HttpServer server = startServer(200, """
+                event: done
+                data: {"runId":1,"contextManifest":"not-an-object"}
+
+                """);
+
+        RecordingHandler handler = new RecordingHandler();
+        gateway(server).streamReply(sampleRequest(), handler);
+
+        assertThat(handler.completions).hasSize(1);
+        assertThat(handler.completions.get(0).contextManifest()).isNull();
     }
 
     // ---------- 脚手架 ----------

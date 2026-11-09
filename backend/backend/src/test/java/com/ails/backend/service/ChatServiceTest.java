@@ -160,6 +160,43 @@ class ChatServiceTest {
     }
 
     @Test
+    @DisplayName("done 携带 contextManifest：收尾时原样写入 agent_run")
+    void persistsContextManifestFromTerminalEvent() {
+        String manifest = "{\"schema_version\":1,\"policy_version\":\"d4-2-v1\","
+                + "\"intent\":\"LEARNING_EXPLANATION\",\"sources\":[],\"budget\":{}}";
+        when(messageService.appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList()))
+                .thenReturn(assistantMessage());
+        doAnswer(invocation -> {
+            AgentStreamHandler handler = invocation.getArgument(1);
+            handler.onDelta(ANSWER);
+            handler.onComplete(new StreamCompletion(null, false, List.of(), manifest));
+            return null;
+        }).when(agentGateway).streamReply(any(ChatAgentRequest.class), any(AgentStreamHandler.class));
+
+        chatService = serviceWith(new TestEmitter(false, false));
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token");
+
+        assertThat(completedRun().getContextManifest()).isEqualTo(manifest);
+    }
+
+    @Test
+    @DisplayName("失败终局没有 contextManifest：不覆盖已有值、不伪造空对象")
+    void failedRunDoesNotWriteContextManifest() {
+        doAnswer(invocation -> {
+            AgentStreamHandler handler = invocation.getArgument(1);
+            handler.onError(502, "模型失败");
+            return null;
+        }).when(agentGateway).streamReply(any(ChatAgentRequest.class), any(AgentStreamHandler.class));
+
+        chatService = serviceWith(new TestEmitter(false, false));
+        chatService.stream(USER_ID, CONVERSATION_ID, QUESTION, CLIENT_REQUEST_ID, "token");
+
+        AgentRun patch = completedRun();
+        assertThat(patch.getStatus()).isEqualTo(AgentRunStatus.FAILED);
+        assertThat(patch.getContextManifest()).isNull();
+    }
+
+    @Test
     @DisplayName("首个 delta 发送抛运行时异常：仍完成落库并触发分析")
     void sendFailureDoesNotSkipPersistenceOrAnalysis() {
         when(messageService.appendAssistantMessage(eq(CONVERSATION_ID), eq(ANSWER), eq(false), anyList()))

@@ -65,4 +65,79 @@ public interface AgentRunMapper extends BaseMapper<AgentRun> {
     int markAnalysisRunStale(@Param("id") Long id,
                              @Param("cutoff") LocalDateTime cutoff,
                              @Param("error") String error);
+
+    /**
+     * D4-4：按 policy_version / intent / 时间范围分页查询某空间内的 Manifest。
+     * <p>
+     * {@code agent_run} 没有 {@code space_id}，空间归属只能经 conversation 证明；
+     * 这里同时带上 {@code r.user_id}、{@code c.learning_space_id} 与
+     * {@code c.deleted_at IS NULL}，保证跨用户 / 跨空间 / 已删对话都查不到。
+     * <p>
+     * policy_version / intent 存在 JSON 列里，用 {@code JSON_EXTRACT} 过滤。
+     * 这条查询没有为 JSON 路径建索引，仅用于开发排查，不适合高 QPS。
+     */
+    @Select("""
+            <script>
+            SELECT r.*
+              FROM agent_run r
+              JOIN conversation c ON c.id = r.conversation_id
+             WHERE r.user_id = #{userId}
+               AND c.learning_space_id = #{spaceId}
+               AND c.deleted_at IS NULL
+               AND r.context_manifest IS NOT NULL
+              <if test="policyVersion != null and policyVersion != ''">
+               AND JSON_UNQUOTE(JSON_EXTRACT(r.context_manifest, '$.policy_version')) = #{policyVersion}
+              </if>
+              <if test="intent != null and intent != ''">
+               AND JSON_UNQUOTE(JSON_EXTRACT(r.context_manifest, '$.intent')) = #{intent}
+              </if>
+              <if test="from != null">
+               AND r.created_at &gt;= #{from}
+              </if>
+              <if test="to != null">
+               AND r.created_at &lt; #{to}
+              </if>
+             ORDER BY r.created_at DESC, r.id DESC
+             LIMIT #{limit} OFFSET #{offset}
+            </script>
+            """)
+    List<AgentRun> selectManifestPage(@Param("userId") Long userId,
+                                      @Param("spaceId") Long spaceId,
+                                      @Param("policyVersion") String policyVersion,
+                                      @Param("intent") String intent,
+                                      @Param("from") LocalDateTime from,
+                                      @Param("to") LocalDateTime to,
+                                      @Param("limit") int limit,
+                                      @Param("offset") int offset);
+
+    /** 与 {@link #selectManifestPage} 同条件的总数，供分页响应使用。 */
+    @Select("""
+            <script>
+            SELECT COUNT(*)
+              FROM agent_run r
+              JOIN conversation c ON c.id = r.conversation_id
+             WHERE r.user_id = #{userId}
+               AND c.learning_space_id = #{spaceId}
+               AND c.deleted_at IS NULL
+               AND r.context_manifest IS NOT NULL
+              <if test="policyVersion != null and policyVersion != ''">
+               AND JSON_UNQUOTE(JSON_EXTRACT(r.context_manifest, '$.policy_version')) = #{policyVersion}
+              </if>
+              <if test="intent != null and intent != ''">
+               AND JSON_UNQUOTE(JSON_EXTRACT(r.context_manifest, '$.intent')) = #{intent}
+              </if>
+              <if test="from != null">
+               AND r.created_at &gt;= #{from}
+              </if>
+              <if test="to != null">
+               AND r.created_at &lt; #{to}
+              </if>
+            </script>
+            """)
+    long countManifestPage(@Param("userId") Long userId,
+                           @Param("spaceId") Long spaceId,
+                           @Param("policyVersion") String policyVersion,
+                           @Param("intent") String intent,
+                           @Param("from") LocalDateTime from,
+                           @Param("to") LocalDateTime to);
 }

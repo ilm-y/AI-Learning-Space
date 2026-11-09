@@ -58,6 +58,19 @@ public class AgentRun {
 
     private String outputSummary;
 
+    /**
+     * D4-3 最小上下文 Manifest 的原始 JSON（D4-4 落库）。
+     * <p>
+     * 只含 {@code schema_version / policy_version / intent / sources / budget}，
+     * 其中每个 source 只有 {@code type / source_id / retrieval_status /
+     * injection_status / reason / estimated_tokens}。刻意不含正文、完整 prompt、
+     * query 或异常原文。旧数据 / 失败 run 为 {@code null}。
+     * <p>
+     * 用 String 承载 JSON 列，与项目其余 JSON 列（如 learning_understanding）一致；
+     * 读取侧按需解析，不在实体层做自动反序列化。
+     */
+    private String contextManifest;
+
     private Integer durationMs;
 
     /**

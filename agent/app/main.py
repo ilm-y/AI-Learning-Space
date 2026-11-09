@@ -27,7 +27,8 @@ meta    { runId, detectedConcepts, estimatedTokens, warnings }
 delta   { delta }
 done    { runId, detectedConcepts, estimatedTokens, elapsedMs,
           finishReason, truncated,    # finishReason=length ⇒ truncated=true
-          citations }                # [{documentId, chunkId, chunkIndex, sourceTitle}]
+          citations,                  # [{documentId, chunkId, chunkIndex, sourceTitle}]
+          contextManifest }           # D4-3 最小 Manifest（只含来源与状态，不含正文）
 error   { runId, message }
 ```
 """

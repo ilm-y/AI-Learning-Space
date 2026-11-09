@@ -296,7 +296,8 @@ public class HttpPythonAgentGateway implements AgentGateway {
                 boolean truncated = "length".equals(finishReason)
                         || node.path("truncated").asBoolean(false);
                 finish(handler, terminated,
-                        new StreamCompletion(finishReason, truncated, parseCitations(node)));
+                        new StreamCompletion(finishReason, truncated, parseCitations(node),
+                                parseContextManifest(node)));
             }
             case "error" -> finish(handler, terminated, false,
                     // 正常路径下这个 int 由上游给出；asInt 的默认值只在事件本身畸形时才会生效
@@ -312,8 +313,22 @@ public class HttpPythonAgentGateway implements AgentGateway {
      * 只接受正数 documentId / chunkId 和非空标题：没有数据库身份的引用无法在历史
      * 读取时校验可用性，也无法安全地打开原文，宁可不下发。
      */
-    private static List<AgentCitation> parseCitations(JsonNode done) {
-        JsonNode array = done.path("citations");
+    /**
+     * 解析 {@code done.contextManifest}。
+     * <p>
+     * 只接受 JSON 对象：Manifest 的结构由 D4-3 定义，不是对象说明 Agent 版本不兼容
+     * 或事件畸形，此时保持 {@code null}（"没有可观测 Manifest"），不落一个空对象。
+     * 这里直接把对象重新序列化成字符串——落库列是 JSON，MySQL 会再次校验合法性。
+     */
+    private static String parseContextManifest(JsonNode done) {
+        JsonNode manifest = done.get("contextManifest");
+        if (manifest == null || !manifest.isObject()) {
+            return null;
+        }
+        return manifest.toString();
+    }
+
+    private static List<AgentCitation> parseCitations(JsonNode done) {        JsonNode array = done.path("citations");
         if (!array.isArray()) {
             return List.of();
         }

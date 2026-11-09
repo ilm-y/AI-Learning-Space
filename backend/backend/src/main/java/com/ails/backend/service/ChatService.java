@@ -378,6 +378,9 @@ public class ChatService {
                                         ? "chars=" + buffer.length() + ",truncated=true"
                                         : "chars=" + buffer.length(),
                                 null,
+                                // D4-4：CONTEXT_BUILT 生成的 Manifest 随终态写入 agent_run。
+                                // 只读查询接口据此回答「这次为什么注入/丢弃了某条上下文」。
+                                terminal.contextManifest(),
                                 startedAt);
                         send(emitter, "message.end", end);
                     } catch (Exception e) {
@@ -390,7 +393,7 @@ public class ChatService {
                                 "runId", run.getId(),
                                 "code", 500,
                                 "message", "回复保存失败"));
-                        finishRun(run, AgentRunStatus.FAILED, null, e.toString(), startedAt);
+                        finishRun(run, AgentRunStatus.FAILED, null, e.toString(), null, startedAt);
                     } finally {
                         // 先安全关流：emitter.complete() 在客户端断开时可能抛传输层异常
                         // （Tomcat 里实际出现过 MimeHeaders.setValue NPE）。它不能阻断
@@ -419,7 +422,7 @@ public class ChatService {
                             "runId", run.getId(),
                             "code", code,
                             "message", message));
-                    finishRun(run, AgentRunStatus.FAILED, null, message, startedAt);
+                    finishRun(run, AgentRunStatus.FAILED, null, message, null, startedAt);
                     completeQuietly(emitter);
                 }
             });
@@ -435,7 +438,7 @@ public class ChatService {
                         "runId", run.getId(),
                         "code", 500,
                         "message", "生成回复失败"));
-                finishRun(run, AgentRunStatus.FAILED, null, e.toString(), startedAt);
+                finishRun(run, AgentRunStatus.FAILED, null, e.toString(), null, startedAt);
                 completeQuietly(emitter);
             }
         }
@@ -555,12 +558,15 @@ public class ChatService {
      * 这个终局名额，因此全局至多执行一次，可以无条件写。
      */
     private void finishRun(AgentRun run, AgentRunStatus status, String outputSummary,
-                           String error, LocalDateTime startedAt) {
+                           String error, String contextManifest, LocalDateTime startedAt) {
         AgentRun patch = new AgentRun();
         patch.setId(run.getId());
         patch.setStatus(status);
         patch.setOutputSummary(outputSummary);
         patch.setErrorMessage(truncate(error, 1000));
+        // MyBatis-Plus updateById 默认忽略 null 字段：失败 / 旧 Agent 没有 manifest 时
+        // 不会被这里覆盖成 NULL，也不会伪造一个空对象。
+        patch.setContextManifest(contextManifest);
         patch.setAssistantMessageId(run.getAssistantMessageId());
         patch.setFinishedAt(LocalDateTime.now());
         patch.setDurationMs(toMillis(startedAt, patch.getFinishedAt()));
