@@ -413,6 +413,8 @@ def one_call(
     baseline: dict[str, Any],
     qdrant_baseline: dict[str, Any],
     default_baseline: dict[str, Any],
+    *,
+    keep_answer: bool = False,
 ) -> dict[str, Any]:
     scenario = SCENARIO_BY_ID[sid]
     dataset = snapshot["datasets"][sid]
@@ -599,6 +601,9 @@ def one_call(
         "embeddingTexts": embedding_texts,
         "answerChars": call["answerChars"],
         "answerPreview": call["answer"][:300],
+        # 仅重跑批次开启：把完整回答留在隔离 temp 的 results 文件里，供修正后的
+        # 判据逐字判定；不写回业务库，也不改变生产行为。
+        **({"answerFull": call["answer"]} if keep_answer else {}),
         "answerMarkers": markers,
         "events": call["events"],
         "preRestore": pre_restore,

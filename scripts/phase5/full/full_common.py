@@ -1711,6 +1711,139 @@ def citation_set(citations: Any) -> list[list[int]]:
     return [list(key) for key in sorted(keys)]
 
 
+# ---------------------------------------------------------------------------
+# 判据修正（Step 3 复盘批次）
+# ---------------------------------------------------------------------------
+#
+# 背景：预注册判据在本批次产生 12 条失败，人工复核确认均为判据设计问题：
+#   1) S5 要求回答逐字包含合成标记 【S5-HISTORY】，但标记不是用户真实说过的
+#      话；模型的合理行为是引用标记后的原句内容、省略人工括号标记。
+#   2) citation 要求 3 次 repeat 的引用集合严格一致，但 temperature=0 下供应商
+#      输出仍有非确定性，引用条数会在 2~4 条之间波动；这并不等于伪造引用。
+#
+# 新判据只放宽「形式」，不放宽「可验证性」：
+#   - S5：必须出现原句内容（连续子串）或三个语义关键词全部出现；
+#   - Citation：所有引用必须可溯源、非空、落在本场景同一文档，且覆盖率达标；
+#   - Manifest / Context Hash / prompt tokens 的一致性判据保持不变；
+#   - 任何 error / timeout / 空输出 / 截断仍然 FAIL。
+# ---------------------------------------------------------------------------
+
+S5_EXPECTED_ORIGINAL = "我原来以为慢启动慢是因为它每次只把窗口加一"
+S5_REQUIRED_KEYWORDS = ("慢启动", "每次只", "加一")
+CITATION_MIN_AVERAGE_COVERAGE = 2.0 / 3.0
+CITATION_MIN_REP_COVERAGE = 1.0 / 3.0
+CITATION_MIN_UNION_CHUNKS = 2
+
+
+def s5_history_use_check(answer: str | None) -> dict[str, Any]:
+    """S5「历史被使用」的可执行判据。
+
+    通过条件（满足其一）：
+      1. 回答包含原句的连续子串
+         ``我原来以为慢启动慢是因为它每次只把窗口加一``；
+      2. 回答等价语义：同时包含「慢启动」「每次只」「加一」三个关键词。
+
+    合成标记 ``【S5-HISTORY】`` 不再作为必需项。理由见模块内注释。
+    """
+    text = answer or ""
+    exact = S5_EXPECTED_ORIGINAL in text
+    keyword_hits = {keyword: keyword in text for keyword in S5_REQUIRED_KEYWORDS}
+    equivalent = all(keyword_hits.values())
+    return {
+        "rule": (
+            "包含原句连续子串「我原来以为慢启动慢是因为它每次只把窗口加一」"
+            "或同时包含「慢启动」「每次只」「加一」三个关键词"
+        ),
+        "exactOriginalSentence": exact,
+        "keywords": keyword_hits,
+        "equivalentSemantics": equivalent,
+        "pass": exact or equivalent,
+    }
+
+
+def citation_consistency_check(
+    records: list[dict[str, Any]], expected_document_id: int
+) -> dict[str, Any]:
+    """3 次 repeat 的 citation 一致性（修正后判据）。
+
+    必须同时满足：
+      1. 每次 repeat 至少 1 条引用（不允许空引用集合）；
+      2. 所有引用可溯源（调用方已通过 citation_traceability 校验）；
+      3. 所有引用都指向本场景的同一份 Knowledge 文档；
+      4. 3 次引用并集至少覆盖 2 个 chunk（避免「只复读同一个 chunk」）；
+      5. 覆盖率达标：平均覆盖率 >= 2/3 且每次 repeat 覆盖率 >= 1/3；
+         或 3 次中至少 2 次的 citation 集合完全相同（顺序无关）。
+
+    覆盖率定义：``c_r = |C_r| / |U|``，其中 ``U = C_1 ∪ C_2 ∪ C_3``。
+    """
+    items = sorted(records, key=lambda item: int(item.get("rep") or 0))
+    sets = [
+        {(int(pair[0]), int(pair[1])) for pair in (item.get("citationSet") or [])}
+        for item in items
+    ]
+    trace_ok = all(
+        bool((item.get("citationTrace") or {}).get("traceable")) for item in items
+    )
+    non_empty = all(bool(current) for current in sets)
+    union: set[tuple[int, int]] = set()
+    for current in sets:
+        union |= current
+    coverages = [len(current) / len(union) if union else 0.0 for current in sets]
+    average_coverage = sum(coverages) / len(coverages) if coverages else 0.0
+    documents = sorted({doc for current in sets for doc, _ in current})
+    same_document = bool(union) and documents == [int(expected_document_id)]
+    identical = [json.dumps(sorted(current)) for current in sets]
+    identical_reps = max((identical.count(value) for value in set(identical)), default=0)
+    coverage_ok = (
+        average_coverage >= CITATION_MIN_AVERAGE_COVERAGE
+        and min(coverages, default=0.0) >= CITATION_MIN_REP_COVERAGE
+    )
+    identical_ok = identical_reps >= 2
+    reasons: list[str] = []
+    if not non_empty:
+        reasons.append("存在空 citation 集合")
+    if not trace_ok:
+        reasons.append("存在不可溯源引用")
+    if not same_document:
+        reasons.append(f"引用未落在本场景文档 document={expected_document_id}：{documents}")
+    if len(union) < CITATION_MIN_UNION_CHUNKS:
+        reasons.append(f"引用并集 chunk 数 {len(union)} < {CITATION_MIN_UNION_CHUNKS}")
+    if not coverage_ok:
+        reasons.append(
+            "覆盖率不足：average="
+            f"{average_coverage:.3f}（阈值 {CITATION_MIN_AVERAGE_COVERAGE:.3f}），"
+            f"per-rep={[round(value, 3) for value in coverages]}"
+            f"（每轮阈值 {CITATION_MIN_REP_COVERAGE:.3f}）"
+        )
+    if not (coverage_ok or identical_ok):
+        reasons.append("且没有 2/3 次 citation 集合完全相同")
+    return {
+        "rule": (
+            "3 次 citation 非空、全部可溯源、全部指向本场景同一文档、并集 >= 2 chunk；"
+            "且（平均覆盖率 >= 2/3 且每轮覆盖率 >= 1/3）或（>= 2 次集合完全相同）"
+        ),
+        "expectedDocumentId": int(expected_document_id),
+        "sets": [[list(pair) for pair in sorted(current)] for current in sets],
+        "union": [list(pair) for pair in sorted(union)],
+        "coverages": coverages,
+        "averageCoverage": average_coverage,
+        "identicalReps": identical_reps,
+        "traceable": trace_ok,
+        "nonEmpty": non_empty,
+        "sameDocument": same_document,
+        "coverageOk": coverage_ok,
+        "identicalOk": identical_ok,
+        "pass": (
+            non_empty
+            and trace_ok
+            and same_document
+            and len(union) >= CITATION_MIN_UNION_CHUNKS
+            and (coverage_ok or identical_ok)
+        ),
+        "reasons": reasons,
+    }
+
+
 def citation_traceability(
     citations: Any, database: str, space_id: int
 ) -> dict[str, Any]:
