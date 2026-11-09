@@ -39,6 +39,58 @@ from common import (  # noqa: E402
 
 AGENT_PORT = 8001
 SPRING_PORT = 8081
+DEFAULT_MEMORY_PREFIX = "ails_memories"
+
+
+def _collection_suffix(env: dict[str, str]) -> str:
+    """按 `collection_name_for` 的同一规则计算 `<model>_<dimension>` 后缀。
+
+    子进程实际生效的是「本机环境 + agent/.env」，所以这里合并两者；
+    agent/.env 与 `Settings` 的默认值保持一致。
+    """
+    model = (env.get("AILS_EMBEDDING_MODEL") or "text-embedding-3-small").strip()
+    safe_model = re.sub(r"[^a-zA-Z0-9_-]+", "_", model).strip("_") or "model"
+    raw_dimension = (env.get("AILS_EMBEDDING_DIMENSION") or "256").strip()
+    try:
+        dimension = int(raw_dimension)
+    except ValueError as exc:
+        raise SystemExit(
+            f"AILS_EMBEDDING_DIMENSION 不是整数，无法计算 collection 名：{raw_dimension!r}"
+        ) from exc
+    if dimension <= 0:
+        raise SystemExit(f"AILS_EMBEDDING_DIMENSION 必须为正数：{dimension}")
+    return f"{safe_model}_{dimension}"
+
+
+def _assert_memory_isolation(
+    *,
+    stamp: str,
+    memory_prefix: str,
+    memory_collection: str,
+    default_memory_collection: str,
+) -> None:
+    """启动前 fail closed：memory collection 必须是本次 Pilot 独占的。
+
+    任一条不满足就拒绝启动，避免 Agent 落到共享默认 collection
+    `ails_memories_*` 并读写其他环境的数据。
+    """
+    problems: list[str] = []
+    if not memory_prefix.strip():
+        problems.append("AILS_MEMORY_COLLECTION_PREFIX 为空")
+    if not memory_collection.strip():
+        problems.append("计算出的 memory collection 为空")
+    if memory_prefix == DEFAULT_MEMORY_PREFIX:
+        problems.append(f"memory 前缀等于共享默认值 {DEFAULT_MEMORY_PREFIX}")
+    if memory_collection == default_memory_collection:
+        problems.append(f"memory collection 等于共享默认名 {default_memory_collection}")
+    if stamp not in memory_prefix or stamp not in memory_collection:
+        problems.append("memory 前缀/collection 不包含本次 Pilot stamp")
+    if not memory_collection.startswith(memory_prefix):
+        problems.append("memory collection 不以 memory 前缀开头")
+    if problems:
+        raise SystemExit(
+            "Memory 隔离 fail-closed 断言失败，拒绝启动：\n- " + "\n- ".join(problems)
+        )
 
 
 def _analysis_names(stamp: str) -> dict[str, str]:
@@ -109,6 +161,19 @@ def main() -> int:
     stamp = time.strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3)
     db_name = "phase5_pilot_" + stamp.replace("-", "_")
     collection_prefix = "phase5-pilot-" + stamp
+    memory_prefix = collection_prefix + "-memory"
+
+    # 与 Agent 子进程实际生效的配置一致（本机环境被 agent/.env 覆盖）。
+    effective_embedding = {**os.environ, **env_values}
+    collection_suffix = _collection_suffix(effective_embedding)
+    memory_collection = f"{memory_prefix}_{collection_suffix}"
+    default_memory_collection = f"{DEFAULT_MEMORY_PREFIX}_{collection_suffix}"
+    _assert_memory_isolation(
+        stamp=stamp,
+        memory_prefix=memory_prefix,
+        memory_collection=memory_collection,
+        default_memory_collection=default_memory_collection,
+    )
 
     identity_secret = secrets.token_hex(32)
     delegation_secret = secrets.token_hex(32)
@@ -129,6 +194,9 @@ def main() -> int:
             "AILS_RETRIEVER_MODE": "http",
             "AILS_CONCEPT_RESOLVER_ENABLED": "false",
             "AILS_QDRANT_COLLECTION_PREFIX": collection_prefix,
+            # Memory 与文档使用不同的前缀，且都带本次 stamp；缺省会落到共享
+            # `ails_memories_*`，因此这里必须显式注入并在启动前断言。
+            "AILS_MEMORY_COLLECTION_PREFIX": memory_prefix,
             "AILS_INTERNAL_TOKEN": token,
             "AILS_INTERNAL_IDENTITY_SECRET": identity_secret,
             "PYTHONPATH": str(AGENT_DIR) + os.pathsep + agent_env.get("PYTHONPATH", ""),
@@ -198,7 +266,12 @@ def main() -> int:
         "stamp": stamp,
         "db": db_name,
         "collectionPrefix": collection_prefix,
-        "collection": f"{collection_prefix}_text-embedding-v4_1024",
+        "collection": f"{collection_prefix}_{collection_suffix}",
+        "collectionSuffix": collection_suffix,
+        "memoryCollectionPrefix": memory_prefix,
+        "memoryCollection": memory_collection,
+        "defaultMemoryCollection": default_memory_collection,
+        "memoryIsolationChecked": True,
         "agentPort": AGENT_PORT,
         "springPort": SPRING_PORT,
         "agentPid": agent_proc.pid,

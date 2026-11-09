@@ -62,6 +62,20 @@ def drop_database(name: str) -> dict:
         return {"dropped": False, "error": sanitize_error(exc)}
 
 
+def list_phase5_pilot_collections() -> list[str]:
+    """列出所有本次实验命名空间下的 collection（文档 + memory）。
+
+    只读；不按前缀模糊删除任何东西。返回空列表表示无残留。
+    """
+    listing = requests.get(f"{QDRANT}/collections", timeout=30).json()
+    names = listing.get("result", {}).get("collections", [])
+    return sorted(
+        str(item.get("name"))
+        for item in names
+        if str(item.get("name", "")).startswith("phase5-pilot-")
+    )
+
+
 def delete_collection(name: str) -> dict:
     result = {"deleted": False, "gone": False}
     try:
@@ -71,13 +85,46 @@ def delete_collection(name: str) -> dict:
         check = requests.get(f"{QDRANT}/collections/{name}", timeout=30)
         result["checkHttp"] = check.status_code
         result["gone"] = check.status_code == 404
-        listing = requests.get(f"{QDRANT}/collections", timeout=30).json()
-        names = listing.get("result", {}).get("collections", [])
-        result["remainingPhase5Pilot"] = sorted(
-            item.get("name") for item in names if str(item.get("name", "")).startswith("phase5-pilot-")
-        )
+        result["remainingPhase5Pilot"] = list_phase5_pilot_collections()
     except Exception as exc:  # noqa: BLE001
         result["error"] = sanitize_error(exc)
+    return result
+
+
+def delete_memory_collection(state: dict) -> dict:
+    """删除本次 Pilot 独占的 memory collection。
+
+    删除前必须通过隔离校验；绝不按 `ails_memories*` 前缀模糊删除，
+    也绝不触碰共享默认 collection。
+    """
+    name = str(state.get("memoryCollection") or "")
+    stamp = str(state.get("stamp") or "")
+    default_name = str(state.get("defaultMemoryCollection") or "")
+    checks = {
+        "nonEmpty": bool(name),
+        "phase5PilotPrefix": name.startswith("phase5-pilot-"),
+        "hasStamp": bool(stamp) and stamp in name,
+        "notDefault": bool(default_name) and name != default_name,
+        "prefixNotSharedDefault": not name.startswith("ails_memories"),
+    }
+    result: dict = {"collection": name, "checks": checks, "deleted": False, "gone": False}
+    if not all(checks.values()):
+        result["refused"] = True
+        result["reason"] = "memory collection 未通过隔离校验，拒绝删除"
+    else:
+        try:
+            response = requests.delete(f"{QDRANT}/collections/{name}", timeout=30)
+            result["deleteHttp"] = response.status_code
+            result["deleted"] = response.status_code in (200, 202, 404)
+            check = requests.get(f"{QDRANT}/collections/{name}", timeout=30)
+            result["checkHttp"] = check.status_code
+            result["gone"] = check.status_code == 404
+        except Exception as exc:  # noqa: BLE001
+            result["error"] = sanitize_error(exc)
+    try:
+        result["remainingPhase5Pilot"] = list_phase5_pilot_collections()
+    except Exception as exc:  # noqa: BLE001
+        result["residualCheckError"] = sanitize_error(exc)
     return result
 
 
@@ -132,7 +179,13 @@ def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit("usage: cleanup.py <STATE_FILE>")
     state = read_state(sys.argv[1])
-    result: dict = {"stamp": state["stamp"], "db": state["db"], "collection": state["collection"]}
+    result: dict = {
+        "stamp": state["stamp"],
+        "db": state["db"],
+        "collection": state["collection"],
+        "memoryCollection": state.get("memoryCollection"),
+        "defaultMemoryCollection": state.get("defaultMemoryCollection"),
+    }
 
     result["springStop"] = stop_process(int(state["springPid"]))
     result["agentStop"] = stop_process(int(state["agentPid"]))
@@ -142,14 +195,28 @@ def main() -> int:
         "spring": port_closed(int(state["springPort"])),
     }
     result["database"] = drop_database(state["db"])
+    # 先删隔离 memory collection，再做全局残留检查（文档 collection 也会检查）。
+    result["memoryCollectionCleanup"] = delete_memory_collection(state)
     result["collectionCleanup"] = delete_collection(state["collection"])
     result["rabbitmq"] = delete_rabbit(state.get("analysisNames", {}), state["stamp"])
+    try:
+        result["residualPhase5Collections"] = list_phase5_pilot_collections()
+        residual_check_ok = True
+    except Exception as exc:  # noqa: BLE001
+        result["residualPhase5Collections"] = []
+        result["residualCheckError"] = sanitize_error(exc)
+        residual_check_ok = False
 
+    memory_cleanup = result["memoryCollectionCleanup"]
     ok = (
-        result["database"].get("dropped")
+        residual_check_ok
+        and result["database"].get("dropped")
         and result["database"].get("remaining") == 0
+        and memory_cleanup.get("gone")
+        and not memory_cleanup.get("remainingPhase5Pilot")
         and result["collectionCleanup"].get("gone")
         and not result["collectionCleanup"].get("remainingPhase5Pilot")
+        and not result["residualPhase5Collections"]
         and not result["rabbitmq"].get("leftovers")
         and result["portsClosed"]["agent"]
         and result["portsClosed"]["spring"]
