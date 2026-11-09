@@ -208,14 +208,15 @@ def main() -> int:
         residual_check_ok = False
 
     memory_cleanup = result["memoryCollectionCleanup"]
+    # 注意：memory_cleanup / collectionCleanup 里的 remainingPhase5Pilot 是在
+    # 第二个 collection 删除之前计算的快照，不能拿来做最终判断；最终判据只用
+    # 两次删除都完成后的 residualPhase5Collections。
     ok = (
         residual_check_ok
         and result["database"].get("dropped")
         and result["database"].get("remaining") == 0
         and memory_cleanup.get("gone")
-        and not memory_cleanup.get("remainingPhase5Pilot")
         and result["collectionCleanup"].get("gone")
-        and not result["collectionCleanup"].get("remainingPhase5Pilot")
         and not result["residualPhase5Collections"]
         and not result["rabbitmq"].get("leftovers")
         and result["portsClosed"]["agent"]
