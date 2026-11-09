@@ -13,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -113,6 +114,59 @@ class LearningAnalysisServiceConceptMatchTest {
                 service.beginTurn(conversation(), "页表项到底存在哪里？");
 
         assertThat(opening.matched()).extracting(Concept::getId).containsExactly(PAGE_TABLE_ID);
+    }
+
+    @Test
+    @DisplayName("别名命中同一 Concept：快表 / 转换检测缓冲区 / translation lookaside buffer")
+    void aliasesMatchSameTlbConcept() {
+        // display name 刻意留空：证明命中的是别名表，而不是 display_name 里的“快表”。
+        when(conceptMapper.selectList(any())).thenReturn(List.of(concept(TLB_ID, "TLB", null)));
+
+        for (String text : List.of(
+                "快表是什么？",
+                "转换检测缓冲区怎么工作？",
+                "translation lookaside buffer 的容量是多少？")) {
+            LearningAnalysisService.TurnOpening opening = service.beginTurn(conversation(), text);
+            assertThat(opening.matched()).as(text).extracting(Concept::getId).containsExactly(TLB_ID);
+        }
+    }
+
+    @Test
+    @DisplayName("别名只命中自己的 canonical concept：快表不会匹配 Page Table")
+    void aliasOnlyMatchesItsOwnCanonicalConcept() {
+        when(conceptMapper.selectList(any()))
+                .thenReturn(List.of(concept(PAGE_TABLE_ID, "Page Table", null)));
+
+        LearningAnalysisService.TurnOpening opening =
+                service.beginTurn(conversation(), "快表命中时会发生什么？");
+
+        assertThat(opening.matched()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("ASCII 别名仍按词边界匹配：translation lookaside buffers 不命中")
+    void asciiAliasRequiresWordBoundary() {
+        when(conceptMapper.selectList(any())).thenReturn(List.of(concept(TLB_ID, "TLB", null)));
+
+        LearningAnalysisService.TurnOpening opening =
+                service.beginTurn(conversation(), "translation lookaside buffers 是怎么设计的？");
+
+        assertThat(opening.matched()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Backend 别名表与 Agent concept_detector.ALIASES 一致（需与 Agent 同步）")
+    void conceptAliasesStayInSyncWithAgentTable() {
+        // 这份期望值来自 agent/app/retriever/concept_detector.py 的 ALIASES。
+        // 修改任何一侧都必须同步另一侧；本用例是跨语言一致性的 Backend 侧锚点。
+        assertThat(LearningAnalysisService.CONCEPT_ALIASES).isEqualTo(Map.of(
+                "tlb", List.of("快表", "转换检测缓冲区", "translation lookaside buffer"),
+                "page table", List.of("页表", "分页表"),
+                "page fault", List.of("缺页", "缺页异常", "缺页中断"),
+                "virtual memory", List.of("虚拟内存", "虚拟存储", "虚存"),
+                "tcp", List.of("传输控制协议"),
+                "redis", List.of("缓存中间件")
+        ));
     }
 
     private static Conversation conversation() {

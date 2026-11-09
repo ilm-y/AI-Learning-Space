@@ -30,6 +30,8 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -67,6 +69,25 @@ public class LearningAnalysisService {
     private static final int OBSERVATION_MAX_LENGTH = 200;
     /** 一句话的截断长度，用于从消息中摘出提及该概念的句子 */
     private static final int SENTENCE_MAX_LENGTH = 160;
+
+    /**
+     * Concept 别名表，键是 canonical_name 的小写形式。
+     * <p>
+     * <b>必须与 Agent 侧 {@code app/retriever/concept_detector.py} 的 {@code ALIASES} 保持同步</b>
+     * （C-G5）。这里只收录「同一概念的不同说法」，不做同义词推理；别名只能命中其对应的
+     * canonical concept，不会扩大 Evidence 查询范围，也不改变 Understanding 的键。
+     * <p>
+     * 没有引入跨语言共享配置文件：Agent 是 Python、Backend 是 Java，共用文件会把构建
+     * 与运行时耦合在一起；用一份显式常量 + 一致性测试把两侧钉住，成本更低。
+     */
+    static final Map<String, List<String>> CONCEPT_ALIASES = Map.of(
+            "tlb", List.of("快表", "转换检测缓冲区", "translation lookaside buffer"),
+            "page table", List.of("页表", "分页表"),
+            "page fault", List.of("缺页", "缺页异常", "缺页中断"),
+            "virtual memory", List.of("虚拟内存", "虚拟存储", "虚存"),
+            "tcp", List.of("传输控制协议"),
+            "redis", List.of("缓存中间件")
+    );
 
     private final EvidenceService evidenceService;
     private final UnderstandingService understandingService;
@@ -389,6 +410,8 @@ public class LearningAnalysisService {
      * 在文本里按名称匹配当前学习空间下的 Concept。
      * <p>
      * 这是「本地规则版」的分析器：宁可少抽（匹配不到就不产生证据），也不瞎猜。
+     * 匹配顺序为 canonical_name → display_name → {@link #CONCEPT_ALIASES}
+     * （C-G5：与 Agent 别名表对齐，但不做同义推理）。
      */
     private List<Concept> matchConcepts(Long spaceId, String text) {
         if (spaceId == null || !StringUtils.hasText(text)) {
@@ -400,8 +423,33 @@ public class LearningAnalysisService {
         return concepts.stream()
                 .filter(c -> containsConceptName(text, c.getCanonicalName())
                         || (StringUtils.hasText(c.getDisplayName())
-                                && containsConceptName(text, c.getDisplayName())))
+                                && containsConceptName(text, c.getDisplayName()))
+                        || matchesAlias(text, c))
                 .toList();
+    }
+
+    /**
+     * Agent 侧识别到的别名，在 Backend 分析匹配里也必须落到同一个 Concept（C-G5）。
+     * <p>
+     * 别名匹配复用 {@link #containsConceptName} 的口径（ASCII 词边界 + 忽略大小写，
+     * 非 ASCII 子串），并且只按 canonical_name 查表 —— 别名不会反向匹配到别的概念，
+     * 也不会因为命中别名而改变 Evidence / Understanding 的写入锚点。
+     */
+    static boolean matchesAlias(String text, Concept concept) {
+        for (String alias : aliasesFor(concept.getCanonicalName())) {
+            if (containsConceptName(text, alias)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static List<String> aliasesFor(String canonicalName) {
+        if (!StringUtils.hasText(canonicalName)) {
+            return List.of();
+        }
+        return CONCEPT_ALIASES.getOrDefault(
+                canonicalName.trim().toLowerCase(Locale.ROOT), List.of());
     }
 
     /**

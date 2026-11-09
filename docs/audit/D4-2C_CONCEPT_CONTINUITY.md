@@ -169,7 +169,7 @@ Conversation 与 Session **不是**检索条件。它们只影响：
 
 1. **Concept 目录必须来自当前 Space**。Agent 的 `list_concepts(space_id)` 是 `concept_ids` 合法性的来源；Understanding / Evidence 的 SQL 本身没有 `space_id`（Understanding）或依赖 `JOIN concept`（Evidence），因此“跨 Space 不返回”最终依赖概念来源与后端归属校验。
 2. **分析写入是异步的**。Evidence / Understanding 由 Backend 分析链路写入；本轮消息之后的新状态不一定在下一轮前已落库。Agent 只能读到“当前已持久化”的状态。
-3. **Backend 匹配口径必须与 Agent 对齐**。D4-2C 已对齐 ASCII 词边界与大小写；但 Backend 只匹配 canonical / display，Agent 还有别名表（见 7.2）。
+3. **Backend 匹配口径必须与 Agent 对齐**。D4-2C 已对齐 ASCII 词边界与大小写；D4-7 补齐了 Backend 别名表（`CONCEPT_ALIASES`），使 Agent `ALIASES` 能识别的说法在 Backend 分析匹配中落到同一个 canonical concept（见 7.2 与 C-G5）。
 4. **SessionResolver 的文本匹配只覆盖 canonical / display 名称**，不覆盖 Agent 别名；它只决定 Session 归属，不决定概念层检索范围。
 
 ### 6.3 缺口
@@ -180,7 +180,7 @@ Conversation 与 Session **不是**检索条件。它们只影响：
 | C-G2 | `SessionResolver` 规则 3 可能把新话题挂到“唯一活跃且最近”的旧 Session | 已由 D4-2D Policy 的 `session_concept_mismatch` 在 Agent 侧剥离 goal/focus；但不能改写 Backend 的 Session 归属 |
 | C-G3 | 多概念 Memory 没有跨概念统一 RRF；Agent 逐概念请求后按轮转交错合并 | 每个概念都有候选，但最终 top_k 不是跨概念统一排序；请求数随概念数增加 |
 | C-G4 | Understanding 接口支持可选 `spaceId`，但 Agent 的 `get_understandings` / `get_revisions` 未传 | D4-2B 的纵深防御未闭环；当前路径依赖概念来源保证 |
-| C-G5 | Backend 分析匹配没有别名表；Agent 识别有 | “快表”等别名可能被 Agent 识别并用于检索，但 Backend 不据此写 Evidence / 更新 Understanding（除非它同时命中 display name） |
+| C-G5 | ~~Backend 分析匹配没有别名表；Agent 识别有~~ | **已修复（D4-7，见 `D4-KNOWN_ISSUES.md` §2 C-G5）**：Backend 增加与 Agent `ALIASES` 一致的 `CONCEPT_ALIASES`，`matchConcepts` 匹配 canonical → display → alias；别名只命中对应 canonical concept，并由一致性测试钉住两侧表内容 |
 | C-G6 | Knowledge 的版本 / 时效字段不进入 `KnowledgeChunk`，Builder 无法二次过滤 | 检索层已做版本隔离与 fail-closed；Builder 层没有可用的版本字段做展示或再过滤 |
 
 ---
@@ -199,7 +199,7 @@ Conversation 与 Session **不是**检索条件。它们只影响：
 4. **别名边界**：
    - Agent 的 `ALIASES` 是人工表，只收录“同一概念的不同说法”，不做同义词推理；
    - 中文别名（“快表”→“tlb”）只在 canonical_name 为 `tlb` 时生效；
-   - Backend 分析匹配不读 `ALIASES`，见 C-G5。
+   - Backend 分析匹配在 D4-7 后读取与 Agent `ALIASES` 同步的 `CONCEPT_ALIASES`，见 C-G5。
 5. **未建模部分**：TLB Miss 与 Page Fault 的因果 / 时序关系、TLB 命中率、多级页表遍历等，均属于 Knowledge 内容或模型解释，不属于 Concept 识别或连续性契约。
 
 ---
