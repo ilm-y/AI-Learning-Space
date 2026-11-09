@@ -233,7 +233,7 @@ def _review_retriever(settings):
             self.calls["recent"] += 1
             raise AssertionError("复盘不应再按时间取最近证据")
 
-        async def get_revisions(self, user_id, concept_ids):
+        async def get_revisions(self, user_id, concept_ids, *, space_id=None):
             self.calls["revisions"] += 1
             return {10: revisions()}
 
@@ -289,7 +289,7 @@ async def test_runtime_does_not_read_revisions_for_plain_question(settings, monk
         async def get_evidences(self, *args):
             return EvidenceRetrievalResult()
 
-        async def get_revisions(self, user_id, concept_ids):
+        async def get_revisions(self, user_id, concept_ids, *, space_id=None):
             self.revisions_called = True
             return {10: revisions()}
 

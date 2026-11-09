@@ -131,6 +131,50 @@ async def test_revision_query_failure_is_degraded_not_no_history() -> None:
     assert "boom" not in (result.warning or "")
 
 
+# ===================== KI-07：Understanding / Revision 带 spaceId =====================
+
+
+async def test_understanding_and_revision_requests_carry_space_id() -> None:
+    seen: list[httpx.URL] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url)
+        return httpx.Response(200, json={"code": 0, "data": None})
+
+    retriever = _retriever(handler)
+    try:
+        await retriever.get_understandings(7, 9, [1, 2])
+        await retriever.get_revisions(7, [3], space_id=9)
+    finally:
+        await retriever.aclose()
+
+    assert [url.path for url in seen] == [
+        "/api/understandings/1",
+        "/api/understandings/2",
+        "/api/understandings/3/revisions",
+    ]
+    # D4-2B 的接口层纵深防御要求 Agent 显式带上本轮 spaceId。
+    assert [url.params.get("spaceId") for url in seen] == ["9", "9", "9"]
+
+
+async def test_revision_request_omits_space_id_when_absent() -> None:
+    seen: list[httpx.URL] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url)
+        return httpx.Response(200, json={"code": 0, "data": None})
+
+    retriever = _retriever(handler)
+    try:
+        # 旧调用方 / 防御性路径：没有 space_id 时保持旧 URL，不拼空参数。
+        await retriever.get_revisions(7, [3])
+    finally:
+        await retriever.aclose()
+
+    assert seen[0].path == "/api/understandings/3/revisions"
+    assert "spaceId" not in seen[0].params
+
+
 # ===================== 上下文层：状态不被压平 =====================
 
 

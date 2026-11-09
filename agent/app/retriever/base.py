@@ -372,13 +372,20 @@ class Retriever(Protocol):
         ...
 
     async def get_revisions(
-        self, user_id: int, concept_ids: list[int]
+        self,
+        user_id: int,
+        concept_ids: list[int],
+        *,
+        space_id: int | None = None,
     ) -> RevisionRetrievalResult:
         """理解快照的不可变版本历史，按 conceptId 分组。
 
         只有显式复盘才调用；它用于找到「误区何时出现、何时被纠正」以及
         每次变化的 triggerEvidenceId，而不是把所有版本无差别塞进上下文。
         查询失败必须是 DEGRADED，不能伪装成「没有历史版本」。
+
+        ``space_id`` 为可选：HTTP 实现用它触发后端的跨 Space 断言；
+        不传时保持旧行为，兼容既有实现与调用方。
         """
         ...
 

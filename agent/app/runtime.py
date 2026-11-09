@@ -890,7 +890,9 @@ class AgentRuntime:
 
         if retrieve_trajectory:
             revision_result = normalize_revision_result(
-                await retriever.get_revisions(state.user_id, concept_ids)
+                await retriever.get_revisions(
+                    state.user_id, concept_ids, space_id=state.space_id
+                )
             )
             state.revision_status = revision_result.status.value
             state.revision_warning = revision_result.warning

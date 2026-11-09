@@ -179,7 +179,9 @@ class ReviewRetriever:
     async def get_evidences(self, *args):
         return EvidenceRetrievalResult.from_items(_evidences())
 
-    async def get_revisions(self, user_id: int, concept_ids: list[int]):
+    async def get_revisions(
+        self, user_id: int, concept_ids: list[int], *, space_id: int | None = None
+    ):
         return self._revisions
 
     async def get_evidence_details(self, user_id: int, concept_ids: list[int], evidence_ids: list[int]):

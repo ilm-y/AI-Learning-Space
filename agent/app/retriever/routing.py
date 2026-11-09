@@ -198,9 +198,18 @@ class FallbackRetriever:
             )
 
     async def get_revisions(
-        self, user_id: int, concept_ids: list[int]
+        self,
+        user_id: int,
+        concept_ids: list[int],
+        *,
+        space_id: int | None = None,
     ) -> RevisionRetrievalResult:
-        return await self._call("get_revisions", user_id=user_id, concept_ids=concept_ids)
+        return await self._call(
+            "get_revisions",
+            user_id=user_id,
+            concept_ids=concept_ids,
+            space_id=space_id,
+        )
 
     async def get_evidence_details(
         self, user_id: int, concept_ids: list[int], evidence_ids: list[int]

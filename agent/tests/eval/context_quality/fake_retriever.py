@@ -115,7 +115,11 @@ class FakeRetriever:
         return RelatedConceptResult()
 
     async def get_revisions(
-        self, user_id: int, concept_ids: list[int]
+        self,
+        user_id: int,
+        concept_ids: list[int],
+        *,
+        space_id: int | None = None,
     ) -> RevisionRetrievalResult:
         self._count("revisions")
         data = self._data

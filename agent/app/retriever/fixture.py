@@ -136,7 +136,11 @@ class FixtureRetriever:
         return RelatedConceptResult(status=RelatedConceptStatus.EMPTY)
 
     async def get_revisions(
-        self, user_id: int, concept_ids: list[int]
+        self,
+        user_id: int,
+        concept_ids: list[int],
+        *,
+        space_id: int | None = None,
     ) -> dict[int, list[UnderstandingRevision]]:
         self._ensure_loaded()
         wanted = set(concept_ids)

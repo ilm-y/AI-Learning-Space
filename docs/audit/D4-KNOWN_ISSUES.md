@@ -1,8 +1,9 @@
 # D4 Known Issues（Phase 4 收尾缺陷登记）
 
 > 范围：D4-2 / D4-3 / D4-4 / D4-5 已知缺陷与限制的**登记**。
-> 约束：本批只登记，不修复；不改生产代码、Policy、ContextBuilder、评测脚本、评测数据。
-> 状态取值：`未修` / `已规避` / `待产品决策`。`已规避` 只表示当前有确定性防线或安全偏置，不等于缺陷消失。
+> 约束：D4-6 及此前只登记、不修复；D4-7 按人工审核结论修复 KI-01 / C-G5 / KI-07，
+> 其余条目仍只登记。修复只改允许的生产文件与对应测试，不改 D4-3 阈值、Policy 与 Manifest 结构。
+> 状态取值：`未修` / `已修复` / `已规避` / `待产品决策`。`已规避` 只表示当前有确定性防线或安全偏置，不等于缺陷消失。
 
 ---
 
@@ -10,13 +11,14 @@
 
 | 编号 | 描述 | 影响 | 状态 |
 |---|---|---|---|
-| KI-01 | 冗余阈值 0.6 对否定句误判，压缩后“不是”丢失 | 关键否定语义可能在上下文压缩中丢失 | 未修 |
+| KI-01 | 冗余阈值 0.6 对否定句误判，压缩后“不是”丢失 | 关键否定语义可能在上下文压缩中丢失 | 已修复（D4-7） |
 | KI-02 | 模型自然语言误述“没有检索到”无法由确定性层阻止 | 回答可能与已知检索状态矛盾 | 已规避（确定性状态说明）；残留风险未修 |
 | KI-03 | 多概念 Memory 无跨概念统一 RRF，逐概念请求增加延迟 | 最终 top_k 非跨概念统一排序；请求数随概念数增长 | 待产品决策 |
 | KI-04 | Knowledge 缺版本 / 过期字段，Builder 无法按版本过滤 | 检索层已隔离版本，但 Builder 层无法二次过滤或展示版本 | 已规避（检索层 fail-closed）；Builder 层未修 |
 | KI-05 | 失败 run 无 Manifest | 失败请求缺少上下文可观测性 | 待产品决策 |
 | KI-06 | Session 概念匹配依赖文本识别与别名表，泛化措辞降级为“无法判定” | 旧 Session 目标可能继续注入；真正的话题切换无法识别 | 已规避（无法判定时保留注入的安全偏置）；能力缺口未修 |
-| KI-07 | Understanding 接口可选 `spaceId` 未被 Agent 消费 | D4-2B 纵深防御未闭环 | 未修 |
+| KI-07 | Understanding 接口可选 `spaceId` 未被 Agent 消费 | D4-2B 纵深防御未闭环 | 已修复（D4-7） |
+| C-G5 | Backend 分析匹配没有别名表，Agent 识别到别名也不写 Evidence / 不更新 Understanding | 概念连续性在两套识别口径之间出现缺口 | 已修复（D4-7） |
 
 ---
 
@@ -66,9 +68,45 @@ python -m pytest tests/test_context_quality_eval.py::test_known_risk_redundancy_
 - 必须复用 D4-5 的 paraphrase / negation 两个探针做回归。
 - 不改检索层，不改 Manifest schema。
 
+**D4-7 修复（2026-11-09）**
+
+修复范围严格限定在 `agent/app/context/builder.py`，**没有改 bigram 阈值 0.6**、预算、排序、去重或 Manifest 结构。
+
+1. `_is_semantically_redundant` 在字符重合判定之外增加保护规则，任一命中即不判冗余、保留 `full` 档：
+   - **否定词**：提取“不是 / 并非 / 没有 / 不会 / 不能 / 不要 / 未 / 无 / 非 / 不”等标记集合；两边集合不同即保护。先屏蔽“不同 / 不断 / 不仅 / 不等式 / 不确定”等非否定复合词，减少噪声。
+   - **数字**：提取数字 token（先剔除日期/时间元数据）；两边集合不同即保护。
+   - **实体**：连续大写字母/数字组合、以及中英文书名号/引号内容；两边集合不同即保护。
+   - 守卫使用 `ContextSection.guard_text`（Understanding 用 summary / known_parts / misconceptions / uncertain_parts / latest_user_explanation；Memory / Evidence 用原始正文），**不拿渲染骨架做比较**，避免 Understanding 的固定说明（本身含“没有”“不要”）误拦正常冗余。
+2. `_render_memory` / `_render_evidence` / `_render_related_evidence` 的 `structured` 截断改为 `_clip_sentences`：
+   - 按句号 / 分号 / 感叹号 / 问号 / 换行切分，不再从字符中间切；
+   - 超限时优先保留含否定词的句子（否定优先级最高），其次数字/实体句，再尽量保留首句与尾句；
+   - 省略处用 `…` 标记；单句仍超限才退化为最近边界截断。
+
+**回归证据**
+
+```text
+python -m tests.eval.context_quality.run_context_quality_eval
+cases passed: 21/21
+C regressions vs A/B: none
+CI status: PASS   (exit 0)
+```
+
+`redundancy_threshold_0_6` 探针：
+
+```text
+paraphrase_overlap: 0.222
+paraphrase_detected_as_redundant: False   # 仍保守漏判
+negation_overlap: 0.857                   # 字符重合仍 ≥ 0.6
+negation_detected_as_redundant: False     # 保护规则生效
+negation_tier: full
+negation_token_lost_in_compressed_text: False
+```
+
+定向测试：`tests/test_context_d4_3.py` 新增否定 / 数字 / 实体保护与 structured 截断用例；`tests/test_context_quality_eval.py` 的 negation 断言从“已复现误判”改为“不误判、否定词保留”。
+
 **当前状态**
 
-未修。修复会改变 D4-3 的压缩语义，超出本批“只登记”的边界。
+已修复（D4-7）。阈值本身未变；变化的是阈值之上的保护规则与截断策略。
 
 ---
 
@@ -291,9 +329,54 @@ D4-2B（`bd95fef`）给 Understanding / Revision 接口增加了可选 `spaceId`
 - 补一条 Agent 侧测试，断言请求 URL 带 `spaceId`。
 - 不改检索协议、不改表结构。
 
+**D4-7 修复（2026-11-09）**
+
+- `HttpBackendRetriever.get_understandings`：请求 `/api/understandings/{conceptId}` 时增加 `spaceId` query 参数。
+- `HttpBackendRetriever.get_revisions`：增加可选关键字参数 `space_id`，请求 `/api/understandings/{conceptId}/revisions` 时同样带 `spaceId`。
+- `AgentRuntime` 在复盘路径把本轮 `state.space_id` 传入；`Retriever` 协议、Fallback 路由与 Fixture 只做向后兼容的可选参数透传。
+- 没有 `space_id`（防御性路径 / 旧调用方）时不拼该参数，URL 与旧行为一致；后端接口签名未改。
+- 未改检索协议语义、AgentState、ContextBuilder。
+
+**测试证据**
+
+`tests/test_retrieval_status_contract.py` 新增：
+
+- `test_understanding_and_revision_requests_carry_space_id`：断言 3 个请求（2 个 Understanding + 1 个 Revision）都带 `spaceId=9`；
+- `test_revision_request_omits_space_id_when_absent`：断言无 `space_id` 时 URL 不含 `spaceId`。
+
 **当前状态**
 
-未修。
+已修复（D4-7）。
+
+---
+
+### C-G5 Backend 分析匹配缺少别名表
+
+**描述**
+
+Agent 侧 `app/retriever/concept_detector.py` 的 `ALIASES` 能把“快表 / 转换检测缓冲区 / translation lookaside buffer”识别为 `tlb`；Backend 侧 `LearningAnalysisService.matchConcepts` 只匹配 `canonical_name` 与 `display_name`，没有别名表。结果是：Agent 识别到别名并据此检索，但 Backend 分析不会写 Evidence、也不会更新同一个 Understanding。
+
+**D4-7 修复（2026-11-09）**
+
+- 在 `LearningAnalysisService` 增加静态 `CONCEPT_ALIASES`，内容与 Agent `ALIASES` 一致（tlb / page table / page fault / virtual memory / tcp / redis）。
+- `matchConcepts` 命中顺序：`canonical_name` → `display_name` → 别名表。
+- 别名匹配复用 `containsConceptName` 的口径：纯 ASCII 词边界 + 忽略大小写，非 ASCII 子串。
+- 别名只按 `canonical_name` 查表，只能命中对应的 canonical concept，不做同义推理；不扩大 Evidence 查询范围、不改变 Understanding 的写入锚点。
+- 未改 concept 表结构、未加别名列、未改 SessionResolver；未修改 Agent `ALIASES`。
+
+**同步方式与一致性测试**
+
+不引入跨语言共享配置文件；两侧用显式常量 + 一致性测试钉住：
+
+- `LearningAnalysisServiceConceptMatchTest.conceptAliasesStayInSyncWithAgentTable` 断言 Backend `CONCEPT_ALIASES` 与 Agent 别名表逐项一致（测试注释标注“需与 Agent 同步”）；
+- `aliasesMatchSameTlbConcept` 断言 TLB 的三种说法都能命中同一 concept（display_name 留空，证明命中的是别名表）；
+- `aliasOnlyMatchesItsOwnCanonicalConcept` 断言“快表”不会命中 Page Table；
+- `asciiAliasRequiresWordBoundary` 断言 `translation lookaside buffers` 不命中（ASCII 词边界）。
+- 既有用例（小写 `tlb miss`、`TLBSize` 不命中、`Page Table` 多词、中文子串）保持通过。
+
+**当前状态**
+
+已修复（D4-7）。
 
 ---
 
@@ -314,7 +397,13 @@ D4-2B（`bd95fef`）给 Understanding / Revision 接口增加了可选 `spaceId`
 
 ## 4. 未完成项
 
-- 本批没有修复任何一条缺陷。
-- 没有新增表、中间件、外部 LLM 评分。
-- 没有修改 Policy / ContextBuilder / 评测脚本 / 评测数据。
+D4-7 只修复 KI-01 / C-G5 / KI-07：
+
+- KI-02 / KI-03 / KI-04 / KI-05 / KI-06 按人工审核结论接受现状，本批未修。
+- 没有新增表、中间件、外部 LLM 评分；没有引入跨语言共享配置文件。
+- 没有修改 D4-2D Policy、D4-3 预算/排序/去重/Manifest 结构、bigram 阈值 0.6。
 - 没有 commit、没有 push。
+
+---
+
+D4-7 修复记录：2026-11-09，KI-01 / C-G5 / KI-07 已修复，其余 KI 接受现状。

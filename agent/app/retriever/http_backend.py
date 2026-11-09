@@ -130,9 +130,12 @@ class HttpBackendRetriever:
         """
         results: list[Understanding] = []
         failed: list[int] = []
+        # D4-2B 的接口层纵深防御：传入 spaceId 时后端会额外断言概念属于该 Space，
+        # 跨 Space 返回 404。space_id 缺失时保持旧 URL（后端参数是可选的）。
+        params = {"spaceId": space_id} if space_id is not None else None
         for concept_id in concept_ids:
             ok, data, failure = await self._get_outcome(
-                f"/api/understandings/{concept_id}"
+                f"/api/understandings/{concept_id}", params=params
             )
             if not ok:
                 log.warning(
@@ -486,7 +489,11 @@ class HttpBackendRetriever:
         return RelatedConceptResult(items=items, status=status, warning=warning)
 
     async def get_revisions(
-        self, user_id: int, concept_ids: list[int]
+        self,
+        user_id: int,
+        concept_ids: list[int],
+        *,
+        space_id: int | None = None,
     ) -> RevisionRetrievalResult:
         """读取每个概念的真实版本历史。
 
@@ -494,12 +501,16 @@ class HttpBackendRetriever:
         但请求失败、HTTP 错误或响应无法解析必须记成 DEGRADED —— 否则
         「Revision 查询失败」会被模型解释成「用户过去没有误区、没有变化」。
         后端接口本身按登录用户鉴权，这里不自行推断权限。
+
+        ``space_id`` 与 ``get_understandings`` 相同：传入时后端额外断言概念
+        属于该 Space（D4-2B 纵深防御）；缺失时保持旧 URL，向后兼容。
         """
         revisions: dict[int, list[UnderstandingRevision]] = {}
         failed: list[int] = []
+        params = {"spaceId": space_id} if space_id is not None else None
         for concept_id in concept_ids:
             ok, data, failure = await self._get_outcome(
-                f"/api/understandings/{concept_id}/revisions"
+                f"/api/understandings/{concept_id}/revisions", params=params
             )
             if not ok:
                 log.warning(

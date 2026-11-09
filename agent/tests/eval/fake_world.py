@@ -208,7 +208,9 @@ class FakeEvalRetriever:
             status=RelatedConceptStatus.OK if items else RelatedConceptStatus.EMPTY,
         )
 
-    async def get_revisions(self, user_id: int, concept_ids: list[int]):
+    async def get_revisions(
+        self, user_id: int, concept_ids: list[int], *, space_id: int | None = None
+    ):
         return {}
 
     async def get_evidence_details(

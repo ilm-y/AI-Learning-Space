@@ -191,7 +191,9 @@ class ConceptStoreRetriever:
         # 没有关系数据：EMPTY 是「本来就没有」，不是查询失败。
         return RelatedConceptResult(status=RelatedConceptStatus.EMPTY)
 
-    async def get_revisions(self, user_id: int, concept_ids: list[int]) -> dict:
+    async def get_revisions(
+        self, user_id: int, concept_ids: list[int], *, space_id: int | None = None
+    ) -> dict:
         return {concept_id: [] for concept_id in concept_ids}
 
     async def get_evidence_details(

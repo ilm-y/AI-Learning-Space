@@ -301,7 +301,7 @@ class PolicyRetriever:
         self.calls["related"] += 1
         return RelatedConceptResult(status=RelatedConceptStatus.EMPTY)
 
-    async def get_revisions(self, user_id, concept_ids):
+    async def get_revisions(self, user_id, concept_ids, *, space_id=None):
         self.calls["revision"] += 1
         return {concept_id: [] for concept_id in concept_ids}
 
