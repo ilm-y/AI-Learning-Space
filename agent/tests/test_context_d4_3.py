@@ -9,7 +9,7 @@
 4. 同一 source_id 只注入一次；
 5. 语义冗余降低细节但保留两边（Understanding 完整 + Memory/Evidence 摘要）；
 6. 冲突两边都保留，并带来源与时间；
-7. Manifest 只有 source_id / 状态 / 原因 / token，不含正文、prompt、query；
+7. Manifest 只有 source_id / source_ids / 状态 / 原因 / token，不含正文、prompt、query；
 8. D4-2A 的 DEGRADED / NOT_QUERIED 措辞不被 D4-3 改坏；
 9. Revision 只在 LEARNING_REVIEW 注入。
 """
@@ -458,6 +458,7 @@ def test_manifest_has_minimal_fields_and_no_body_or_query() -> None:
     source_keys = {
         "type",
         "source_id",
+        "source_ids",
         "retrieval_status",
         "injection_status",
         "reason",
@@ -465,6 +466,8 @@ def test_manifest_has_minimal_fields_and_no_body_or_query() -> None:
     }
     for entry in manifest["sources"]:
         assert set(entry) == source_keys
+        assert isinstance(entry["source_ids"], list) and entry["source_ids"]
+        assert entry["source_id"] == entry["source_ids"][0]
         assert isinstance(entry["estimated_tokens"], int)
         assert entry["estimated_tokens"] >= 0
 
@@ -539,6 +542,26 @@ def trajectory() -> LearningTrajectory:
     )
 
 
+def trajectory_with_evidence() -> LearningTrajectory:
+    """同一 trajectory section 同时包含 revision 与 evidence 两个 source。"""
+    return LearningTrajectory(
+        concept_id=CONCEPT_ID,
+        concept_name="TLB",
+        current_status=UnderstandingStatus.PARTIAL,
+        revisions=[
+            UnderstandingRevision(
+                id=700,
+                concept_id=CONCEPT_ID,
+                revision_no=1,
+                summary="早期理解",
+                status=UnderstandingStatus.PARTIAL,
+                created_at=T0,
+            )
+        ],
+        evidences=[evidence(701, "TRAJECTORY-EVIDENCE-MARKER 早期证据")],
+    )
+
+
 def test_revision_is_not_injected_for_ordinary_explanation() -> None:
     state = make_state(PLAIN_QUESTION, trajectories=[trajectory()])
     state.retrieval_plan = plan_for(PLAIN_QUESTION)
@@ -568,3 +591,34 @@ def test_revision_is_injected_for_learning_review() -> None:
         if entry["type"] == "trajectory"
     ]
     assert selected and selected[0]["injection_status"] in {"SELECTED", "TRUNCATED"}
+
+
+def test_manifest_records_all_source_ids_for_multi_source_section() -> None:
+    """同一 section 折叠多个 source 时，Manifest 不能只留 source_ids[0]。"""
+    state = make_state(REVIEW_QUESTION, trajectories=[trajectory_with_evidence()])
+    state.retrieval_plan = plan_for(REVIEW_QUESTION)
+
+    context = ContextBuilder().build(state)
+    selected = next(
+        entry
+        for entry in context.context_manifest["sources"]
+        if entry["type"] == "trajectory"
+    )
+    assert selected["source_id"] == "revision:700"
+    assert selected["source_ids"] == ["revision:700", "evidence:701"]
+
+
+def test_manifest_records_all_source_ids_for_excluded_section() -> None:
+    """排除路径同样要保留同一 section 的全部 source_id。"""
+    state = make_state(PLAIN_QUESTION, trajectories=[trajectory_with_evidence()])
+    state.retrieval_plan = plan_for(PLAIN_QUESTION)
+
+    context = ContextBuilder().build(state)
+    excluded = next(
+        entry
+        for entry in context.context_manifest["sources"]
+        if entry["type"] == "trajectory"
+    )
+    assert excluded["injection_status"] == "EXCLUDED"
+    assert excluded["source_id"] == "revision:700"
+    assert excluded["source_ids"] == ["revision:700", "evidence:701"]

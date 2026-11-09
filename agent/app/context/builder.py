@@ -309,7 +309,7 @@ class BuiltContext:
     memory_detail: str | None = None
     revision_status: str = "NOT_QUERIED"
     revision_warning: str | None = None
-    # D4-3 最小 Manifest：只含 source_id / 状态 / 原因 / token 估算与预算汇总。
+    # D4-3 最小 Manifest：只含 source_id / source_ids / 状态 / 原因 / token 估算与预算汇总。
     # 刻意不包含正文、完整 prompt、query 或异常原文；不是可查询的持久化结构。
     context_manifest: dict[str, object] = field(default_factory=dict)
 
@@ -1145,12 +1145,12 @@ class ContextBuilder:
         injection_status: str,
         reason: str,
     ) -> None:
+        source_ids = list(section.source_ids) or [section.name]
         scope.exclusions.append(
             {
                 "type": section.source_type or _kind(section),
-                "source_id": (
-                    section.source_ids[0] if section.source_ids else section.name
-                ),
+                "source_id": source_ids[0],
+                "source_ids": source_ids,
                 "retrieval_status": section.retrieval_status or "UNKNOWN",
                 "injection_status": injection_status,
                 "reason": reason,
@@ -1249,9 +1249,11 @@ class ContextBuilder:
 
     @staticmethod
     def _manifest_entry(section: ContextSection) -> dict[str, object]:
+        source_ids = list(section.source_ids) or [section.name]
         return {
             "type": section.source_type or _kind(section),
-            "source_id": section.source_ids[0] if section.source_ids else section.name,
+            "source_id": source_ids[0],
+            "source_ids": source_ids,
             "retrieval_status": section.retrieval_status or "UNKNOWN",
             "injection_status": section.injection_status or INJECTION_SELECTED,
             "reason": (
