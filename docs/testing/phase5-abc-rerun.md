@@ -1157,3 +1157,167 @@ S5 复盘问题不必须引用知识文档：每次 repeat 满足「citation 非
 7. **S5-A 未重跑**：沿用 Batch 3 的 PASS；若要求本批所有组合同快照重跑，需要追加 3 次调用。
 8. **90 次全量观测缺口**：原批次未记录 historyGuardTriggered / memoryDegraded，原隔离库已清理，无法回溯；下一批全量必须补记。
 
+
+## 14. 引用类请求的条件 prompt 强化与 S5-B 重跑（Batch 5）
+
+- 追加时间：2026-11-09T23:52:00
+- 重跑快照时间：2026-11-09 23:45:36
+- 隔离库：`phase5_pilot_20261109234536_3b4746`
+- 文档 collection：`phase5-pilot-20261109234536-3b4746_text-embedding-v4_1024`
+- Memory collection：`phase5-pilot-20261109234536-3b4746-memory_text-embedding-v4_1024`
+- 重跑范围：S5-B 3 次 + 非引用类回归 S1 / S2 / S6 各 1 次（策略 B），共 6 次对话、6 次实际 LLM 调用。
+- 生成参数指纹：沿用 `2e1405ed23bbe132b96b018c7e79d190321e43ff5ffb5c5108e99bee47edb5f6`；model=`deepseek-flash`，temperature=`0`。
+
+### 14.1 追加逻辑的位置与不触碰全局契约的说明
+
+| 项目 | 说明 |
+|---|---|
+| 追加位置 | `agent/app/tutor/tutor.py` 的 `Tutor._apply_request_instruction`，在 `_validated(context.messages)` 之后、交给 LLM 之前 |
+| 追加对象 | 只重写第一条 `system` message：`f"{原 system}\n\n{逐字引用约束}"`；其余消息原样保留 |
+| 调用点 | `Tutor.stream()` 与 `Tutor.complete()` 共用同一方法，覆盖流式与一次性生成 |
+| 全局契约 | `agent/app/prompts.py` 的 `BASE_SYSTEM_INSTRUCTION` **未修改**；约束是独立的 `VERBATIM_QUOTE_INSTRUCTION` 常量 |
+| ContextBuilder | 未修改。System prompt 仍由 ContextBuilder 组装；Tutor 只在最终发消息边界做条件拼接 |
+| 判定输入 | 只看本轮最后一条 `user` message 的内容，不看 system / 历史消息 / 模型输出 |
+| 回归保护 | 非引用类请求 `quote_instruction_for()` 返回 `None`，`_apply_request_instruction` 原样返回 messages，system prompt 与改动前逐字一致 |
+
+- 为什么不在 ContextBuilder 里做：ContextBuilder 负责「上下文里有什么」，与「本轮用户怎么问」无关；把条件追加放在 Tutor 的消息组装边界，既不改变 Manifest / Context Hash 的组装语义，也不需要 ContextBuilder 感知请求类型。
+- 实测佐证：同一 S5-B 上下文，Batch 4 的 `systemChars=4914`；Batch 5 为 `5002`，差值 `88 = 2`（两个换行）+ `86`（约束正文长度），与预期逐字一致。非引用类 S1/S2/S6 未出现 `+88`。
+
+### 14.2 关键词规则与追加文本
+
+| 项目 | 值 |
+|---|---|
+| 关键词 | `引用`、`原话`、`原文`、`原句`、`复述`；任一出现即视为引用类请求 |
+| 判定函数 | `agent/app/prompts.py: is_quote_request()` / `quote_instruction_for()`；关键词常量 `QUOTE_REQUEST_KEYWORDS` |
+| 追加文本（逐字） | 当用户要求引用原话时，必须逐字使用历史消息原文，不得用 Understanding/Memory/Evidence 的转述替代；历史中无原话时明确说明，不得用相近转述冒充。 |
+| 非引用类 | 不追加；`system` 与 `BASE_SYSTEM_INSTRUCTION` / ContextBuilder 输出逐字一致 |
+
+**测试覆盖**（`agent/tests/test_tutor_quote_instruction.py`，14 passed）：
+
+| 用例 | 结果 |
+|---|---|
+| 全局 `BASE_SYSTEM_INSTRUCTION` 不含该约束 | PASS |
+| 5 个关键词分别触发追加 | PASS |
+| 4 类非引用输入不触发 | PASS |
+| 引用类请求追加在 system 末尾，user 消息不被改写 | PASS |
+| 非引用类 system 与改动前逐字一致 | PASS |
+| HISTORY_GUARD 的 `extra_instruction` 追加在引用约束之后 | PASS |
+| `complete()` 与 `stream()` 行为一致 | PASS |
+
+### 14.3 S5-B 逐次结果
+
+| key | run_id | 引用来源（全部命中） | 主来源 | historyGuardTriggered | LLM 调用数 | finish | prompt/completion/total | citation 集合 | Context Hash(12) | System Hash(12) | Manifest(12) | Manifest 关键来源 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| S5-B-1 | 1 | 历史原句, Understanding, 其他 | 历史原句 | 否 | 1 | stop | 2942/883/3825 | [[5,15]] | 1eb51dcbf778 | 152af781e3f8 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 |
+| S5-B-2 | 3 | 历史原句, Understanding, 其他 | 历史原句 | 否 | 1 | stop | 2942/1509/4451 | [[5,14],[5,15]] | 1eb51dcbf778 | 152af781e3f8 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 |
+| S5-B-3 | 5 | 历史原句, Understanding | 历史原句 | 否 | 1 | stop | 2942/1190/4132 | [[5,13],[5,14],[5,15]] | 1eb51dcbf778 | 152af781e3f8 | b51f17aeaba1 | history:1,history:2,revision:6,evidence:5,revision:7 |
+
+- 判据沿用 Batch 4：B/C 的正向判据是「每次最终回答必须含原句内容或等价语义」；citation 采用「citation 非空或引用历史原句」；Hash 一致性在未触发守卫 / 未降级时要求 3 次完全一致。
+- 逐次判定：S5-B-1 / 2 / 3 均命中 `historyUse.pass=true`（`exactOriginalSentence=true`）；3 次均未触发 HISTORY_GUARD；3 次均无 Memory DEGRADED；`guard_aware_hash_consistency` 返回 PASS（contextHash / systemSha256 / systemChars 三次一致，manifestSha256 三次一致）；citation 三次非空、可溯源、同文档，`citation_consistency_check(allow_history_quote=True)` PASS。
+- 本轮失败判据「S5-B 仍有回答引用 Understanding 而非历史原句」**未触发**：3/3 都逐字包含历史原句。
+
+**引用来源明细**：
+
+| key | 历史原句 | Understanding 片段 | Memory 片段 | Evidence / Revision | 说明 |
+|---|---|---|---|---|---|
+| S5-B-1 | 是 | 「我原以为慢启动增长很慢，后来明白是起点小、呈指数增长」 | 无 | Evidence「误解为线性增长，已纠正为指数增长」 | 明确说明 Evidence 是总结性描述、不能当原话 |
+| S5-B-2 | 是 | 同上 | 无 | Evidence 同上 | 明确说明 Evidence / Memory 是转述、不是原话 |
+| S5-B-3 | 是 | 同上 | 无 | 无 | 把 Understanding 句子称为「你当时的另一句原话」 |
+
+**残留观测（不构成本批失败判据，但必须记录）**：
+
+- 3/3 回答仍把 Understanding 的 explanation 当作「用户更早的说法 / 另一句原话」呈现。历史原句同时存在，因此不是「用 Understanding 替代历史原句」；但这是 KI-1 的残留形态：模型没有区分「Understanding 的总结性转述」与「用户在 history 里的逐字原话」。
+- 本批没有重生成、没有回退，因此不存在 HISTORY_GUARD 覆盖原句的问题（KI-2 修复路径本批未触发）。
+
+### 14.4 非引用类回归
+
+| key | quoteRequestDetected | run_id | finish | prompt/completion/total | Context Hash(12) | System Hash(12) | Manifest(12) | problems |
+|---|---|---|---|---|---|---|---|---|
+| S1-B-1 | 否 | 7 | stop | 2834/1244/4078 | 361fa576ae95 | bc7017685c10 | ccaaac3a9c83 | 无 |
+| S2-B-1 | 否 | 9 | stop | 2845/1497/4342 | 50014f452263 | d955b1fb62c0 | 4f080390b1df | 无 |
+| S6-B-1 | 否 | 11 | stop | 2752/1177/3929 | 1c457ecbf7a0 | cf1bcc085b55 | 9de45baca76b | 无 |
+
+- 三个非引用类问题（S1「为什么数据一多，网络就会变慢甚至丢包？」、S2「继续讲：B+ 树的范围查询为什么比哈希索引快？」、S6「我现在对虚拟内存掌握到什么程度？哪里还薄弱？」）均未命中关键词，`_apply_request_instruction` 走原样返回分支。
+- 代码级测试证明非引用类 system 与改动前逐字一致；真实运行中 systemChars 也没有出现引用约束的 `+88` 增量。
+- 3 次真实运行均 `finishReason=stop`、无空输出、无截断、无 error/timeout，`problems=[]`。
+
+### 14.5 回归与离线评测
+
+| 项目 | 结果 |
+|---|---|
+| 全量 Agent 测试 `pytest tests` | **648 passed, 9 skipped, 1 xfailed**（含新增 14 条引用约束用例） |
+| D4-5 离线上下文质量评测 | **21/21 cases passed**；C regressions vs A/B: none；failed safety probes: none；CI status: PASS |
+| S1 / S2 / S6 真实运行 | 各 1 次，全部 stop、无 problems |
+| S5-B 3 次重跑 | 3/3 完成，全部含历史原句 |
+
+### 14.6 KI-1 更新
+
+- KI-1 状态由「开放，观测中」更新为「开放，已通过条件 prompt 缓解，未根治」。
+- 本批效果：S5-B 3/3 含历史原句，0/3 出现「引用 Understanding 而非历史原句」；Batch 4 的 S5-B-2 属于该失败形态，本批未复现。
+- 残留：3/3 仍把 Understanding explanation 称为用户原话。约束降低了「替代」频次，但没有让模型完全区分 Understanding 转述与 history 原句。
+- 样本量仅 3 次，不能据此宣布 KI-1 关闭；后续全量实验应继续统计「引用来源」分布。
+
+### 14.7 成本记录
+
+| 项目 | 数值 |
+|---|---|
+| 对话调用次数（记录） | 6 |
+| 模型实际调用次数（含守卫重生成） | 6 |
+| 触发守卫的对话数 | 0 |
+| LLM 预算 | 9；实际 6，未超出 |
+| prompt tokens（仅最终记录） | 17257 |
+| completion tokens（仅最终记录） | 7500 |
+| total tokens（仅最终记录） | 24757 |
+| Agent 进程内 Embedding 调用 | 12 |
+| Agent 进程内 Embedding 文本数 | 12 |
+| 单次运行 Embedding 最大值 | 2（上限 3） |
+| Tavily 调用 | 0 |
+
+- 预算核对：LLM 6/9（S5-B 3 + 回归 3）；Embedding 12/15；Tavily 0。setup 阶段 10 份文档的索引 Embedding 由 Spring 侧发起，不属于每次对话的 Agent 预算。
+
+### 14.8 冻结与清理
+
+| 检查 | 结果 | 说明 |
+|---|---|---|
+| MySQL 全局冻结 | PASS | 无漂移 |
+| Qdrant 文档 + Memory | PASS | 无漂移 |
+| 默认 Memory collection | PASS | 未读写 |
+
+| 项目 | 结果 |
+|---|---|
+| cleanup.py exitCode | 0 |
+| MySQL 库残留 | 0 |
+| Qdrant 残留 | [] |
+| RabbitMQ 队列残留 | [] |
+| RabbitMQ 交换机残留 | [] |
+| 仍开放的端口 | [] |
+| 独立残留检查 | PASS |
+
+### 14.9 本批结论
+
+- **条件追加仅对引用类请求生效**：S5-B 的 systemChars 增加 88（约束 86 + 两个换行）；S1 / S2 / S6 未追加，代码级测试与真实运行一致。
+- **S5-B 3 次重跑完成**：3/3 逐字包含历史原句，3/3 未触发 HISTORY_GUARD，Hash / Manifest / citation 判据通过；本批失败判据「S5-B 仍有回答引用 Understanding 而非历史原句」未触发。
+- **回归通过**：全量 Agent 测试 648 passed；D4-5 21/21；S1/S2/S6 各 1 次无 problems。
+- **未 commit / 未 push**：本批只做本地修改与实验。
+- **保留残余风险**：3/3 回答仍把 Understanding 转述称为用户原话；这是 KI-1 的缓解而非根治，需在后续批次继续观测（见 14.10 决策点 1）。
+
+### 14.10 需要人工审核的决策点
+
+1. **Understanding 仍被当作「用户原话」**：3/3 回答同时引用历史原句与 Understanding explanation。按本批字面失败判据（是否「引用 Understanding 而非历史原句」）判为未触发；若要求「不得把 Understanding 转述称为用户原话」，则应判 FAIL。需要人工确认最终口径。
+2. **关键词规则边界**：当前命中「引用 / 原话 / 原文 / 原句 / 复述」任一即追加。可能把「引用某段资料」这类非历史原话请求也纳入；是否需要在后续收紧为「引用 + 原话/原文/原句」组合，需人工确认。
+3. **追加位置的架构归属**：条件追加放在 Tutor（最终消息组装边界），未改 ContextBuilder / BASE_SYSTEM_INSTRUCTION。需确认这符合「prompt 构造模块」的边界。
+4. **非引用类回归的策略选择**：S1/S2/S6 各 1 次使用策略 B。任务未指定策略；若要求 A/C 也覆盖，需要追加调用。
+5. **样本量**：S5-B 仅 3 次，不能据此关闭 KI-1；后续全量应继续记录引用来源分布。
+6. **harness 运行方式**：本批使用隔离 temp 中的一次性 runner 调用既有 `setup_phase / one_call / cleanup_phase`，未修改 `run_s5_rerun.py` 或 `run_full_abc.py`。是否接受该运行方式，需人工确认。
+
+### 14.11 工作区状态
+
+| 项目 | 值 |
+|---|---|
+| branch | main |
+| HEAD | b9f6443 |
+| HEAD subject | fix: 修复 HISTORY_GUARD 否定语境误判与回退覆盖原句，S5-C PASS |
+| 工作区状态 | M agent/app/prompts.py  M agent/app/tutor/tutor.py  M scripts/phase5/full/full_common.py  M docs/testing/phase5-abc-rerun.md  M docs/testing/phase5-known-issues.md  ?? agent/tests/test_tutor_quote_instruction.py |
+| 是否 commit | 否（本批次未执行 git commit） |
+| 是否 push | 否（本批次未执行 git push） |
+

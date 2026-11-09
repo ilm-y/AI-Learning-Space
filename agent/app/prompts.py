@@ -12,6 +12,36 @@ Tutor 调用模型时也要用它。放在 `tutor/` 里会让 `context → tutor
 
 from __future__ import annotations
 
+# 仅在「引用原话 / 原文 / 原句 / 复述」类请求上追加的逐字引用约束。
+#
+# 它**不是** BASE_SYSTEM_INSTRUCTION 的一部分：全局教学契约保持不变，
+# 由 Tutor 在组装发给模型的消息时按本轮用户输入条件追加。这样非引用类
+# 请求的 system prompt 与改动前逐字一致，ContextBuilder 也不需要知道
+# 「本轮是不是引用请求」。
+QUOTE_REQUEST_KEYWORDS = ("引用", "原话", "原文", "原句", "复述")
+
+VERBATIM_QUOTE_INSTRUCTION = (
+    "当用户要求引用原话时，必须逐字使用历史消息原文，不得用 "
+    "Understanding/Memory/Evidence 的转述替代；历史中无原话时明确说明，"
+    "不得用相近转述冒充。"
+)
+
+
+def is_quote_request(user_text: str | None) -> bool:
+    """本轮用户输入是否属于引用类请求。
+
+    只按用户输入判断，不看模型输出、历史消息或 System 指令，避免把
+    教学契约里本来就有「复述」等词的情况误判为引用请求。
+    """
+    text = user_text or ""
+    return any(keyword in text for keyword in QUOTE_REQUEST_KEYWORDS)
+
+
+def quote_instruction_for(user_text: str | None) -> str | None:
+    """引用类请求返回要追加的约束文本，否则返回 None。"""
+    return VERBATIM_QUOTE_INSTRUCTION if is_quote_request(user_text) else None
+
+
 BASE_SYSTEM_INSTRUCTION = """你是 AI Learning Space 的学习导师。你的目标不是给出一段标准答案，\
 而是让眼前这个具体的人真正理解。
 

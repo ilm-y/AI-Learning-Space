@@ -1763,6 +1763,71 @@ def s5_history_use_check(answer: str | None) -> dict[str, Any]:
     }
 
 
+# S5 上下文里各来源的可区分原句片段。用于回答「引用来源」分类：只按
+# 片段是否出现在最终回答里判断，不做语义推断，避免把模型自己的解释
+# 误标成某个来源。
+#
+# 注意：判据本身仍由 ``s5_history_use_check`` 决定；这里的分类是报告
+# 观测字段，不参与 PASS/FAIL。
+S5_UNDERSTANDING_FRAGMENTS = (
+    "用户曾把慢启动理解为线性增长，现已理解它是指数增长",
+    "曾把慢启动的增长方式理解为线性递增",
+    "我原以为慢启动增长很慢，后来明白是起点小、呈指数增长",
+)
+S5_MEMORY_FRAGMENTS = (
+    "用户曾把 TCP 慢启动理解为线性加一",
+)
+S5_EVIDENCE_FRAGMENTS = (
+    "误解为线性增长，已纠正为指数增长",
+)
+S5_REVISION_FRAGMENTS = (
+    "用户认为慢启动每次只把窗口加一",
+    "慢启动就是每次加一",
+    "用户已纠正：慢启动从 1 开始指数增长",
+    "慢启动慢在起点小，不是每次只加一",
+)
+
+
+def s5_quote_source_check(answer: str | None) -> dict[str, Any]:
+    """记录 S5 最终回答引用的是哪类来源。
+
+    返回 ``sources``（全部命中的来源）与 ``primary``（优先级最高的一项）：
+    历史原句 > Understanding > Memory > 其他。Evidence / Revision 命中
+    归入「其他」，但仍单独列出，供人工核对。
+
+    该字段只做报告观测，不参与 Step 3 的 PASS/FAIL 判定。
+    """
+    text = answer or ""
+    history = S5_EXPECTED_ORIGINAL in text
+    understanding = [
+        fragment for fragment in S5_UNDERSTANDING_FRAGMENTS if fragment in text
+    ]
+    memory = [fragment for fragment in S5_MEMORY_FRAGMENTS if fragment in text]
+    evidence = [fragment for fragment in S5_EVIDENCE_FRAGMENTS if fragment in text]
+    revision = [fragment for fragment in S5_REVISION_FRAGMENTS if fragment in text]
+
+    sources: list[str] = []
+    if history:
+        sources.append("历史原句")
+    if understanding:
+        sources.append("Understanding")
+    if memory:
+        sources.append("Memory")
+    if evidence or revision:
+        sources.append("其他")
+
+    primary = sources[0] if sources else "其他"
+    return {
+        "sources": sources,
+        "primary": primary,
+        "historyOriginal": history,
+        "understandingFragments": understanding,
+        "memoryFragments": memory,
+        "evidenceFragments": evidence,
+        "revisionFragments": revision,
+    }
+
+
 # 只在 HISTORY_GUARD 触发重生成时允许不同的字段。Manifest 不在豁免范围内：
 # 重生成不改变本轮注入来源；如果 Manifest 也变了，说明是上下文组装发生了变化。
 GUARD_EXEMPT_FIELDS = (

@@ -28,6 +28,7 @@ from typing import AsyncIterator
 
 from app.context.builder import BuiltContext
 from app.llm.base import ChatMessage, LLMAdapter, LLMError, StreamCompletion
+from app.prompts import quote_instruction_for
 
 # 模型一个字都没吐出来时，宁可明确报错，也不要给用户一条空消息
 EMPTY_REPLY_HINT = "模型没有返回任何内容"
@@ -60,6 +61,7 @@ class Tutor:
         终态方法时保持 ``metadata_available=False``，不推断截断。
         """
         messages = self._validated(context.messages)
+        messages = self._apply_request_instruction(messages)
         if extra_instruction:
             messages = [
                 ChatMessage("system", f"{messages[0].content}\n\n{extra_instruction}"),
@@ -88,7 +90,24 @@ class Tutor:
 
     async def complete(self, context: BuiltContext) -> str:
         """一次性产出。给不需要流式的场景（将来的结构化任务）留的入口。"""
-        return await self._llm.complete(self._validated(context.messages))
+        messages = self._apply_request_instruction(self._validated(context.messages))
+        return await self._llm.complete(messages)
+
+    @staticmethod
+    def _apply_request_instruction(messages: list) -> list:
+        """按本轮用户输入条件追加约束，不改动 ContextBuilder 产出的内容。
+
+        引用类请求（「引用 / 原话 / 原文 / 原句 / 复述」）在 system message
+        末尾追加逐字引用约束；其他请求原样返回，system prompt 与改动前逐字
+        一致。全局 BASE_SYSTEM_INSTRUCTION 本身不被修改。
+        """
+        instruction = quote_instruction_for(messages[-1].content)
+        if not instruction:
+            return messages
+        return [
+            ChatMessage("system", f"{messages[0].content}\n\n{instruction}"),
+            *messages[1:],
+        ]
 
     @staticmethod
     def _validated(messages: list) -> list:
