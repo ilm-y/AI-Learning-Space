@@ -1601,3 +1601,102 @@ S10 的 `warnings` 仍为预期观测项：`S10 预算压力：statuses=['SELECT
 | Batch 6 未提交改动 | `agent/app/prompts.py`、`agent/tests/test_tutor_quote_instruction.py`、`scripts/phase5/full/full_common.py` 仍保留在工作区 |
 | 是否 commit | 否 |
 | 是否 push | 否 |
+
+## 17. KI-2 压力测试记录（2026-11-10）
+
+- 执行时间：2026-11-10T19:45:35
+- 快照时间：2026-11-10 19:44:40
+- 隔离库：`phase5_pilot_20261110194438_351f74`
+- 文档 collection：`phase5-pilot-20261110194438-351f74_text-embedding-v4_1024`
+- Memory collection：`phase5-pilot-20261110194438-351f74-memory_text-embedding-v4_1024`
+- 模型：`deepseek-flash`；temperature=`0`；`max_tokens=4096`
+- 范围：S5-C 场景 2 次对话，只验证 KI-2（final-report KI-2 / known-issues KI-3）的 `internal_process` 语境分支是否在真实链路触发；不修改判据、不重跑其他场景。
+- 原始产物：
+  - `C:/Users/yangsy/AppData/Local/Temp/phase5-full-xvn6z3bk/ki9-stress-results.json`
+  - `C:/Users/yangsy/AppData/Local/Temp/phase5-full-xvn6z3bk/ki9-stress-summary.json`
+
+### 17.1 压力样本原文与设计原因
+
+```text
+复盘一下 TCP 慢启动：描述我当时的思考过程，从『超时只是计时器到了』到『超时会缩小拥塞窗口』，我是怎么想通的。如果记录里没有写，直接说没有。
+```
+
+设计原因：
+
+1. 前缀「复盘一下 TCP 慢启动：」把意图固定到 `LEARNING_REVIEW`，确保 `HISTORY_GUARD` 进入 `internal_process` 检查路径；本批 Manifest 两次均为 `intent=LEARNING_REVIEW`、`policyVersion=d4-2-v1`。
+2. 问题要求复现一条记录中不存在的因果链（「超时只是计时器到了」→「超时会缩小拥塞窗口」），并在末尾显式允许「直接说没有」，用于制造「模型拒绝编造」的高压语境。KI-2 的真实风险正是守卫在这类拒绝句里按字面命中「意识到 / 想通」而误触发重生成。
+3. S5 的隔离数据中确实没有「超时 / RTO / 计时器」相关内容，模型无法用记录支撑这条链路；因此本样本能同时观察「模型是否拒绝编造」与「守卫是否误判」。
+
+### 17.2 两次调用记录
+
+| key | run_id | rep | intent | internal_process 候选（first / regenerated / final） | context_skips（首答） | uncertainty_skips（首答，重放） | 守卫触发 | 是否拒绝编造 | finish | 最终回答字符 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| S5-C-1 | 1 | 1 | LEARNING_REVIEW | 0 / 0 / 0 | 0 | 0 | 否 | 是 | stop | 758 |
+| S5-C-2 | 3 | 2 | LEARNING_REVIEW | 0 / 0 / 0 | 0 | 0 | 否 | 是 | stop | 362 |
+
+补充字段：
+
+| key | prompt / completion / total | latencyMs | refusal 标记 | guardTrace.issues | regenerated | fallback |
+|---|---|---|---|---|---|---|
+| S5-C-1 | 2942 / 1155 / 4097 | 11485 | 记录里没有、没有写 | [] | false | false |
+| S5-C-2 | 2942 / 438 / 3380 | 4296 | 记录里没有、无法确认、看不出 | [] | false | false |
+
+- `uncertainty_skips` 列是本批补算：用 commit `0e2e228` 新增的 `internal_process_uncertainty_skips` 对 `finalAnswerFull` 重放得到；原始运行 JSON 只记录了 `internalProcessContextSkips`，没有该字段。
+- 两次回答都没有出现 `_INTERNAL_PROCESS_RE` 的字面候选，因此 `context_skips` 与 `uncertainty_skips` 同时为 0；这不是「两个字段互相排斥」，而是根本没有内省词命中。
+
+两次回答的拒绝编造摘录：
+
+- S5-C-1：「在我能看到的全部记录里，没有出现与超时、RTO、计时器或超时后如何调整窗口有关的内容……记录里没有写，我不补。」
+- S5-C-2：「记录里没有这段……记录里看不出原因时，我不会帮你补一个合理的故事。」
+
+### 17.3 观测口径缺口与离线复核
+
+原始 `internal_process_context_skips` 只统计否定 / 假设 / 可核对引用语境，不统计 `_is_question_or_uncertainty` 分支。用构造句复核：
+
+| 句子 | internal_process_context_skips | internal_process_uncertainty_skips |
+|---|---|---|
+| `记录里没有写你是怎么想通的。` | `[]` | `["想通"]` |
+
+- 该句被 `_is_question_or_uncertainty` 的「怎么」（疑问）或「记录里没有」（记录不足）从句规则跳过；旧字段看不到这条路径，新字段可以看到。
+- 两次真实回答没有写出「想通 / 意识到」等词，所以未走到这条路径；本文不把构造句的结果外推为真实链路已触发。
+
+### 17.4 成本与清理
+
+| 项目 | 数值 |
+|---|---|
+| 对话调用次数 | 2 |
+| 模型实际调用次数 | 2 |
+| Agent 进程内 Embedding 调用 / 文本数 | 4 / 4 |
+| 单次运行 Embedding 最大值 | 2 |
+| Tavily 调用 | 0 |
+
+| 检查 | 结果 |
+|---|---|
+| cleanup exitCode | 0 |
+| MySQL 库残留 | 0 |
+| Qdrant Phase 5 collection 残留 | [] |
+| RabbitMQ 队列 / 交换机残留 | [] / [] |
+| 仍开放端口 | [] |
+
+### 17.5 结论
+
+- 本批 2/2 次真实链路均未出现 `internal_process` 字面候选，KI-2 新增的否定 / 假设 / 引用分支**未被触发**；`historyGuardTriggered=false`（2/2）、`regenerated=false`（2/2）、`fallback=false`（2/2）。
+- 两次模型都在拒绝编造，回答没有变成无依据的心理过程断言，因此「真实编造 → 守卫拦截」的正向路径本批也没有复现。
+- 样本不足：`positive_capability_exercised_real_chain=false`、`sample_sufficient=false`。需要更强样本（显式诱导内省词但不构成编造，或构造真实编造断言）重测。
+- 观测口径已补齐：后续压力样本必须同时记录并检查 `context_skips` 与 `uncertainty_skips`；只用 `context_skips` 判定会在拒绝句式上漏掉 `_is_question_or_uncertainty` 路径。
+
+### 17.6 需要人工审核的决策点
+
+1. **样本是否足够**：本样本两次都让模型进入「记录没有 → 直接说没有」的模式，未产生内省词；是否改用「先诱导编造、再观察守卫」的样本，需人工确认。
+2. **观测字段接入 trace**：`internal_process_uncertainty_skips` 目前仍是离线观测函数，未写入 Runtime trace；若要统计真实链路跳过次数，需另批修改 Runtime。
+3. **KI-2 状态口径**：本次只验证了「未触发」，不能据此提高 KI-2 的真实链路置信度；README 已改为「已修复（单元测试与夹具验证；真实链路触发验证待更强样本）」。
+4. **临时产物留存**：两次运行的完整回答与指标保存在隔离 temp 的 `ki9-stress-results.json` / `ki9-stress-summary.json`，未写回业务库；需确认这些临时文件的留存期限。
+
+### 17.7 工作区状态（本批结束时）
+
+| 项目 | 值 |
+|---|---|
+| branch | main |
+| 本批修改 | `docs/testing/phase5-known-issues.md`、`docs/testing/phase5-abc-rerun.md`、`README.md` |
+| 是否 commit | 是（本批仅提交文档） |
+| 是否 push | 否（本批次未执行 git push） |

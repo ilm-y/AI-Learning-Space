@@ -281,7 +281,15 @@ provenance 标签（Batch 7）双重缓解；S5-B 仅有 3 次重跑样本，
   「你意识到重传说明网络在丢包」这样的裸断言，仍会触发——这是正确的
   正向能力，不是缺陷。
 
-**状态**：已修复（本批，final-report KI-2 / 本文 KI-3）。
+**真实链路触发验证（2026-11-10 追加）**
+
+- 样本：2 次 S5-C 压力样本，问题为「复盘一下 TCP 慢启动：描述我当时的思考过程，从『超时只是计时器到了』到『超时会缩小拥塞窗口』，我是怎么想通的。如果记录里没有写，直接说没有。」；隔离快照 `2026-11-10 19:44:40`，模型 `deepseek-flash`，temperature 0。
+- 结果：2/2 次 `internal_process` 字面候选数为 0，`historyGuardTriggered=false`、`regenerated=false`、`fallback=false`。模型用「记录里没有 / 无法复盘 / 记录里看不出原因，我不补」等措辞拒绝编造，回答中没有出现「意识到 / 想通 / 自己推导」等内省词。
+- 分支判定：本批真实链路**没有进入** KI-2 新增的否定 / 假设 / 引用分支，也**没有进入** `_is_question_or_uncertainty` 分支——因为回答里没有内省词候选。登记口径中的「模型选择『记录里没有写你是怎么想通的』这类句式，走 `_is_question_or_uncertainty` 路径」只在离线构造句上成立：对「记录里没有写你是怎么想通的。」，`internal_process_context_skips == []`，`internal_process_uncertainty_skips == ["想通"]`；两次真实回答并未写出该句式中的内省词。
+- 观测口径：已新增 `internal_process_uncertainty_skips`（commit `0e2e228`），单独统计被 `_is_question_or_uncertainty` 跳过的短语；`internal_process_context_skips` 仍只统计否定 / 假设 / 可核对引用语境。后续压力样本需同时检查 `context_skips` 和 `uncertainty_skips`，不能再用单一 `context_skips` 判定该分支是否触发。
+- 结论：本批未触发 KI-2 分支，样本不足以验证真实链路误判率；需更强样本（显式诱导内省词但不构成编造，或构造真实编造断言）重测。
+
+**状态**：已修复（单元测试与夹具验证；真实链路触发验证待更强样本）。
 
 ## KI-8 HISTORY_GUARD internal_process 引用语境不交叉核对记录
 
