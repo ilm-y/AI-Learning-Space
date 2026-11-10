@@ -18,6 +18,7 @@ Prompt 已经写了这些规则，但只靠 prompt 时模型仍会偶尔补一�
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -29,6 +30,8 @@ from app.schemas import (
     UnderstandingStatus,
 )
 from app.state.agent_state import AgentState
+
+log = logging.getLogger(__name__)
 
 _STATUS_LABEL = {
     UnderstandingStatus.UNKNOWN: "未接触",
@@ -118,6 +121,103 @@ _QUOTE_SPAN_RES = (
 )
 _QUOTE_REFERENCE_RE = re.compile(
     r"所谓|你说的|你当时说的|你曾说|记录里|记录中|原话|原文|引用|复述"
+)
+
+# KI-8：引用语境跳过前的记录核对。
+#
+# 「记录里写的『你意识到丢包』」只有在引号内的短语确实出现在记录中时才是
+# 真实引用；记录里找不到时，模型是在编造一条「记录里写的」原话。
+# 严格匹配用去掉标点与空白后的子串；失败时再用下面的停用词表做一次
+# 「疑似改写引用」观测（只写日志，不改变判定）。
+_QUOTE_MATCH_STOPWORDS = (
+    "当时",
+    "时候",
+    "我们",
+    "你们",
+    "他们",
+    "你的",
+    "我的",
+    "他的",
+    "她的",
+    "就是",
+    "不是",
+    "因为",
+    "所以",
+    "而且",
+    "但是",
+    "然后",
+    "已经",
+    "可以",
+    "可能",
+    "应该",
+    "这个",
+    "那个",
+    "一个",
+    "一下",
+    "什么",
+    "怎么",
+    "为什么",
+    "还是",
+    "或者",
+    "如果",
+    "那么",
+    "只是",
+    "其实",
+    "自己",
+    "这样",
+    "那样",
+    "的",
+    "了",
+    "是",
+    "在",
+    "我",
+    "你",
+    "他",
+    "她",
+    "它",
+    "们",
+    "这",
+    "那",
+    "就",
+    "也",
+    "都",
+    "会",
+    "能",
+    "要",
+    "吗",
+    "呢",
+    "啊",
+    "吧",
+    "和",
+    "与",
+    "及",
+    "或",
+    "而",
+    "但",
+    "却",
+    "很",
+    "太",
+    "更",
+    "最",
+    "还",
+    "又",
+    "再",
+    "被",
+    "把",
+    "对",
+    "于",
+    "从",
+    "中",
+    "里",
+    "上",
+    "下",
+    "个",
+    "一",
+    "之",
+    "其",
+    "所",
+    "以",
+    "为",
 )
 
 # 外部帮助 / 资料使用。只有记录明确写了才可以说「没有」。
@@ -263,11 +363,12 @@ def check_history_answer(answer: str, state: AgentState) -> list[HistoryIssue]:
         return [HistoryIssue("empty_answer", "", "回答为空")]
 
     corpus = _recorded_corpus(state)
+    quote_corpus = _quote_record_corpus(state, corpus)
     sentences = _sentences(text)
     issues: list[HistoryIssue] = []
 
     for sentence in sentences:
-        issues.extend(_check_internal_process(sentence, corpus))
+        issues.extend(_check_internal_process(sentence, corpus, quote_corpus))
         issues.extend(_check_external_absence(sentence, corpus))
 
     # 「有记录」不等于「有轨迹」：按需召回的 evidence 也是记录。
@@ -419,14 +520,39 @@ def _preserved_quote_segment(state: AgentState, first_answer: str) -> str:
 # ---------- 检查 ----------
 
 
-def _check_internal_process(sentence: str, corpus: list[str]) -> list[HistoryIssue]:
+def _check_internal_process(
+    sentence: str,
+    corpus: list[str],
+    quote_corpus: list[str] | None = None,
+) -> list[HistoryIssue]:
     issues: list[HistoryIssue] = []
+    # KI-8：引用核对用更宽语料（历史用户消息 + Memory + 记录本体）。
+    # 直接调用本函数（测试）未传 quote_corpus 时退回 corpus。
+    quote_records = quote_corpus if quote_corpus is not None else corpus
     for match in _INTERNAL_PROCESS_RE.finditer(sentence):
         if _is_question_or_uncertainty(sentence, match.start(), match.end()):
             # 疑问 / 选择问 / 「是否」列举只是在问记录，不是对过去的断言。
             continue
-        if _internal_process_in_skipped_context(sentence, match.start(), match.end()):
-            # 否定 / 拒绝、引用、假设语境：不是在断言用户过去的心理过程。
+        if _internal_process_in_negation_or_hypothesis(sentence, match.start()):
+            # 否定 / 拒绝、假设语境：不是在断言用户过去的心理过程。
+            continue
+        quoted = _quoted_reference_span(sentence, match.start(), match.end())
+        if quoted is not None:
+            # 引用语境也不再无条件放行：引号内的短语必须能在记录中找到。
+            if _quoted_span_in_records(quoted, quote_records):
+                continue
+            _observe_quoted_fuzzy_match(quoted, quote_records)
+            # 编造引用直接判为 internal_process，且不能落到下面的通用
+            # `_recorded_phrase` 例外：记录里可能恰好出现「意识到」三个字，
+            # 但整句引用仍是编造的。
+            issues.append(
+                HistoryIssue(
+                    "internal_process",
+                    _excerpt(sentence),
+                    "引用语境中的短语未在记录中找到："
+                    f"「{_normalise_quote_text(quoted)}」",
+                )
+            )
             continue
         span = match.group(0)
         if _recorded_phrase(span, corpus):
@@ -485,10 +611,8 @@ def _is_question_or_uncertainty(sentence: str, start: int, end: int) -> bool:
     return bool(_UNCERTAINTY_CLAUSE_RE.search(clause))
 
 
-def _internal_process_in_skipped_context(
-    sentence: str, start: int, end: int
-) -> bool:
-    """内省词是否处在否定 / 拒绝、引用或假设语境中。
+def _internal_process_in_negation_or_hypothesis(sentence: str, start: int) -> bool:
+    """内省词是否处在否定 / 拒绝或假设语境中。
 
     只回看同一句内、短语前 ``_INTERNAL_CONTEXT_WINDOW`` 个字符。句子边界
     由调用方的 ``_sentences`` 保证（。！？!?\n 已切开），因此这里不会跨句。
@@ -496,13 +620,24 @@ def _internal_process_in_skipped_context(
     window = sentence[max(0, start - _INTERNAL_CONTEXT_WINDOW) : start]
     if _INTERNAL_NEGATION_RE.search(window):
         return True
-    if _INTERNAL_HYPOTHESIS_RE.search(window):
+    return bool(_INTERNAL_HYPOTHESIS_RE.search(window))
+
+
+def _internal_process_in_skipped_context(
+    sentence: str, start: int, end: int, corpus: list[str] | None = None
+) -> bool:
+    """内省词是否处在否定 / 拒绝、可核对引用或假设语境中。
+
+    与 KI-2 的否定 / 假设判定完全一致；引用语境在 KI-8 之后要求短语
+    能在 ``corpus`` 中找到，找不到就视为编造引用（不跳过）。
+    """
+    if _internal_process_in_negation_or_hypothesis(sentence, start):
         return True
-    return _phrase_quoted_with_reference(sentence, start, end)
+    return _phrase_quoted_with_reference(sentence, start, end, corpus or [])
 
 
-def _phrase_quoted_with_reference(sentence: str, start: int, end: int) -> bool:
-    """短语是否被引号包裹，且引号前带有「所谓 / 你说的 / 记录里的」等标记。"""
+def _quoted_reference_span(sentence: str, start: int, end: int) -> str | None:
+    """包含该短语、且引号前带引用标记的引号片段；没有则返回 None。"""
     for pattern in _QUOTE_SPAN_RES:
         for match in pattern.finditer(sentence):
             if not (match.start() < start and end <= match.end()):
@@ -511,23 +646,72 @@ def _phrase_quoted_with_reference(sentence: str, start: int, end: int) -> bool:
                 max(0, match.start() - _INTERNAL_CONTEXT_WINDOW) : match.start()
             ]
             if _QUOTE_REFERENCE_RE.search(before):
-                return True
-    return False
+                return match.group(0)
+    return None
 
 
-def internal_process_context_skips(text: str | None) -> list[str]:
+def _normalise_quote_text(text: str) -> str:
+    """引用核对用归一化：只保留字母、数字与汉字，去掉标点、空白和引号。"""
+    return "".join(char for char in (text or "") if char.isalnum())
+
+
+def _quoted_span_in_records(quoted: str, corpus: list[str]) -> bool:
+    """引号内的短语（去标点 / 空白后）是否逐字出现在记录中。"""
+    normalised = _normalise_quote_text(quoted)
+    if not normalised:
+        return False
+    return any(normalised in item for item in corpus)
+
+
+def _observe_quoted_fuzzy_match(quoted: str, corpus: list[str]) -> None:
+    """疑似改写引用：严格子串没命中，但短语的实词字符都出现在记录里。
+
+    只写观测日志，不改变判定——调用方仍会触发 ``internal_process``。
+    是否把「疑似改写引用」放宽为放行，留待人工决策。
+    """
+    normalised = _normalise_quote_text(quoted)
+    keywords = normalised
+    for stopword in _QUOTE_MATCH_STOPWORDS:
+        keywords = keywords.replace(stopword, "")
+    if not keywords:
+        return
+    haystack = "".join(corpus)
+    if all(char in haystack for char in keywords):
+        log.info("internal_process_quoted_fuzzy_match phrase=%s", normalised)
+
+
+def _phrase_quoted_with_reference(
+    sentence: str, start: int, end: int, corpus: list[str]
+) -> bool:
+    """短语是否处在**可核对**的引用语境中（KI-8）。
+
+    引号 + 引用标记只是候选；引号内的短语还必须真的出现在记录里，
+    否则模型写「记录里写的『……』」就能绕过 internal_process。
+    """
+    quoted = _quoted_reference_span(sentence, start, end)
+    if quoted is None:
+        return False
+    return _quoted_span_in_records(quoted, corpus)
+
+
+def internal_process_context_skips(
+    text: str | None, corpus: list[str] | None = None
+) -> list[str]:
     """观测用：列出因否定 / 引用 / 假设语境被跳过的内省词字面命中。
 
     返回值只用于实验记录与回归测试，不参与判定；与
     ``partial_upgrade_negation_skips`` 一样，它回答「语境识别实际拦下了
     多少次字面命中」。
+
+    ``corpus`` 是引用核对语料（去标点 / 空白后的记录文本）。不传时视为
+    没有可用记录，引用语境一律不再计入跳过——与 KI-8 的生产判定一致。
     """
     value = text or ""
     skipped: list[str] = []
     for sentence in _sentences(value):
         for match in _INTERNAL_PROCESS_RE.finditer(sentence):
             if _internal_process_in_skipped_context(
-                sentence, match.start(), match.end()
+                sentence, match.start(), match.end(), corpus
             ):
                 skipped.append(match.group(0))
     return skipped
@@ -889,6 +1073,21 @@ def _recorded_corpus(state: AgentState) -> list[str]:
     # 按需召回的 evidence 也可能包含用户原话；它同样是可核对记录。
     texts.extend(evidence.observation for evidence in state.evidences)
     return [_normalise(text) for text in texts if text]
+
+
+def _quote_record_corpus(state: AgentState, corpus: list[str]) -> list[str]:
+    """KI-8：可用于核对「记录里写的『……』」的记录文本。
+
+    ``corpus`` 已覆盖 Understanding / Trajectory / Evidence；这里再补上
+    历史消息与 Memory。只收**用户**历史消息：助手自己的历史输出不是
+    「记录」，否则模型可以复述上一轮的编造内容并把它当成引用放行。
+    """
+    texts: list[str] = [
+        message.content for message in state.history if message.is_user()
+    ]
+    texts.extend(memory.content for memory in state.memories if memory.content)
+    texts.extend(corpus)
+    return [_normalise_quote_text(text) for text in texts if text]
 
 
 def _recorded_phrase(span: str, corpus: list[str]) -> bool:

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 
 import pytest
@@ -246,13 +247,17 @@ def _process_context_state() -> AgentState:
     )
 
 
-def test_negated_refused_quoted_or_hypothetical_internal_process_is_not_flagged() -> None:
-    """KI-2 反向用例：否定 / 拒绝 / 引用 / 假设语境里的内省词不触发。"""
+def test_negated_refused_or_hypothetical_internal_process_is_not_flagged() -> None:
+    """KI-2 反向用例：否定 / 拒绝 / 假设语境里的内省词不触发。
+
+    KI-8 起，「记录里写的『……』」只有在引号内容确实出现在记录中时才放行；
+    原先把编造引用「记录里写的『你意识到丢包』」也写在这条用例里，现移交
+    到下方 KI-8 反向用例，避免把「引用核对」与「否定 / 假设语境」混为一谈。
+    """
     answers = [
         STEP4_RUN15_FIRST_ANSWER,
         "我不会说你当时想通了，因为记录里没有。",
         "假设你当时想通了，那也只是假设。",
-        "记录里写的『你意识到丢包』，是记录，不是我的推断。",
         BATCH6_S5B1_FIRST_ANSWER,
     ]
     for answer in answers:
@@ -316,6 +321,106 @@ def test_internal_process_context_skips_are_observable() -> None:
     assert internal_process_context_skips(STEP4_RUN15_FIRST_ANSWER) == ["意识到"]
     assert internal_process_context_skips(BATCH6_S5B1_FIRST_ANSWER) == ["想通"]
     assert internal_process_context_skips("你当时想通了超时重传会缩小拥塞窗口") == []
+
+
+# ---------- KI-8：引用语境跳过前的记录核对 ----------
+
+
+def _quote_record_state(record_text: str) -> AgentState:
+    return _state(
+        with_trajectory=True,
+        evidences=[_evidence(601, record_text, EvidenceCorrectness.CORRECT)],
+    )
+
+
+def _empty_record_state() -> AgentState:
+    """没有任何 Understanding / Trajectory / Evidence / Memory / 历史消息。"""
+    return AgentState(
+        run_id=1,
+        user_id=1,
+        conversation_id=1,
+        space_id=1,
+        user_message=QUESTION,
+        history_review_requested=True,
+        trace=RunTrace(run_id=1),
+    )
+
+
+def test_ki8_fabricated_quote_without_records_is_flagged() -> None:
+    """记录为空时，任何引用语境都视为编造。"""
+    issues = check_history_answer(
+        "记录里写的『你意识到丢包』", _empty_record_state()
+    )
+
+    assert "internal_process" in _kinds(issues)
+
+
+def test_ki8_fabricated_quote_that_differs_from_record_is_flagged() -> None:
+    """记录里只有相近句子，引用的却是记录中没有的短语。"""
+    issues = check_history_answer(
+        "记录里写的『你意识到超时意味着丢包』",
+        _quote_record_state("你意识到重传意味着丢包"),
+    )
+
+    assert "internal_process" in _kinds(issues)
+
+
+def test_ki8_fabricated_quote_against_unrelated_record_is_flagged() -> None:
+    issues = check_history_answer(
+        "记录里写的『你当时想通了拥塞窗口』",
+        _quote_record_state("TLB 缓存的是页表项"),
+    )
+
+    assert "internal_process" in _kinds(issues)
+
+
+def test_ki8_verbatim_quote_from_record_is_not_flagged() -> None:
+    issues = check_history_answer(
+        "记录里写的『你意识到重传意味着丢包』，是记录。",
+        _quote_record_state("你意识到重传意味着丢包"),
+    )
+
+    assert "internal_process" not in _kinds(issues)
+
+
+def test_ki8_quote_matches_after_punctuation_and_whitespace_are_stripped() -> None:
+    issues = check_history_answer(
+        "记录里写的『你意识到，  重传意味着丢包』，是记录。",
+        _quote_record_state("你意识到重传意味着丢包"),
+    )
+
+    assert "internal_process" not in _kinds(issues)
+
+
+def test_ki8_paraphrased_quote_is_logged_and_still_flagged(caplog) -> None:
+    """边界：措辞差异的真实引用当前仍触发，但留一条疑似改写引用观测。"""
+    with caplog.at_level(logging.INFO, logger="app.history_guard"):
+        issues = check_history_answer(
+            "记录里写的『你意识到重传会丢包』",
+            _quote_record_state("你意识到重传意味着丢包"),
+        )
+
+    assert "internal_process" in _kinds(issues)
+    assert "internal_process_quoted_fuzzy_match" in caplog.text
+
+
+def test_ki8_reordered_quote_is_logged_and_still_flagged(caplog) -> None:
+    """边界：语序不同、实词都在记录中，仍按严格子串判定触发。"""
+    with caplog.at_level(logging.INFO, logger="app.history_guard"):
+        issues = check_history_answer(
+            "记录里写的『丢包你意识到重传』",
+            _quote_record_state("你意识到重传意味着丢包"),
+        )
+
+    assert "internal_process" in _kinds(issues)
+    assert "internal_process_quoted_fuzzy_match" in caplog.text
+
+
+def test_ki8_context_skips_require_a_verified_quote() -> None:
+    assert internal_process_context_skips("记录里写的『你意识到丢包』") == []
+    assert internal_process_context_skips(
+        "记录里写的『你意识到丢包』", ["你意识到丢包"]
+    ) == ["意识到"]
 
 
 def test_partial_cannot_be_upgraded_to_wrong_or_completely_correct() -> None:

@@ -309,4 +309,59 @@ provenance 标签（Batch 7）双重缓解；S5-B 仅有 3 次重跑样本，
 找不到时仍按无依据断言处理。需要同时补充回归用例（真实引用放行、
 伪造引用触发）。
 
-**状态**：开放，已知限制。
+**修复（本批，2026-11-10）**
+
+1. **引用核对语料**：`_quote_record_corpus(state, corpus)` = 历史**用户**
+   消息 + `MemoryItem.content` + `_recorded_corpus`（Understanding /
+   Trajectory / Evidence）。不收助手历史输出：否则模型可以复述自己上一轮
+   的编造内容并把它当成「记录」放行。
+2. **核对位置**：`_check_internal_process` 在否定 / 假设语境跳过之后、
+   通用 `_recorded_phrase` 兜底之前，用 `_quoted_reference_span` 取出
+   引号片段（仍需引号前 20 字符内有引用标记），`_normalise_quote_text`
+   去掉标点 / 空白后做子串匹配：
+   - 命中 → 真实引用，跳过 `internal_process`；
+   - 未命中 → 直接判 `internal_process`，**不再**落到通用
+     `_recorded_phrase` 例外。否则记录里恰好出现「意识到」三个字时，
+    编造的整句引用仍会被放行。
+3. **空记录**：引用核对语料为空时，任何引用语境都视为编造并触发。
+4. **疑似改写**：严格子串失败但去掉停用词后的实词字符都出现在记录中时，
+   写一条 `internal_process_quoted_fuzzy_match` 观测日志，**仍触发**。
+   是否把「疑似改写引用」放宽为放行，留人工决策（见下方决策点）。
+5. **未改动项**：KI-2 的否定 / 拒绝 / 假设正则与判定顺序保持不变
+   （`_internal_process_in_negation_or_hypothesis`）；`partial_upgrade`、
+   回退逻辑、Runtime / ContextBuilder / Policy / Schema / SSE 均未改动。
+
+**回归与验证**
+
+- `agent/tests/test_history_guard.py` + `test_history_guard_runtime.py`：
+  48 passed, 1 skipped；KI-2 / KI-8 定向用例 14 passed。
+- 新增 KI-8 用例：
+  - 反向（编造引用，均触发）：记录为空时「记录里写的『你意识到丢包』」；
+    记录有「你意识到重传意味着丢包」但引用「你意识到超时意味着丢包」；
+    记录完全无关时引用「你当时想通了拥塞窗口」；
+  - 正向（真实引用，不触发）：逐字引用「你意识到重传意味着丢包」；
+    引号内标点 / 空白不同（`你意识到，  重传意味着丢包`）仍命中；
+  - 边界（触发 + 观测）：措辞差异「你意识到重传会丢包」、语序不同
+    「丢包你意识到重传」均触发，并写出 `internal_process_quoted_fuzzy_match`；
+  - KI-2 原先把编造引用「记录里写的『你意识到丢包』」放在「不触发」
+    聚合用例里，现移入 KI-8 反向用例；否定 / 拒绝 / 假设用例保留。
+- 全量 `agent/tests`：666 passed, 10 skipped, 1 xfailed。
+- S5-B 离线夹具重跑 3 次（ScriptedLLM）：`issues=[]`、
+  `regenerated=false`、`fallback=false`、`llmCalls=1`（3/3），
+  即 `historyGuardTriggered=false`（3/3）。夹具通过 ≠ 真实链路通过。
+
+**已知限制**
+
+- 严格子串匹配会导致措辞差异的真实引用被误判为编造，触发额外重生成；
+  真实链路误判率待验证。这类情况会留下
+  `internal_process_quoted_fuzzy_match` 观测日志，便于后续统计。
+- 引号内若含 `。！？!?\n`，`_sentences` 会在引号中间切开，导致该引用
+  无法被识别为引用语境，走原有通用核对路径（既有局限，本批未扩大范围）。
+- 历史用户消息只收 `role=user`；助手历史输出不作为「记录」来源。
+
+**需要人工确认的决策点**
+
+- 是否把「疑似改写引用」（实词都在记录中、但严格子串不命中）放宽为
+  跳过。当前选择不放宽：宁可多触发一次重生成，也不放过编造引用。
+
+**状态**：已修复（本批，2026-11-10）。
