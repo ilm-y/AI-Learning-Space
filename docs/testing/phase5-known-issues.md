@@ -4,7 +4,7 @@
 - 来源批次：Phase 5 Step 3（S5 数据重设计与 HISTORY_GUARD 判据调整后的重跑）
 - 适用范围：仅登记，不在本批修复；不作为 Phase 5 Step 3 的通过/失败判据，但必须在结论中附带
 
-> 本文 KI 编号与 phase5-final-report.md 存在差异：本文 KI-3（HISTORY_GUARD internal_process 误判）对应 final-report 的 KI-2；后续跟踪统一以 final-report 编号为准。
+> 本文 KI 编号与 phase5-final-report.md 存在差异：本文 KI-3（HISTORY_GUARD internal_process 语境误判）对应 final-report 的 KI-2；后续跟踪统一以 final-report 编号为准。本文 KI-2 是更早一批修复的 `partial_upgrade` 否定语境问题，两者修复相互独立。**本批（2026-11-10）已修复 final-report KI-2 / 本文 KI-3。**
 
 本文件登记两条已观测到的产品/模型行为问题。两条都已在
 `docs/testing/phase5-abc-rerun.md` 第 11、12 节留痕。
@@ -171,10 +171,10 @@ provenance 标签（Batch 7）双重缓解；S5-B 仅有 3 次重跑样本，
 
 **状态**：已修复（Batch 4，2026-11-09）。
 
-## KI-3 HISTORY_GUARD internal_process 对「想通」的字面误判
+## KI-3（final-report KI-2）HISTORY_GUARD internal_process 的语境误判
 
 - 登记时间：2026-11-10
-- 来源批次：Phase 5 Step 4 前置条件第 6 项（只登记，本批不修）
+- 来源批次：Phase 5 Step 4 前置条件第 6 项（Step 4 只登记，本批修复）
 
 **现象**
 
@@ -197,22 +197,116 @@ provenance 标签（Batch 7）双重缓解；S5-B 仅有 3 次重跑样本，
   其余 3 次尝试（attempt1、attempt4、attempt5）模型均未产生可拦截的
   编造断言，未触发守卫。详见 `docs/testing/phase5-step4-results.md`
   第 4、6 节。
-- 相关实现：`agent/app/history_guard.py:63-91` 的 `_PROCESS_TERMS`
-  与 `_INTERNAL_PROCESS_RE`；`_check_internal_process` 在
-  `agent/app/history_guard.py:392-413`。
+- 相关实现：`agent/app/history_guard.py:63-125` 的 `_PROCESS_TERMS`、
+  `_INTERNAL_PROCESS_RE` 与语境识别常量；`_check_internal_process` 在
+  `agent/app/history_guard.py:426-450`；语境判定在
+  `agent/app/history_guard.py:492-539`。
 
 **影响**
 
 1. 合法回答多一次 LLM 调用、延迟与 token；
 2. 若重生成仍被字面命中，会使用确定性回退文本，可能丢失用户要求的
-   引用原句（与 KI-2 的回退路径相同）；
+   引用原句（与 KI-2 `partial_upgrade` 修复时的回退路径相同）；
 3. 影响 `historyGuardTriggered` 观测：触发次数不完全等于真实无依据
    断言次数。
 
-**本批边界**
+**修复（本批，2026-11-10）**
 
-Step 4 不修改 `agent/app/history_guard.py`。异常场景中构造
-`internal_process` 触发时，需同时记录产品 trace 的 `kind/excerpt`
-与首答/重生成结果，区分「真实无依据断言」与「字面误判」。
+1. **语境识别**：`_check_internal_process` 在字面命中后、记录核对前增加
+   `_internal_process_in_skipped_context`，任一命中则跳过该短语：
+   - 否定 / 拒绝：短语前 20 字符内出现 `我不会 / 我不能 / 不能 /
+     不应该 / 不该 / 不认为 / 不觉得 / 不是 / 并非 / 并没有 / 没有说 /
+     不说 / 谈不上 / 不意味着 / 不代表 / 不等于 / 别以为 / 不要以为 /
+     我如果给你补 / 那是我编的 / 不是发生过的事实`；
+   - 引用：短语被 `「」`、`『』`、`“”` 或 `""` 包裹，且引号前 20 字符内
+     出现 `所谓 / 你说的 / 你当时说的 / 你曾说 / 记录里 / 记录中 /
+     原话 / 原文 / 引用 / 复述`；
+   - 假设：短语前 20 字符内出现 `假设 / 如果 / 假如 / 倘若 / 若是 /
+     要是 / 按理说 / 比如 / 例如`。`可能 / 也许 / 或许` 等模态词
+     不作为跳过理由。
+2. **边界**：只回看同一句、短语前 20 字符；句子已由 `_sentences` 按
+   `。！？!?\n` 切开，因此不跨句。`_phrase_in_negated_context` 及其
+   `partial_upgrade` 调用路径未改动；回退逻辑与 Runtime 未改动。
+3. **正向能力**：原有「意识到 / 想通 / 自己推导 / 通过重读……」匹配保留；
+   另补一条窄形式「你 + 已经/已 + 理解/掌握/明白了」，用于覆盖
+   「你已经理解了……」这类对用户内部状态的直接断言（不匹配助教自述的
+   「我理解……」或用户的「理解成……」）。
+4. **可观测性**：新增 `internal_process_context_skips(text)`，与
+   `partial_upgrade_negation_skips` 同口径，供离线回归 / 实验记录重放；
+   本批未改 Runtime，因此尚未写入 trace。
 
-**状态**：开放（只登记，不在 Step 4 修复）。
+**收窄（本批复审，2026-11-10）**
+
+- 删除上一版为覆盖「你已经理解了……」而新增的正向正则分支。该句不在
+  原正则覆盖范围内，本批不为通过验收而扩大检测面；对应测试标记为
+  `skip`，留给后续单独评估。
+- 假设语境移除 `可能 / 也许 / 或许`：模态推断「你可能是自己推导的」
+  仍应触发，不能被当作假设跳过；「如果是你想通的」仍按假设跳过。
+- 删除扩展后没有其他新增正则分支，因此没有需要补反向用例的扩展。
+
+**回归与验证**
+
+- `agent/tests/test_history_guard.py` + `test_history_guard_runtime.py`
+  40 passed, 1 skipped（修复前 32 passed）。新增用例：
+  - 反向：「我如果给你补一段『你意识到重传意味着丢包』，那是我编的」
+    （Step 4 run 15 首答）、「我不会说你当时想通了，因为记录里没有」、
+    「假设你当时想通了，那也只是假设」、
+    「记录里写的『你意识到丢包』，是记录，不是我的推断」、
+    「比如是自己想通的、看了资料」（Batch 6 S5-B-1 首答）均不触发；
+  - 正向：「你当时想通了超时重传会缩小拥塞窗口」「你意识到重传说明
+    网络在丢包」「你可能是自己推导的」均触发；
+  - 边界：「你意识到重传说明丢包，这是记录里写的」触发（无引用标记）；
+    「如果你意识到丢包，就会缩小窗口」「如果是你想通的，那也只是假设」
+    不触发（假设语境，选择按条件句处理，不视为对过去心理过程的断言）；
+  - 「你已经理解了超时和拥塞窗口的关系」标记为 `skip`：原正则不支持，
+    本批不为通过验收扩大检测面。
+- S5-B 离线夹具重跑 3 次（ScriptedLLM，按现有测试基座；真实链路需要
+  隔离 MySQL / Qdrant 与模型密钥，本批未运行）：
+  `historyGuardTriggered=false`（3/3）、`llmCalls=1`（3/3）、
+  `issues=[]`、`regenerated=false`、`fallback=false`，
+  最终回答均含历史原句（3/3）。夹具通过 ≠ 真实链路通过；真实链路验证
+  需另批。
+- 全量 `agent/tests`：656 passed, 9 skipped, 1 xfailed。
+
+**剩余风险**
+
+- 语境识别仍是规则匹配：反讽、双重否定、跨句否定、引号嵌套等更复杂
+  表达可能漏判。
+- `可能 / 也许 / 或许` 已从假设语境移除，「你可能是自己推导的」会正常
+  触发；代价是纯假设句若只靠模态词引导（未出现「假设 / 如果 / 比如」
+  等显式标记）仍可能误判。
+- `internal_process_context_skips` 目前只做离线观测，未接入 trace；
+  若要统计真实链路跳过次数，需另批修改 Runtime（本批边界禁止）。
+- 修复后首答不再误判，不会触发重生成；若模型真实说出
+  「你意识到重传说明网络在丢包」这样的裸断言，仍会触发——这是正确的
+  正向能力，不是缺陷。
+
+**状态**：已修复（本批，final-report KI-2 / 本文 KI-3）。
+
+## KI-8 HISTORY_GUARD internal_process 引用语境不交叉核对记录
+
+- 登记时间：2026-11-10
+- 来源批次：KI-2（internal_process 语境识别）修复复审
+- 编号说明：final-report 已使用 KI-7（Step 5 缺少 repeat），本条按当前
+  最大编号 +1 记为 KI-8。
+
+**现象**
+
+`internal_process` 的引用语境识别只要求短语被引号包裹、且引号前有
+「记录里 / 所谓 / 原话」等标记，不校验被引用的短语是否真的出现在记录
+中。模型可以写成「记录里写的『你意识到丢包』」，即使记录没有这句话，
+也会被当作引用而跳过校验。
+
+**影响**
+
+低。需要模型主动构造「引用格式 + 引用标记」才能绕过；正常回答中更常见
+的是直接断言或如实引用。它不会让无引号的编造断言通过。
+
+**建议**
+
+下一批在引用语境跳过前增加 corpus 交叉核对：只有被引号包裹的短语能在
+`_recorded_corpus(state)` 中逐字（或归一化后）找到时，才按引用放行；
+找不到时仍按无依据断言处理。需要同时补充回归用例（真实引用放行、
+伪造引用触发）。
+
+**状态**：开放，已知限制。

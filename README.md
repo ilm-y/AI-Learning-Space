@@ -27,7 +27,7 @@
 | ID | 问题 | 状态 |
 |---|---|---|
 | KI-1 | 模型历史使用不稳定，可能把 Understanding 转述称为用户原话 | 开放，已通过来源定义与 provenance 标签缓解，未根治 |
-| KI-2 | `HISTORY_GUARD` 否定 / 对比语境误判，可能触发多余重生成或回退 | 开放（已缓解），继续统计触发率 |
+| KI-2 | `HISTORY_GUARD` 否定 / 对比语境误判，可能触发多余重生成或回退 | 已修复（2026-11-10） |
 | KI-3 | L2-3 判据缺少“相关性”限定，话题切换场景出现评分口径分歧 | 新登记，下一轮修判据 |
 | KI-4 | L3 收益阈值未预注册，只能使用事后判据 | 新登记（流程），不能声称达到预注册阈值 |
 | KI-5 | 评审独立性 / 来源不可核验，两份评分表均无人工签名 | 新登记（流程），PASS 仅为内容判定 |
@@ -82,7 +82,7 @@ cd web && npm install && npm run dev                                # :5173
 | Phase 2 | Spring 测试（真实 MySQL / RabbitMQ / Qdrant） | 45 场景：41 PASS / 1 PARTIAL / 0 FAIL / 1 BLOCKED / 2 未覆盖；JUnit 49/49 | [phase2-results](docs/testing/phase2-results.md) |
 | Phase 3 | 真实 LLM Agent 质量 | 校准后 9 PASS / 1 FAIL（D01）；LLM Judge 未经人工确认 | [phase3.1-results](docs/testing/phase3.1-results.md) |
 | Phase 4 | Context Builder + 真实 RAG | 索引 7/7、检索隔离 PASS；预算压力存在结构性缺口 | [phase4-rag-agent-results](docs/testing/phase4-rag-agent-results.md) |
-| Phase 5 | A/B/C 个性化策略与双人盲审 | L1 PASS；L2 PASS（89/90）；L3 方向性 PASS；**附条件关闭**，遗留 KI-1~KI-7 | [phase5-final-report](docs/testing/phase5-final-report.md) |
+| Phase 5 | A/B/C 个性化策略与双人盲审 | L1 PASS；L2 PASS（89/90）；L3 方向性 PASS；**附条件关闭**，遗留 KI-1、KI-3~KI-7（KI-2 已修复） | [phase5-final-report](docs/testing/phase5-final-report.md) |
 
 > Phase 5 的 L2/L3 PASS 是内容判定，不是评审组织合规判定：L3 阈值未预注册，
 > 两份评分表为 AI 辅助 / 独立评审记录，缺少可核验人工签名。
