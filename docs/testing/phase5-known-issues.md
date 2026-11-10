@@ -4,6 +4,8 @@
 - 来源批次：Phase 5 Step 3（S5 数据重设计与 HISTORY_GUARD 判据调整后的重跑）
 - 适用范围：仅登记，不在本批修复；不作为 Phase 5 Step 3 的通过/失败判据，但必须在结论中附带
 
+> 本文 KI 编号与 phase5-final-report.md 存在差异：本文 KI-3（HISTORY_GUARD internal_process 误判）对应 final-report 的 KI-2；后续跟踪统一以 final-report 编号为准。
+
 本文件登记两条已观测到的产品/模型行为问题。两条都已在
 `docs/testing/phase5-abc-rerun.md` 第 11、12 节留痕。
 
