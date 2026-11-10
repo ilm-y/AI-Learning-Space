@@ -717,6 +717,27 @@ def internal_process_context_skips(
     return skipped
 
 
+def internal_process_uncertainty_skips(text: str | None) -> list[str]:
+    """观测用：列出因疑问 / 记录不足语境被跳过的内省词字面命中。
+
+    与 ``internal_process_context_skips`` 互补：后者只统计否定 / 假设 /
+    可核对引用语境，本函数单独统计先于它们生效的
+    ``_is_question_or_uncertainty`` 分支（``_check_internal_process`` 的
+    第一个 ``continue``）。因此「记录里没有写你是怎么想通的」这类句子会
+    出现在这里，而不是 ``context_skips``。
+
+    两个观测口径互不排斥：一个短语若同时满足两类语境，会同时出现在两个
+    列表里。返回值只用于实验记录与回归测试，不参与判定。
+    """
+    value = text or ""
+    skipped: list[str] = []
+    for sentence in _sentences(value):
+        for match in _INTERNAL_PROCESS_RE.finditer(sentence):
+            if _is_question_or_uncertainty(sentence, match.start(), match.end()):
+                skipped.append(match.group(0))
+    return skipped
+
+
 def _check_record_facts(state: AgentState, text: str) -> list[HistoryIssue]:
     issues: list[HistoryIssue] = []
     evidences = _recorded_evidences(state)

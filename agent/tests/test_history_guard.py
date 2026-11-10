@@ -18,6 +18,7 @@ from app.history_guard import (
     build_history_fallback,
     check_history_answer,
     internal_process_context_skips,
+    internal_process_uncertainty_skips,
     partial_upgrade_negation_skips,
     retry_instruction,
 )
@@ -321,6 +322,23 @@ def test_internal_process_context_skips_are_observable() -> None:
     assert internal_process_context_skips(STEP4_RUN15_FIRST_ANSWER) == ["意识到"]
     assert internal_process_context_skips(BATCH6_S5B1_FIRST_ANSWER) == ["想通"]
     assert internal_process_context_skips("你当时想通了超时重传会缩小拥塞窗口") == []
+
+
+def test_internal_process_uncertainty_skips_are_observable() -> None:
+    """KI-2 真实链路：疑问 / 记录不足语境走的是独立的跳过分支。"""
+    text = "记录里没有写你是怎么想通的"
+
+    assert internal_process_uncertainty_skips(text) == ["想通"]
+    assert internal_process_context_skips(text) == []
+
+
+def test_internal_process_uncertainty_skips_do_not_cover_other_contexts() -> None:
+    """互补口径：否定 / 假设 / 引用语境的命中仍只记在 context_skips。"""
+    assert internal_process_uncertainty_skips(STEP4_RUN15_FIRST_ANSWER) == []
+    assert internal_process_uncertainty_skips(BATCH6_S5B1_FIRST_ANSWER) == []
+    assert internal_process_uncertainty_skips(
+        "你当时想通了超时重传会缩小拥塞窗口"
+    ) == []
 
 
 # ---------- KI-8：引用语境跳过前的记录核对 ----------
