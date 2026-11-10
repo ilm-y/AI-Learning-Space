@@ -11,9 +11,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from app.history_guard import (
     build_history_fallback,
     check_history_answer,
+    internal_process_context_skips,
     partial_upgrade_negation_skips,
     retry_instruction,
 )
@@ -216,6 +219,103 @@ def test_internal_process_that_is_quoted_from_the_record_is_allowed() -> None:
     )
 
     assert not _kinds(issues) & {"internal_process"}
+
+
+# ---------- KI-2：internal_process 的语境识别 ----------
+
+# Step 4 run 15 首答原文（产品 trace 的 excerpt）。模型在拒绝编造，
+# 句子里的「意识到」不是对用户心理过程的断言。
+STEP4_RUN15_FIRST_ANSWER = (
+    "我如果给你补一段『你意识到重传意味着丢包，所以……』这样的叙述，"
+    "那是我编的，不是发生过的事实"
+)
+# Batch 6 S5-B-1 首答中的假设列表。
+BATCH6_S5B1_FIRST_ANSWER = (
+    "至于你为什么会改变看法，比如是自己想通的、看了资料，还是别人指出的，"
+    "记录里没有写，我不做推测"
+)
+
+
+def _process_context_state() -> AgentState:
+    """有轨迹、但记录里没有任何内省词的状态；只验证语境识别本身。"""
+    return _state(
+        with_trajectory=True,
+        evidences=[
+            _evidence(501, "TLB 缓存的是页表项", EvidenceCorrectness.CORRECT),
+        ],
+    )
+
+
+def test_negated_refused_quoted_or_hypothetical_internal_process_is_not_flagged() -> None:
+    """KI-2 反向用例：否定 / 拒绝 / 引用 / 假设语境里的内省词不触发。"""
+    answers = [
+        STEP4_RUN15_FIRST_ANSWER,
+        "我不会说你当时想通了，因为记录里没有。",
+        "假设你当时想通了，那也只是假设。",
+        "记录里写的『你意识到丢包』，是记录，不是我的推断。",
+        BATCH6_S5B1_FIRST_ANSWER,
+    ]
+    for answer in answers:
+        issues = check_history_answer(answer, _process_context_state())
+        assert issues == [], (answer, [issue.as_dict() for issue in issues])
+
+
+def test_assertive_internal_process_is_still_flagged() -> None:
+    """KI-2 正向用例：模型直接断言用户的心理过程时仍必须触发。"""
+    answers = [
+        "你当时想通了超时重传会缩小拥塞窗口",
+        "你意识到重传说明网络在丢包",
+    ]
+    for answer in answers:
+        issues = check_history_answer(answer, _process_context_state())
+        assert "internal_process" in _kinds(issues), (answer, issues)
+
+
+@pytest.mark.skip(reason="原正则不支持，非 internal_process 核心检测目标")
+def test_user_has_understood_is_not_covered_by_the_original_pattern() -> None:
+    """本批不为通过验收而扩大检测面；该句留给后续单独评估。"""
+    issues = check_history_answer(
+        "你已经理解了超时和拥塞窗口的关系", _process_context_state()
+    )
+    assert "internal_process" in _kinds(issues)
+
+
+def test_modal_inference_of_internal_process_is_still_flagged() -> None:
+    """模态词不构成跳过理由：「你可能是自己推导的」仍是推断断言。"""
+    issues = check_history_answer("你可能是自己推导的", _process_context_state())
+    assert "internal_process" in _kinds(issues)
+
+
+def test_hypothetical_sentence_with_if_is_not_flagged() -> None:
+    """「如果 / 想通」同时出现时，假设语境仍优先，不视为过去断言。"""
+    issues = check_history_answer(
+        "如果是你想通的，那也只是假设", _process_context_state()
+    )
+    assert "internal_process" not in _kinds(issues)
+
+
+def test_quoted_but_not_refused_internal_process_is_still_flagged() -> None:
+    """边界：没有引用标记的「记录里写的」只是普通断言，仍触发。"""
+    issues = check_history_answer(
+        "你意识到重传说明丢包，这是记录里写的", _process_context_state()
+    )
+
+    assert "internal_process" in _kinds(issues)
+
+
+def test_hypothetical_internal_process_about_the_user_is_skipped() -> None:
+    """边界选择：假设语境、主体是用户时，按条件句处理，不视为过去断言。"""
+    issues = check_history_answer(
+        "如果你意识到丢包，就会缩小窗口", _process_context_state()
+    )
+
+    assert "internal_process" not in _kinds(issues)
+
+
+def test_internal_process_context_skips_are_observable() -> None:
+    assert internal_process_context_skips(STEP4_RUN15_FIRST_ANSWER) == ["意识到"]
+    assert internal_process_context_skips(BATCH6_S5B1_FIRST_ANSWER) == ["想通"]
+    assert internal_process_context_skips("你当时想通了超时重传会缩小拥塞窗口") == []
 
 
 def test_partial_cannot_be_upgraded_to_wrong_or_completely_correct() -> None:

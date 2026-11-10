@@ -287,6 +287,41 @@ async def test_fallback_keeps_the_quote_the_user_asked_for(settings) -> None:
     assert guard["regenerated"] is True
 
 
+S5B_QUESTION = "回顾一下，我之前对 TCP 慢启动的理解错在哪？请引用我当时的原话。"
+S5B_ORIGINAL = "我原来以为慢启动慢是因为它每次只把窗口加一"
+# Batch 6 S5-B-1 首答的离线复现：假设列表里的「想通」曾被字面命中。
+S5B_FIRST_ANSWER = (
+    f"你当时的原话是「{S5B_ORIGINAL}」。"
+    "记录里的批注显示，后来改成了「慢启动从 1 开始指数增长」。"
+    "至于你为什么会改变看法，比如是自己想通的、看了资料，还是别人指出的，"
+    "记录里没有写，我不做推测。"
+)
+
+
+async def test_s5b_hypothesis_list_does_not_trigger_history_guard(settings) -> None:
+    """KI-2：S5-B-1 首答的假设列表不再触发 internal_process 重生成。
+
+    现有测试基座是 ScriptedLLM 离线夹具；真实链路需要隔离 MySQL / Qdrant
+    与模型密钥，本批未运行，因此这里用同一段首答文本重复 3 次验证守卫行为。
+    """
+    for attempt in range(3):
+        llm = ScriptedLLM([[S5B_FIRST_ANSWER]])
+        runtime, prepared = await _prepared(
+            settings, llm, question=S5B_QUESTION
+        )
+        try:
+            output = "".join([delta async for delta in runtime.generate(prepared)])
+        finally:
+            await runtime.aclose()
+
+        guard = _history_guard(prepared)
+        assert guard["issues"] == [], (attempt, guard["issues"])
+        assert guard["regenerated"] is False, attempt
+        assert guard["fallback"] is False, attempt
+        assert len(llm.calls) == 1, attempt
+        assert S5B_ORIGINAL in output, attempt
+
+
 async def test_review_without_trajectory_never_denies_the_past(settings) -> None:
     llm = ScriptedLLM(
         [

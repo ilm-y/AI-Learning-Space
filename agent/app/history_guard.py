@@ -90,6 +90,36 @@ _INTERNAL_PROCESS_RE = re.compile(
     r"|你(之所以|之所以能)[^。！？!?\n]{0,24}(因为|是由于|是因为|源于)"
 )
 
+# internal_process 的语境识别（KI-2）。
+#
+# 「意识到」「想通」等词出现在否定 / 拒绝、引用或假设语境里时，模型并不是
+# 在断言用户过去的心理过程。按字面命中会触发无谓重生成；重生成仍命中时
+# 还会回退掉合法回答（Step 4 run 15、Batch 6 S5-B-1）。
+#
+# 判定只看同一句、短语前 _INTERNAL_CONTEXT_WINDOW 个字符，不跨句。它与
+# partial_upgrade 的纯否定 / 对比规则是两套语义：这里还要识别引用与假设，
+# 所以单独实现，不复用 _phrase_in_negated_context。
+_INTERNAL_CONTEXT_WINDOW = 20
+_INTERNAL_NEGATION_RE = re.compile(
+    r"我不会|我不能|不能|不应该|不该|不认为|不觉得|不是|并非|并没有|"
+    r"没有说|不说|谈不上|不意味着|不代表|不等于|别以为|不要以为|"
+    r"我如果给你补|那是我编的|不是发生过的事实"
+)
+_INTERNAL_HYPOTHESIS_RE = re.compile(
+    r"假设|如果|假如|倘若|若是|要是|按理说|比如|例如"
+)
+# 中文引号 + 英文双引号。『』也纳入，因为 Step 4 run 15 的真实首答用的
+# 就是『你意识到……』。
+_QUOTE_SPAN_RES = (
+    re.compile(r"「[^」]*」"),
+    re.compile(r"『[^』]*』"),
+    re.compile(r"“[^”]*”"),
+    re.compile(r'"[^"]*"'),
+)
+_QUOTE_REFERENCE_RE = re.compile(
+    r"所谓|你说的|你当时说的|你曾说|记录里|记录中|原话|原文|引用|复述"
+)
+
 # 外部帮助 / 资料使用。只有记录明确写了才可以说「没有」。
 _EXTERNAL_ABSENCE_RE = re.compile(
     r"(没有|未|无)[^。！？!?\n]{0,12}(外部|他人|别人|老师)[^。！？!?\n]{0,8}"
@@ -395,6 +425,9 @@ def _check_internal_process(sentence: str, corpus: list[str]) -> list[HistoryIss
         if _is_question_or_uncertainty(sentence, match.start(), match.end()):
             # 疑问 / 选择问 / 「是否」列举只是在问记录，不是对过去的断言。
             continue
+        if _internal_process_in_skipped_context(sentence, match.start(), match.end()):
+            # 否定 / 拒绝、引用、假设语境：不是在断言用户过去的心理过程。
+            continue
         span = match.group(0)
         if _recorded_phrase(span, corpus):
             continue
@@ -450,6 +483,54 @@ def _is_question_or_uncertainty(sentence: str, start: int, end: int) -> bool:
     if _INTERROGATIVE_CLAUSE_RE.search(clause):
         return True
     return bool(_UNCERTAINTY_CLAUSE_RE.search(clause))
+
+
+def _internal_process_in_skipped_context(
+    sentence: str, start: int, end: int
+) -> bool:
+    """内省词是否处在否定 / 拒绝、引用或假设语境中。
+
+    只回看同一句内、短语前 ``_INTERNAL_CONTEXT_WINDOW`` 个字符。句子边界
+    由调用方的 ``_sentences`` 保证（。！？!?\n 已切开），因此这里不会跨句。
+    """
+    window = sentence[max(0, start - _INTERNAL_CONTEXT_WINDOW) : start]
+    if _INTERNAL_NEGATION_RE.search(window):
+        return True
+    if _INTERNAL_HYPOTHESIS_RE.search(window):
+        return True
+    return _phrase_quoted_with_reference(sentence, start, end)
+
+
+def _phrase_quoted_with_reference(sentence: str, start: int, end: int) -> bool:
+    """短语是否被引号包裹，且引号前带有「所谓 / 你说的 / 记录里的」等标记。"""
+    for pattern in _QUOTE_SPAN_RES:
+        for match in pattern.finditer(sentence):
+            if not (match.start() < start and end <= match.end()):
+                continue
+            before = sentence[
+                max(0, match.start() - _INTERNAL_CONTEXT_WINDOW) : match.start()
+            ]
+            if _QUOTE_REFERENCE_RE.search(before):
+                return True
+    return False
+
+
+def internal_process_context_skips(text: str | None) -> list[str]:
+    """观测用：列出因否定 / 引用 / 假设语境被跳过的内省词字面命中。
+
+    返回值只用于实验记录与回归测试，不参与判定；与
+    ``partial_upgrade_negation_skips`` 一样，它回答「语境识别实际拦下了
+    多少次字面命中」。
+    """
+    value = text or ""
+    skipped: list[str] = []
+    for sentence in _sentences(value):
+        for match in _INTERNAL_PROCESS_RE.finditer(sentence):
+            if _internal_process_in_skipped_context(
+                sentence, match.start(), match.end()
+            ):
+                skipped.append(match.group(0))
+    return skipped
 
 
 def _check_record_facts(state: AgentState, text: str) -> list[HistoryIssue]:
